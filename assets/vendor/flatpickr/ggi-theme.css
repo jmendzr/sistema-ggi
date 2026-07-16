@@ -1,0 +1,102 @@
+/* ── Tema flatpickr alineado al design system GGI ──────────────────────────
+   Usa los tokens (--bg-surface, --tx, --ac, …) → el modo oscuro funciona solo.
+   Cargar DESPUÉS de flatpickr.min.css. */
+
+.flatpickr-calendar {
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--brd, #e2e8f0);
+  border-radius: 12px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .16), 0 2px 8px rgba(15, 23, 42, .08);
+  font-family: 'Inter', sans-serif;
+  width: 19rem;
+}
+.flatpickr-calendar.arrowTop:before  { border-bottom-color: var(--brd, #e2e8f0); }
+.flatpickr-calendar.arrowTop:after   { border-bottom-color: var(--bg-surface, #fff); }
+.flatpickr-calendar.arrowBottom:before { border-top-color: var(--brd, #e2e8f0); }
+.flatpickr-calendar.arrowBottom:after  { border-top-color: var(--bg-surface, #fff); }
+
+/* Cabecera (mes/año + flechas) */
+.flatpickr-months { padding-top: 4px; }
+.flatpickr-months .flatpickr-month,
+.flatpickr-current-month,
+.flatpickr-current-month input.cur-year,
+.flatpickr-monthDropdown-months {
+  color: var(--tx, #0f172a);
+  fill:  var(--tx, #0f172a);
+  font-weight: 700;
+}
+/* El dropdown de mes es un <select> nativo → anular el estilo GLOBAL de selects
+   (borde, chevron de fondo y padding) que rompía la cabecera y encimaba el año. */
+.flatpickr-calendar .flatpickr-monthDropdown-months {
+  -webkit-appearance: none !important; appearance: none !important;
+  background: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 2px !important;
+  margin: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  outline: none !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: var(--tx, #0f172a) !important;
+  cursor: pointer;
+}
+.flatpickr-calendar .flatpickr-monthDropdown-months:focus { background: transparent !important; }
+.flatpickr-monthDropdown-months .flatpickr-monthDropdown-month { background: var(--bg-surface, #fff); color: var(--tx, #0f172a); }
+/* Año: input numérico compacto, sin estilos globales raros */
+.flatpickr-current-month .numInputWrapper { width: 4.2ch; }
+.flatpickr-current-month input.cur-year {
+  font-family: 'Inter', sans-serif !important; font-weight: 700 !important;
+  font-size: 15px !important; color: var(--tx, #0f172a) !important;
+  background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important;
+}
+.flatpickr-current-month .numInputWrapper span.arrowUp:after { border-bottom-color: var(--tx2, #64748b); }
+.flatpickr-current-month .numInputWrapper span.arrowDown:after { border-top-color: var(--tx2, #64748b); }
+
+.flatpickr-months .flatpickr-prev-month,
+.flatpickr-months .flatpickr-next-month { fill: var(--tx2, #64748b); }
+.flatpickr-months .flatpickr-prev-month svg,
+.flatpickr-months .flatpickr-next-month svg { fill: var(--tx2, #64748b); }
+.flatpickr-months .flatpickr-prev-month:hover svg,
+.flatpickr-months .flatpickr-next-month:hover svg { fill: var(--ac, #1d4ed8); }
+
+/* Días de la semana */
+.flatpickr-weekdays { background: transparent; }
+span.flatpickr-weekday {
+  color: var(--tx3, #94a3b8);
+  font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .3px;
+}
+
+/* Días */
+.flatpickr-day {
+  color: var(--tx, #0f172a);
+  border-radius: 8px;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+.flatpickr-day:hover,
+.flatpickr-day:focus { background: var(--bg-hover, #f1f5f9); border-color: var(--bg-hover, #f1f5f9); }
+.flatpickr-day.today { border-color: var(--ac, #1d4ed8); color: var(--ac, #1d4ed8); font-weight: 700; }
+.flatpickr-day.today:hover { background: var(--ac-soft, #dbeafe); }
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+  background: var(--ac, #1d4ed8);
+  border-color: var(--ac, #1d4ed8);
+  color: #fff;
+  box-shadow: none;
+}
+.flatpickr-day.flatpickr-disabled,
+.flatpickr-day.flatpickr-disabled:hover,
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay { color: var(--tx3, #cbd5e1); background: transparent; }
+
+/* Botones inferiores (Borrar/Hoy si se usan) y time */
+.flatpickr-time input,
+.flatpickr-time .flatpickr-time-separator { color: var(--tx, #0f172a); }
+.flatpickr-time input:hover, .flatpickr-time input:focus { background: var(--bg-hover, #f1f5f9); }

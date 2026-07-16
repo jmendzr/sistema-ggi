@@ -1,0 +1,1426 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   GGI DESIGN SYSTEM - Componentes Core Reutilizables
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Variables ── */
+:root {
+  /* Estados */
+  --state-por-preparar: #f59e0b;
+  --state-preparado: #3b82f6;
+  --state-en-transito: #8b5cf6;
+  --state-recibido: #10b981;
+  --state-entregado: #059669;
+  --state-devuelto: #ef4444;
+  --state-activo: #059669;
+  --state-inactivo: #6b7280;
+  --state-prospecto: #f59e0b;
+  --state-vencido: #ef4444;
+  --state-suspendido: #f59e0b;
+}
+
+/* ╔════════════════════════════════════════════════════════════════════════╗
+   ║ 1. CONFIRMDIALOG                                                       ║
+   ╚════════════════════════════════════════════════════════════════════════╝ */
+
+.ggi-confirm-dialog {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  animation: fadeIn 0.15s ease;
+}
+
+.ggi-confirm-dialog.open {
+  display: flex;
+}
+
+.ggi-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.ggi-confirm-content {
+  position: relative;
+  margin: auto;
+  background: var(--bg-surface);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  max-width: 440px;
+  width: 90%;
+  padding: 22px;
+  animation: slideUp 0.2s ease;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.ggi-confirm-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 200px;
+}
+
+.ggi-confirm-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--tx3);
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.ggi-confirm-close:hover {
+  background: var(--bg-hover);
+  color: var(--tx);
+}
+
+.ggi-confirm-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.ggi-confirm-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.ggi-confirm-icon.danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.ggi-confirm-icon.warning {
+  background: rgba(245, 158, 11, 0.18);
+  color: #f59e0b;
+}
+
+.ggi-confirm-icon.info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.ggi-confirm-icon.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.ggi-confirm-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--tx);
+  text-align: left;
+  margin-bottom: 4px;
+}
+
+.ggi-confirm-message {
+  font-size: 13px;
+  color: var(--tx2);
+  text-align: left;
+  margin-bottom: 0;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.ggi-confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  width: 100%;
+  flex-basis: 100%;
+  margin-top: 8px;
+}
+
+.ggi-confirm-actions .btn {
+  flex: 1;
+  padding: 10px 16px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+
+.ggi-confirm-actions .btn:first-child {
+  background: var(--bg-hover);
+  color: var(--tx);
+  border: 1px solid var(--brd);
+}
+
+.ggi-confirm-actions .btn:first-child:hover {
+  background: var(--brd);
+}
+
+.ggi-confirm-actions .btn.btn-danger,
+.ggi-confirm-actions .btn-danger {
+  background: #ef4444;
+  color: white;
+}
+
+.ggi-confirm-actions .btn.btn-danger:hover,
+.ggi-confirm-actions .btn-danger:hover {
+  background: #dc2626;
+}
+
+#confirm-btn {
+  background: #ef4444 !important;
+  color: white !important;
+  padding: 10px 18px !important;
+  border-radius: 8px !important;
+  border: none !important;
+  cursor: pointer !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  transition: all 0.2s !important;
+}
+
+#confirm-btn:hover {
+  background: #dc2626 !important;
+}
+
+#confirm-btn:focus,
+#confirm-btn:active {
+  background: #b91c1c !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ╔════════════════════════════════════════════════════════════════════════╗
+   ║ 2. STATECHANGE                                                         ║
+   ╚════════════════════════════════════════════════════════════════════════╝ */
+
+.ggi-state-select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ggi-state-select label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tx2);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ggi-state-input {
+  padding: 10px 12px;
+  border: 1px solid var(--brd);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--tx);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  appearance: none;
+  padding-right: 24px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+.ggi-state-input:focus {
+  outline: none;
+  border-color: var(--ac);
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.1);
+}
+
+.ggi-state-input:hover {
+  border-color: var(--ac);
+}
+
+.ggi-state-input.error {
+  border-color: var(--s-err);
+  background-color: rgba(239, 68, 68, 0.05);
+}
+
+.ggi-state-error {
+  font-size: 12px;
+  color: var(--s-err);
+  display: none;
+}
+
+.ggi-state-error.show {
+  display: block;
+}
+
+/* ── Validación de formularios — feedback canónico ───────────────────────────
+   Antes cada módulo redefinía .req / input.error / .err-msg (unos con var(--red),
+   otros con #ef4444; varios forms ni definían .req → asterisco no salía rojo).
+   Canónico aquí y tokenizado (var(--s-err) = dark-aware). GGIForm añade .error al
+   campo inválido y pinta un .err-msg; .req es el asterisco de campo obligatorio. */
+.req { color: var(--s-err); margin-left: 2px; }
+input.error, select.error, textarea.error,
+.field input.error, .field select.error, .field textarea.error,
+.select-wrap select.error { border-color: var(--s-err) !important; }
+.err-msg { font-size: 11px; color: var(--s-err); margin-top: 3px; }
+
+/* State Badge - para lectura rápida */
+.ggi-state-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--brd);
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.ggi-state-badge:hover {
+  border-color: var(--ac);
+  box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.1);
+}
+
+.ggi-state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ggi-state-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tx);
+}
+
+.ggi-state-chevron {
+  width: 10px;
+  height: 10px;
+  color: var(--tx3);
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.ggi-state-badge:hover .ggi-state-chevron {
+  transform: translateY(2px);
+}
+
+/* ╔════════════════════════════════════════════════════════════════════════╗
+   ║ 3. DATATABLE                                                           ║
+   ╚════════════════════════════════════════════════════════════════════════╝ */
+
+.ggi-datatable {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-radius: 8px;
+  border: 1px solid var(--brd);
+  overflow: hidden;
+}
+
+/* Toolbar */
+.ggi-dt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--brd);
+  background: var(--bg-surface2);
+}
+
+.ggi-dt-search {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--brd);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--tx);
+  font-size: 13px;
+}
+
+.ggi-dt-search:focus {
+  outline: none;
+  border-color: var(--ac);
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.1);
+}
+
+.ggi-dt-toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Contenedor de tabla */
+.ggi-dt-container {
+  flex: 1;
+  overflow: auto;
+  min-height: 200px;
+}
+
+.ggi-dt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ggi-dt-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--bg-th);
+  border-bottom: 1px solid var(--brd);
+  z-index: 10;
+}
+
+.ggi-dt-table th {
+  padding: 12px 14px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--tx2);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.ggi-dt-table th.sorteable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ggi-dt-table th.sorteable:hover {
+  background: var(--brd);
+}
+
+.ggi-dt-table th.sorted {
+  background: rgba(29, 78, 216, 0.05);
+  color: var(--ac);
+}
+
+.ggi-dt-table tbody tr {
+  border-bottom: 1px solid var(--brd);
+  transition: background 0.15s;
+}
+
+.ggi-dt-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.ggi-dt-table td {
+  padding: 12px 14px;
+  color: var(--tx);
+  vertical-align: middle;
+}
+
+.ggi-dt-table td a,
+.ggi-dt-table td button {
+  font-size: 12px;
+}
+
+/* Estado vacío */
+.ggi-dt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  color: var(--tx3);
+  text-align: center;
+  padding: 40px;
+}
+
+.ggi-dt-empty-icon {
+  width: 64px;
+  height: 64px;
+  color: var(--tx3);
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.ggi-dt-empty p {
+  font-size: 14px;
+  margin: 0;
+}
+
+/* Footer y paginación */
+.ggi-dt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--brd);
+  background: var(--bg-surface2);
+  font-size: 12px;
+  color: var(--tx2);
+}
+
+.ggi-dt-info {
+  flex: 1;
+}
+
+.ggi-dt-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ggi-dt-prev,
+.ggi-dt-next {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--brd);
+  background: var(--bg-surface);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--tx);
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.ggi-dt-prev:hover,
+.ggi-dt-next:hover {
+  background: var(--bg-hover);
+  border-color: var(--ac);
+}
+
+.ggi-dt-prev:disabled,
+.ggi-dt-next:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--tx3);
+}
+
+.ggi-dt-page-info {
+  font-size: 12px;
+  color: var(--tx2);
+  min-width: 80px;
+  text-align: center;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .ggi-dt-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ggi-dt-search {
+    width: 100%;
+  }
+
+  .ggi-dt-table th:not(:nth-child(1)):not(:last-child),
+  .ggi-dt-table td:not(:nth-child(1)):not(:last-child) {
+    display: none;
+  }
+
+  .ggi-dt-table {
+    font-size: 12px;
+  }
+
+  .ggi-dt-table td {
+    padding: 8px 12px;
+  }
+}
+
+/* ╔════════════════════════════════════════════════════════════════════════╗
+   ║ CONFIRMATION BUTTONS - ESTÁNDAR GLOBAL                                 ║
+   ╚════════════════════════════════════════════════════════════════════════╝ */
+
+/* Botón Cancelar / No - Estilo gris neutral */
+.ggi-btn-confirm-cancel {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #374151;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 13px;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.ggi-btn-confirm-cancel:hover {
+  background: #f3f4f6;
+  border-color: #bca9da;
+}
+
+.ggi-btn-confirm-cancel:active {
+  background: #e5e7eb;
+}
+
+.ggi-btn-confirm-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Botón Acción / Sí - Estilo con gradiente según tipo */
+.ggi-btn-confirm-action {
+  padding: 11px 20px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #fcd34d 0%, #f59e0b 100%);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.2s;
+  font-family: inherit;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.2);
+}
+
+.ggi-btn-confirm-action:hover {
+  background: linear-gradient(135deg, #fde047 0%, #d97706 100%);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.ggi-btn-confirm-action:active {
+  background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.2);
+}
+
+.ggi-btn-confirm-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ╔════════════════════════════════════════════════════════════════════════╗
+   ║ COMPLEX MODALS - ESTÁNDAR GLOBAL PARA MODALES CON CONTENIDO           ║
+   ╚════════════════════════════════════════════════════════════════════════╝ */
+
+/* Overlay base */
+.ggi-modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 9100;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.ggi-modal-overlay.open {
+  display: flex;
+}
+
+/* Modal box */
+.ggi-modal-box {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 520px;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Modal header */
+.ggi-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 28px;
+}
+
+.ggi-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ggi-modal-title svg {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 7px;
+  border-radius: 9px;
+  background: rgba(245, 158, 11, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Iconos con color específico - el fondo se adapta al color */
+.ggi-modal-title[style*="color:#10b981"] svg,
+.ggi-modal-title[style*="color:#059669"] svg,
+.ggi-modal-title.success svg {
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.ggi-modal-title[style*="color:#ef4444"] svg,
+.ggi-modal-title.danger svg {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.ggi-modal-title[style*="color:#f59e0b"] svg,
+.ggi-modal-title.warning svg {
+  background: rgba(245, 158, 11, 0.18);
+}
+
+.ggi-modal-title[style*="color:#3b82f6"] svg,
+.ggi-modal-title.info svg {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.ggi-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.ggi-modal-close:hover {
+  color: #1f2937;
+}
+
+/* Modal body */
+.ggi-modal-body {
+  padding: 12px 28px;
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(100vh - 200px);
+}
+
+.ggi-modal-body p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Modal footer */
+.ggi-modal-footer {
+  padding: 16px 28px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.ggi-modal-footer .ggi-btn-confirm-cancel {
+  flex: 0 0 auto;
+  min-width: 120px;
+}
+
+/* ── Utilidad: contenedor con scroll horizontal y hint visible ──────────────
+   iOS oculta los scrollbars → el usuario no sabe que la tabla se desplaza.
+   Un scrollbar fino siempre visible es el hint más simple y robusto. */
+.ggi-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.ggi-scroll-x::-webkit-scrollbar { height: 5px; }
+.ggi-scroll-x::-webkit-scrollbar-track { background: transparent; }
+.ggi-scroll-x::-webkit-scrollbar-thumb { background: var(--brd, #cbd5e1); border-radius: 3px; }
+.ggi-scroll-x { scrollbar-width: thin; scrollbar-color: var(--brd, #cbd5e1) transparent; }
+
+/* Táctil: botones de confirmación con target ≥44px (Apple HIG / Material 48dp).
+   En desktop conservan su tamaño compacto (mouse). */
+@media (hover: none) {
+  .ggi-btn-confirm-cancel,
+  .ggi-btn-confirm-action {
+    min-height: 44px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .ggi-modal-box {
+    max-width: 100%;
+    max-height: 90vh;
+  }
+
+  .ggi-modal-header {
+    padding: 16px 20px;
+  }
+
+  .ggi-modal-body {
+    padding: 16px 20px;
+  }
+
+  .ggi-modal-footer {
+    padding: 12px 20px;
+    flex-direction: column-reverse;
+  }
+
+  .ggi-modal-footer > button {
+    width: 100%;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DARK MODE - GGI Modal
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root[data-tema="oscuro"] .ggi-modal-box {
+  background: #1a1f36;
+  border-color: #2d3748;
+}
+
+:root[data-tema="oscuro"] .ggi-modal-header {
+  border-bottom-color: #2d3748;
+  color: #e2e8f0;
+}
+
+:root[data-tema="oscuro"] .ggi-modal-title {
+  color: #e2e8f0;
+}
+
+:root[data-tema="oscuro"] .ggi-modal-close {
+  background: #2d3748;
+  color: #cbd5e1;
+}
+
+:root[data-tema="oscuro"] .ggi-modal-close:hover {
+  background: #3d4758;
+  color: #e2e8f0;
+}
+
+:root[data-tema="oscuro"] .ggi-modal-body {
+  color: #cbd5e1;
+}
+
+:root[data-tema="oscuro"] .ggi-modal-footer {
+  border-top-color: #2d3748;
+}
+
+:root[data-tema="oscuro"] .ggi-modal-body input,
+:root[data-tema="oscuro"] .ggi-modal-body textarea,
+:root[data-tema="oscuro"] .ggi-modal-body select {
+  background: #111927;
+  border-color: #2d3748;
+  color: #e2e8f0;
+}
+
+:root[data-tema="oscuro"] .ggi-modal-body input:focus,
+:root[data-tema="oscuro"] .ggi-modal-body textarea:focus,
+:root[data-tema="oscuro"] .ggi-modal-body select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+:root[data-tema="oscuro"] .ggi-modal-title svg {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+:root[data-tema="oscuro"] .ggi-modal-title svg.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+:root[data-tema="oscuro"] .ggi-modal-title svg.danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+:root[data-tema="oscuro"] .ggi-modal-title svg.warning {
+  background: rgba(245, 158, 11, 0.18);
+  color: #f59e0b;
+}
+
+:root[data-tema="oscuro"] .ggi-modal-title svg.info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+/* Dark mode para GGIConfirm */
+:root[data-tema="oscuro"] .ggi-confirm-dialog {
+  background: transparent;
+}
+
+:root[data-tema="oscuro"] .ggi-confirm-content {
+  background: #1a1f36;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-tema="oscuro"] .ggi-confirm-close {
+  background: #2d3748;
+  color: #cbd5e1;
+}
+
+:root[data-tema="oscuro"] .ggi-confirm-close:hover {
+  background: #3d4758;
+  color: #e2e8f0;
+}
+
+:root[data-tema="oscuro"] .ggi-confirm-title {
+  color: #e2e8f0;
+}
+
+:root[data-tema="oscuro"] .ggi-confirm-message {
+  color: #cbd5e1;
+}
+
+:root[data-tema="oscuro"] .ggi-confirm-icon.danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+:root[data-tema="oscuro"] .ggi-confirm-icon.warning {
+  background: rgba(245, 158, 11, 0.18);
+  color: #f59e0b;
+}
+
+:root[data-tema="oscuro"] .ggi-confirm-icon.info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+:root[data-tema="oscuro"] .ggi-confirm-icon.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+:root[data-tema="oscuro"] .ggi-btn-confirm-cancel {
+  background: #2d3748;
+  color: #cbd5e1;
+  border-color: #3d4758;
+}
+
+:root[data-tema="oscuro"] .ggi-btn-confirm-cancel:hover {
+  background: #3d4758;
+  border-color: #4d5868;
+  color: #e2e8f0;
+}
+
+/* ╔════════════════════════════════════════════════════════════════════════╗
+   ║  LISTADOS — Acciones de fila en hover + menú contextual (...)           ║
+   ║  Patrón SaaS: las acciones de cada fila aparecen al pasar el mouse.     ║
+   ╚════════════════════════════════════════════════════════════════════════╝ */
+
+/* Acciones ocultas por defecto; aparecen en hover/selección/foco de la fila. */
+.data-table tbody .action-btns {
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+.data-table tbody tr:hover .action-btns,
+.data-table tbody tr.bulk-selected .action-btns,
+.data-table tbody tr:focus-within .action-btns {
+  opacity: 1;
+}
+/* Mantener acciones visibles mientras su menú (...) está abierto. */
+.data-table tbody .action-btns:has(.ggi-row-menu-wrap.open) {
+  opacity: 1 !important;
+}
+
+/* En dispositivos sin hover (táctil/PWA) las acciones siempre visibles. */
+@media (hover: none) {
+  .data-table tbody .action-btns { opacity: 1 !important; }
+}
+
+/* ── Botón kebab (...) reutilizable ── */
+.ggi-row-menu-wrap { position: relative; display: inline-flex; }
+.ggi-row-menu-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 7px;
+  border: none; cursor: pointer; background: transparent;
+  color: var(--tx2, #64748b); transition: background .15s, color .15s;
+  flex-shrink: 0; touch-action: manipulation;
+}
+.ggi-row-menu-btn:hover,
+.ggi-row-menu-wrap.open .ggi-row-menu-btn {
+  background: var(--bg-hover, #f1f5f9);
+  color: var(--ac, #1d4ed8);
+}
+/* Foco visible para navegación por teclado (a11y CRÍTICO) */
+.ggi-row-menu-btn:focus-visible,
+.ggi-row-menu-item:focus-visible {
+  outline: 2px solid var(--ac, #1d4ed8);
+  outline-offset: 2px;
+}
+.ggi-row-menu-item:focus-visible {
+  background: var(--ac-soft, #dbeafe);
+  outline-offset: -2px;
+}
+
+/* ── Popup del menú contextual ── */
+.ggi-row-menu {
+  position: fixed;   /* fixed (no absolute) → escapa cualquier overflow:hidden de
+                        contenedores (.table-wrap), clave en el layout de tarjetas móvil.
+                        La posición (top/left) la calcula GGIRowMenu desde el botón. */
+  top: 0; left: 0;
+  min-width: 184px; z-index: 9700;
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--brd, #e2e8f0);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15,23,42,.14), 0 2px 6px rgba(15,23,42,.08);
+  padding: 5px;
+  display: none;
+  flex-direction: column; gap: 1px;
+  animation: ggiRowMenuIn .12s ease;
+}
+.ggi-row-menu-wrap.open .ggi-row-menu { display: flex; }
+@keyframes ggiRowMenuIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ggi-row-menu-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; box-sizing: border-box;
+  padding: 9px 11px; border: none; background: none;
+  border-radius: 7px; cursor: pointer; text-decoration: none;
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  color: var(--tx, #0f172a); text-align: left;
+  transition: background .12s, color .12s;
+}
+.ggi-row-menu-item:hover {
+  background: var(--ac-soft, #dbeafe);
+  color: var(--ac, #1d4ed8);
+}
+.ggi-row-menu-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+.ggi-row-menu-item.danger { color: #dc2626; }
+.ggi-row-menu-item.danger:hover { background: #fef2f2; color: #dc2626; }
+.ggi-row-menu-sep { height: 1px; background: var(--brd, #e2e8f0); margin: 4px 2px; }
+
+/* Objetivos táctiles ≥44px en móvil/PWA (Touch CRÍTICO) */
+@media (hover: none), (max-width: 768px) {
+  .ggi-row-menu-item { min-height: 44px; font-size: 14px; }
+  .ggi-row-menu-btn { width: 44px; height: 44px; }
+}
+
+/* Respeta prefers-reduced-motion (a11y) */
+@media (prefers-reduced-motion: reduce) {
+  .data-table tbody .action-btns { transition: none; }
+  .ggi-row-menu { animation: none; }
+  .ggi-row-menu-btn { transition: none; }
+}
+
+/* Tema oscuro */
+:root[data-tema="oscuro"] .ggi-row-menu-item.danger { color: #f87171; }
+:root[data-tema="oscuro"] .ggi-row-menu-item.danger:hover { background: rgba(239,68,68,.14); color: #fca5a5; }
+
+/* Skip-link de accesibilidad (§ skip-links): oculto hasta recibir foco con Tab,
+   permite a usuarios de teclado saltar la navegación e ir al contenido principal. */
+.ggi-skip-link {
+  position: fixed; top: 10px; left: 10px; z-index: 100000;
+  background: var(--ac, #1d4ed8); color: #fff;
+  padding: 10px 16px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; text-decoration: none;
+  box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  transform: translateY(-160%); opacity: 0;
+  transition: transform .16s ease, opacity .16s ease;
+}
+.ggi-skip-link:focus,
+.ggi-skip-link:focus-visible {
+  transform: translateY(0); opacity: 1;
+  outline: 2px solid #fff; outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) { .ggi-skip-link { transition: none; } }
+
+/* Estado vacío de listados — patrón SaaS con ícono + jerarquía (§ empty-states).
+   Reutilizable: ícono atenuado, título, subtítulo y acción de recuperación. */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px; text-align: center; color: var(--tx2); }
+.empty-state-icon {
+  color: var(--tx3, #94a3b8);
+  opacity: .55;
+  margin-bottom: 14px;
+}
+.empty-state-title {
+  font-size: 15px; font-weight: 700;
+  color: var(--tx, #0f172a);
+  margin: 0 0 4px;
+}
+.empty-state-sub {
+  font-size: 13px; line-height: 1.5;
+  color: var(--tx3, #64748b);
+  margin: 0; max-width: 360px;
+}
+
+/* Cifras tabulares en tablas de datos (§ number-tabular): alinea montos/números y
+   evita el "salto" de ancho al cambiar dígitos. Solo afecta numerales, no el texto. */
+.data-table td,
+.ggi-dt-table td {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Área de toque mayor para checkboxes de fila en táctil (§ touch-target-size).
+   Sin tocar el markup: agranda el control y el padding de su celda en móvil. */
+@media (hover: none) {
+  .row-chk { width: 20px !important; height: 20px !important; cursor: pointer; }
+  .td-chk, .th-chk { padding-top: 14px !important; padding-bottom: 14px !important; }
+}
+
+/* ╔════════════════════════════════════════════════════════════════════════╗
+   ║  COMPONENTES CANÓNICOS — fuente única de verdad (reemplaza los duplicados ║
+   ║  por módulo). Todo con tokens → consistencia y modo oscuro automáticos.   ║
+   ╚════════════════════════════════════════════════════════════════════════╝ */
+
+/* ── Botón de ícono de acción (.btn-ic) — antes duplicado en 15 módulos con hex
+   hardcodeado (#1A3A8F) y sin modo oscuro. Ahora tokenizado: los tokens *-soft y
+   de estado ya tienen variante oscura, así que se adapta solo. ── */
+.btn-ic {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 7px;
+  border: none; cursor: pointer; text-decoration: none;
+  transition: background .15s, color .15s; flex-shrink: 0;
+}
+.btn-ic-blue  { background: var(--ac-soft);    color: var(--ac); }
+.btn-ic-blue:hover  { background: var(--ac);    color: #fff; }
+.btn-ic-red   { background: var(--s-err-bg);   color: var(--s-err); }
+.btn-ic-red:hover   { background: var(--s-err); color: #fff; }
+.btn-ic-amber { background: var(--s-warn-bg);  color: var(--s-warn); }
+.btn-ic-amber:hover { background: var(--s-warn); color: #fff; }
+.btn-ic-green { background: var(--gr-soft); color: var(--gr); }
+.btn-ic-green:hover { background: var(--gr); color: #fff; }
+/* .btn-ic-wa / .btn-ic-wa-off (WhatsApp) tienen tratamiento global propio en layout_end.php */
+.btn-ic:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+
+/* Contenedor de acciones de fila (antes duplicado por módulo con gaps distintos) */
+.action-btns { display: flex; align-items: center; gap: 5px; }
+
+/* ── Tabla de datos base (.data-table) — antes duplicada en 8 módulos. Las reglas
+   específicas de columna (td:nth-child…{max-width}) siguen siendo locales. ── */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th {
+  font-size: 11px; font-weight: 600; color: var(--tx2);
+  text-transform: uppercase; letter-spacing: .5px;
+  padding: 11px 14px; background: var(--bg-th);
+  border-bottom: 1px solid var(--brd); text-align: left; white-space: nowrap;
+}
+.data-table td {
+  padding: 11px 14px; font-size: 13px;
+  border-bottom: 1px solid var(--brd2); color: var(--tx); vertical-align: middle;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: var(--bg-hover); }
+
+/* ── Utilidad de título de sección — reemplaza los font-size:28/26/20/18px sueltos.
+   El título de página sigue siendo .page-header h1 (global en layout). ── */
+.ggi-section-title {
+  font-family: 'Inter', sans-serif;
+  font-size: 16px; font-weight: 700; color: var(--tx);
+  margin: 0 0 12px; letter-spacing: -.01em;
+}
+.ggi-section-title-sm { font-size: 14px; }
+
+/* ============================================================
+   Paginación canónica (.ggi-pager) — footer de listados
+   Server-side offset + total. Reutilizable vía helper PHP ggi_pager().
+   Temable por tokens (claro/oscuro). Render: helpers.php
+   ============================================================ */
+.ggi-pager {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 14px;
+  padding: 13px 18px; border-top: 1px solid var(--brd);
+  font-size: 13px; color: var(--tx2);
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+}
+.ggi-pager-left, .ggi-pager-right { display: flex; align-items: center; gap: 12px; }
+.ggi-pager-perpage { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.ggi-pager-sep { width: 1px; height: 18px; background: var(--brd); flex-shrink: 0; }
+.ggi-pager-range { color: var(--tx3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Selector "Ítems por página" con chevron propio */
+.ggi-pager-select {
+  appearance: none; -webkit-appearance: none;
+  padding: 6px 28px 6px 10px; border: 1px solid var(--brd); border-radius: 8px;
+  background: var(--bg-surface); color: var(--tx);
+  font: 600 13px 'Plus Jakarta Sans', sans-serif; cursor: pointer; outline: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2.5'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat; background-position: right 8px center;
+  transition: border-color .14s;
+}
+.ggi-pager-select:focus { border-color: var(--ac); }
+
+/* Input de salto de página */
+.ggi-pager-pagelabel { color: var(--tx2); white-space: nowrap; }
+.ggi-pager-total { color: var(--tx3); white-space: nowrap; }
+.ggi-pager-input {
+  width: 46px; text-align: center;
+  padding: 6px 4px; border: 1px solid var(--brd); border-radius: 8px;
+  background: var(--bg-surface); color: var(--tx);
+  font: 600 13px 'Plus Jakarta Sans', sans-serif;
+  font-variant-numeric: tabular-nums; outline: none; transition: border-color .14s;
+}
+.ggi-pager-input:focus { border-color: var(--ac); }
+.ggi-pager-input::-webkit-outer-spin-button,
+.ggi-pager-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ggi-pager-input[type=number] { -moz-appearance: textfield; }
+
+/* Botones de navegación prev/next */
+.ggi-pager-nav {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border: 1px solid var(--brd); border-radius: 8px;
+  background: var(--bg-surface); color: var(--tx2); cursor: pointer;
+  text-decoration: none; transition: background .14s, color .14s, border-color .14s;
+}
+.ggi-pager-nav:hover:not(.disabled) { background: var(--ac-soft); color: var(--ac); border-color: var(--ac); }
+.ggi-pager-nav.disabled { opacity: .4; pointer-events: none; cursor: default; }
+
+@media (max-width: 768px) {
+  .ggi-pager { padding: 12px 14px; gap: 10px; }
+  .ggi-pager-left, .ggi-pager-right { gap: 8px; flex-wrap: wrap; }
+  .ggi-pager-perpage span { display: none; } /* solo el selector en móvil */
+
+  /* ── Listados en móvil: tarjeta ÚNICA (sin "caja dentro de otra") ──────────
+     En móvil cada fila de .data-table se convierte en tarjeta (con su propio
+     borde/fondo). El contenedor .table-wrap NO debe aportar su propio
+     borde/fondo/radius o se ve una caja dentro de otra. Canónico para los 8
+     listados (clientes, cotizaciones, certificados, envios, auditorias, bonos,
+     historial, alertas). !important: vence la definición local de cada módulo. */
+  .table-wrap {
+    border: none !important;
+    background: transparent !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+
+  /* iOS hace auto-zoom al enfocar un input con font-size < 16px (salta el layout).
+     Forzar ≥16px en controles de texto en móvil (Apple HIG / readable-font-size). */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea { font-size: 16px; }
+
+  /* ── Tarjeta móvil limpia: sin divisores por-campo ────────────────────────
+     En la tarjeta, los campos se separan con espacio/jerarquía, no con líneas
+     entre cada uno (se veía "segmentado", peor con el fondo de selección).
+     Se conserva el separador sobre los botones de acción (td:last-child). */
+  .table-wrap .data-table td { border-bottom: none !important; }
+
+  /* ── Filtros compactos: recuperar espacio vertical en listados ────────────
+     Cada módulo define .toolbar/.search-input localmente → override global con
+     !important para los 8 listados (clientes, cotizaciones, certificados,
+     envios, auditorias, bonos, historial, alertas). */
+  .toolbar { margin-bottom: 12px !important; }
+  .toolbar form { gap: 8px !important; }
+  .toolbar .search-input,
+  .toolbar .ms-drop-btn { padding-top: 10px !important; padding-bottom: 10px !important; }
+}
+
+/* ── Filtros colapsables en móvil (canónico, reutilizable en todos los listados) ─
+   Markup: botón .ggi-filtros-toggle (solo móvil) + los controles de filtro
+   envueltos en .ggi-filtros. El form lleva la clase .filtros-open cuando están
+   visibles (se abre solo si hay filtros activos, server-side).
+   Desktop: .ggi-filtros { display:contents } → los filtros fluyen inline y el
+   botón se oculta (experiencia desktop intacta). */
+.ggi-filtros { display: contents; }
+.ggi-filtros-toggle { display: none; }
+/* Grupo de botones de acción de la barra (Buscar/Limpiar): juntos en una fila. */
+.ggi-filtros-actions { display: flex; gap: 8px; }
+@media (max-width: 768px) {
+  .ggi-filtros-actions { width: 100%; }
+  .ggi-filtros-actions .btn { flex: 1; justify-content: center; }
+  .ggi-filtros-toggle {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    width: 100%; padding: 11px 14px; border-radius: 9px;
+    border: 1.5px solid var(--brd, #e2e8f0); background: var(--bg-surface, #fff);
+    color: var(--tx, #0f172a); font-size: 14px; font-weight: 600; cursor: pointer;
+    font-family: 'Inter', sans-serif;
+  }
+  .ggi-filtros-toggle svg { color: var(--tx2, #64748b); }
+  .ggi-filtros { display: none; flex-direction: column; gap: 8px; width: 100%; }
+  form.filtros-open .ggi-filtros { display: flex; }
+  form.filtros-open .ggi-filtros-toggle { border-color: var(--ac, #1d4ed8); color: var(--ac, #1d4ed8); }
+  form.filtros-open .ggi-filtros-toggle svg { color: var(--ac, #1d4ed8); }
+  .ggi-filtros-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 100px;
+    background: var(--ac, #1d4ed8); color: #fff; font-size: 11px; font-weight: 700;
+  }
+}
+
+/* ── Popover de chips "+N" (lista completa de tags) — render: window.ggiChipPop ── */
+.ggi-chip-pop {
+  position: fixed; z-index: 9999;
+  display: flex; flex-wrap: wrap; gap: 4px;
+  max-width: 260px;
+  background: var(--bg-surface); border: 1px solid var(--brd);
+  border-radius: 9px; padding: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.12);
+  animation: ggiChipPopIn .12s ease;
+}
+@keyframes ggiChipPopIn { from { opacity:0; transform: translateY(-4px); } to { opacity:1; transform: translateY(0); } }
+
+/* ── Copiar identificadores (RUC, N° certificado, códigos) — render: helper ggi_copy ──
+   Ícono discreto que aparece en hover/focus; copia al click. Feedback con check verde. */
+.ggi-copyable {
+  display: inline-flex; align-items: center; gap: 4px;
+  cursor: pointer; background: none; border: none; padding: 0;
+  font: inherit; color: inherit; vertical-align: baseline; max-width: 100%;
+}
+.ggi-copyable .ggi-copy-ic {
+  width: 11px; height: 11px; flex-shrink: 0; color: var(--tx3);
+  opacity: 0; transition: opacity .12s;
+}
+.ggi-copyable:hover .ggi-copy-ic,
+.ggi-copyable:focus-visible .ggi-copy-ic { opacity: .65; }
+.ggi-copyable:focus-visible { outline: none; }
+.ggi-copyable:focus-visible > span:first-child { text-decoration: underline; text-underline-offset: 2px; }
+.ggi-copyable.ggi-copied .ggi-copy-ic { opacity: 1; color: var(--s-ok-tx); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Aparición escalonada (stagger fade-up) — global y reutilizable.
+   - .ggi-stagger: contenedor; sus hijos directos aparecen en cascada (tarjetas/KPIs).
+   - .data-table tbody tr: las filas de los listados canónicos aparecen en cascada.
+   Respeta prefers-reduced-motion (accesibilidad).
+   ════════════════════════════════════════════════════════════════════════ */
+@keyframes ggiFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* fill-mode = `backwards` (NO `both`/`forwards`):
+   con `forwards`/`both`, una animación de `transform` deja retenido un
+   `matrix(...)` resuelto AL TERMINAR — aunque sea la identidad (translateY 0).
+   Un transform != `none` convierte a CADA elemento en containing-block de sus
+   hijos `position:fixed`, lo que descentraba el menú kebab "..." de los listados
+   (aparecía anclado a su <tr> en vez del viewport, corrido cientos de px).
+   `backwards` aplica el frame 0% durante el delay escalonado (entrada intacta)
+   pero al terminar revierte a `transform:none` → sin containing-block residual. */
+.ggi-stagger > * { animation: ggiFadeUp .38s ease backwards; }
+.ggi-stagger > *:nth-child(1)  { animation-delay: .02s; }
+.ggi-stagger > *:nth-child(2)  { animation-delay: .06s; }
+.ggi-stagger > *:nth-child(3)  { animation-delay: .10s; }
+.ggi-stagger > *:nth-child(4)  { animation-delay: .14s; }
+.ggi-stagger > *:nth-child(5)  { animation-delay: .18s; }
+.ggi-stagger > *:nth-child(6)  { animation-delay: .22s; }
+.ggi-stagger > *:nth-child(7)  { animation-delay: .26s; }
+.ggi-stagger > *:nth-child(8)  { animation-delay: .30s; }
+.ggi-stagger > *:nth-child(9)  { animation-delay: .34s; }
+.ggi-stagger > *:nth-child(10) { animation-delay: .38s; }
+.ggi-stagger > *:nth-child(n+11) { animation-delay: .40s; }
+
+/* Filas de listados canónicos: cascada sutil al cargar/cambiar de página */
+.data-table tbody tr { animation: ggiFadeUp .34s ease backwards; }
+.data-table tbody tr:nth-child(1) { animation-delay: .02s; }
+.data-table tbody tr:nth-child(2) { animation-delay: .05s; }
+.data-table tbody tr:nth-child(3) { animation-delay: .08s; }
+.data-table tbody tr:nth-child(4) { animation-delay: .11s; }
+.data-table tbody tr:nth-child(5) { animation-delay: .14s; }
+.data-table tbody tr:nth-child(6) { animation-delay: .17s; }
+.data-table tbody tr:nth-child(7) { animation-delay: .20s; }
+.data-table tbody tr:nth-child(8) { animation-delay: .23s; }
+.data-table tbody tr:nth-child(n+9) { animation-delay: .25s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ggi-stagger > *, .data-table tbody tr { animation: none !important; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Pendientes de atención (sistema unificado) — render: core/pendientes.php
+   Indicador compacto en listados (🔴 N) + alerta en ficha + popover desglose.
+   ════════════════════════════════════════════════════════════════════════ */
+/* Indicador compacto para listados: ocupa mínimo, no aumenta alto de fila */
+.ggi-pend {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px 1px 6px; border-radius: 100px;
+  background: var(--s-err-bg); color: var(--s-err-tx, #c53030);
+  border: 1px solid color-mix(in srgb, #ef4444 35%, transparent);
+  font-size: 11px; font-weight: 700; line-height: 1.55;
+  cursor: pointer; flex-shrink: 0; white-space: nowrap;
+  font-variant-numeric: tabular-nums; vertical-align: middle;
+  transition: filter .12s, box-shadow .12s;
+}
+.ggi-pend .ggi-pend-dot { width: 7px; height: 7px; border-radius: 50%; background: #ef4444; flex-shrink: 0; }
+.ggi-pend .ggi-pend-ic { width: 11px; height: 11px; flex-shrink: 0; }
+.ggi-pend:hover { filter: brightness(.97); }
+.ggi-pend:focus-visible { outline: none; box-shadow: 0 0 0 2px #ef4444; }
+:root[data-tema="oscuro"] .ggi-pend { background: #450a0a; color: #fca5a5; border-color: #7f1d1d; }
+
+/* Alerta descriptiva en la ficha detalle (clic → desglose) */
+.ggi-pend-alert {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 100px;
+  background: var(--s-warn-bg); color: var(--s-warn-tx);
+  border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
+  font-size: 11px; font-weight: 600; line-height: 1.5; cursor: pointer;
+  transition: filter .12s, box-shadow .12s;
+}
+.ggi-pend-alert svg { width: 11px; height: 11px; flex-shrink: 0; }
+.ggi-pend-alert:hover { filter: brightness(.98); }
+.ggi-pend-alert:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--s-warn-tx); }
+:root[data-tema="oscuro"] .ggi-pend-alert { background: #451a03; color: #fcd34d; border-color: #854d0e; }
+
+/* Contenido del popover (dentro de .ggi-chip-pop) */
+.ggi-chip-pop .ggi-pend-pop { display: block; max-width: 240px; }
+.ggi-pend-pop-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--tx2); margin-bottom: 6px; }
+.ggi-pend-pop-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.ggi-pend-pop-list li { position: relative; padding-left: 14px; font-size: 13px; color: var(--tx); white-space: nowrap; }
+.ggi-pend-pop-list li::before { content: ''; position: absolute; left: 0; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: #ef4444; }
+
+/* ── Números: cifras tabulares para alinear y comparar (montos, contadores) ── */
+.ggi-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.ggi-num-right { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; text-align: right; }
+th.ggi-num-right, td.ggi-num-right { text-align: right; }
+
+/* ── Lista de tags con overflow "+N" (render: helper PHP ggi_tags) ──
+   Mantiene la fila a altura uniforme; el resto se ve en el popover ggiChipPop. */
+.ggi-tags { display:inline-flex; align-items:center; gap:4px; flex-wrap:nowrap; }
+.ggi-tag {
+  display:inline-block; background:var(--bg-hover); color:var(--tx2);
+  border:1px solid var(--brd); font-size:10px; font-weight:700;
+  padding:2px 6px; border-radius:5px; white-space:nowrap;
+}
+.ggi-tag-more { background:var(--ac-soft); color:var(--ac); border-color:var(--ac-soft); cursor:pointer; outline:none; }
+.ggi-tag-more:hover { filter:brightness(1.05); }
+.ggi-tag-more:focus-visible { box-shadow:0 0 0 2px var(--ac); }
+/* Las tags dentro del popover sí pueden envolver */
+.ggi-chip-pop .ggi-tag { white-space:nowrap; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   KPI cards — tarjetas de indicadores para cabecera de listados (canónico).
+   Antes duplicadas por módulo (pagos, historial…); fuente única aquí.
+   ══════════════════════════════════════════════════════════════════════════ */
+.kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; margin-bottom:22px; }
+.kpi-card { background:var(--gris-card,#fff); border-radius:12px; border:1px solid var(--gris-borde); padding:18px 20px; }
+.kpi-label { font-size:11px; font-weight:600; color:var(--gris-texto); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+.kpi-value { font-size:clamp(18px, 1.7vw, 23px); font-weight:700; font-family:'Inter',sans-serif; color:var(--gris-dark); white-space:nowrap; letter-spacing:-.01em; }
+.kpi-value.muted { color:var(--tx3); }
+.kpi-value.amber { color:#d97706; }
+.kpi-value.blue  { color:#1d4ed8; }
+.kpi-value.green { color:var(--s-ok-tx); }
+.kpi-value.red   { color:#c53030; }
+.kpi-value.teal  { color:#0f766e; }
+.kpi-sub  { font-size:11px; color:var(--gris-texto); margin-top:4px; }
+/* Responsive por defecto: 2 columnas (los módulos con más KPIs pueden sobreescribir). */
+@media (max-width:768px){
+  .kpi-grid { grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:14px; }
+  .kpi-card { padding:12px 12px; }
+  .kpi-label { font-size:9px; letter-spacing:.3px; margin-bottom:3px; }
+  .kpi-value { font-size:16px; white-space:normal; word-break:break-word; line-height:1.15; }
+  .kpi-sub { display:none; }
+}
+
+/* ── Pill de estado (solo lectura) — colores por tokens, tema oscuro incluido ── */
+.ggi-pill { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:100px; font-size:11px; font-weight:600; white-space:nowrap; }
+.ggi-pill-ok    { background:var(--s-ok-bg);   color:var(--s-ok-tx); }
+.ggi-pill-err   { background:var(--s-err-bg);  color:#c53030; }
+.ggi-pill-info  { background:var(--s-info-bg); color:#475569; }
+.ggi-pill-warn  { background:var(--s-warn-bg); color:var(--s-warn-tx); }
+.ggi-pill-muted { background:var(--bg-hover);  color:var(--tx2); }
+:root[data-tema="oscuro"] .ggi-pill-err   { background:#450a0a !important; color:#fca5a5 !important; }
+:root[data-tema="oscuro"] .ggi-pill-info  { background:#1e293b !important; color:#94a3b8 !important; }

@@ -1,0 +1,122 @@
+# GGI Sistema - Reglas Apache / LiteSpeed
+Options -Indexes
+
+# ── Sesión PHP (mod_php / LiteSpeed LSAPI) ───────────────────────────────────
+# gc_maxlifetime debe coincidir con SESSION_LIFETIME (30 días) para que el GC
+# del servidor no elimine sesiones activas. .user.ini cubre PHP-FPM/LSAPI;
+# php_value cubre mod_php y LiteSpeed vía .htaccess.
+<IfModule mod_php.c>
+    php_value session.gc_maxlifetime  2592000
+    php_value session.cookie_lifetime 2592000
+    php_value session.gc_probability  1
+    php_value session.gc_divisor      1000
+    php_value session.cookie_httponly 1
+    php_value session.cookie_secure   1
+    php_value session.use_strict_mode 1
+</IfModule>
+<IfModule mod_php8.c>
+    php_value session.gc_maxlifetime  2592000
+    php_value session.cookie_lifetime 2592000
+    php_value session.gc_probability  1
+    php_value session.gc_divisor      1000
+    php_value session.cookie_httponly 1
+    php_value session.cookie_secure   1
+    php_value session.use_strict_mode 1
+</IfModule>
+
+# Redirigir todo al index si no existe el archivo
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [L,QSA]
+
+# Bloquear acceso directo a carpetas y archivos sensibles
+RewriteRule ^config/.*$  - [F,L]
+RewriteRule ^core/.*$    - [F,L]
+RewriteRule ^sql/.*$     - [F,L]
+RewriteRule ^logs/.*$    - [F,L]
+RewriteRule ^cron/.*$    - [F,L]
+
+# Bloquear el directorio de control de versiones .git (nunca servir su contenido por web)
+RewriteRule "(^|/)\.git"  - [F,L]
+
+# Bloquear archivos sensibles específicos
+<FilesMatch "(\.env|\.git|editar_test\.php)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Bloquear archivos SQL en cualquier subdirectorio
+<FilesMatch "\.sql$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Compresión GZIP para HTML, CSS, JS
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css
+    AddOutputFilterByType DEFLATE application/javascript application/json
+    AddOutputFilterByType DEFLATE image/svg+xml font/woff2
+</IfModule>
+
+# Caché del navegador para assets estáticos
+<IfModule mod_expires.c>
+    ExpiresActive On
+    # CSS y JS: 1 mes (versionados con ?v= si cambian)
+    ExpiresByType text/css                  "access plus 1 month"
+    ExpiresByType application/javascript    "access plus 1 month"
+    # Imágenes y fuentes: 6 meses
+    ExpiresByType image/png                 "access plus 6 months"
+    ExpiresByType image/jpeg                "access plus 6 months"
+    ExpiresByType image/webp                "access plus 6 months"
+    ExpiresByType image/svg+xml             "access plus 6 months"
+    ExpiresByType font/woff2                "access plus 6 months"
+    ExpiresByType font/woff                 "access plus 6 months"
+</IfModule>
+
+# Cache-Control headers
+<IfModule mod_headers.c>
+    # Assets estáticos: caché pública de 1 mes
+    <FilesMatch "\.(css|js|woff2?|png|jpg|jpeg|webp|svg)$">
+        Header set Cache-Control "public, max-age=2592000, immutable"
+    </FilesMatch>
+
+    # Service Worker: NUNCA cachear el script. Va después de la regla genérica de
+    # .js para sobreescribir su "immutable". Sin esto, los navegadores (sobre todo
+    # iOS PWA) mantienen un SW viejo y el modal embed muestra el dashboard.
+    <Files "sw.js">
+        Header set Cache-Control "no-cache, no-store, must-revalidate, max-age=0"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </Files>
+
+    # Páginas PHP: sin caché para garantizar contenido siempre fresco.
+    <FilesMatch "\.php$">
+        Header always unset Cache-Control
+        Header always unset Pragma
+        Header always unset Last-Modified
+        Header always unset ETag
+        Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        Header always set Pragma "no-cache"
+        Header always set Expires "Thu, 01 Jan 1970 00:00:00 GMT"
+    </FilesMatch>
+</IfModule>
+
+# Cabeceras de seguridad
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+</IfModule>
+
+# Desactivar caché de LiteSpeed para páginas PHP
+<IfModule LiteSpeed>
+    CacheLookup off
+</IfModule>
+
+# No mostrar versión PHP
+<IfModule mod_php.c>
+    php_flag expose_php Off
+</IfModule>

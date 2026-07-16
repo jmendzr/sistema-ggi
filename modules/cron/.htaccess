@@ -1,0 +1,4 @@
+# Bloquear acceso web directo al directorio cron
+# Los scripts solo deben ejecutarse desde CLI o con token seguro
+Order deny,allow
+Deny from all

@@ -1,0 +1,310 @@
+<?php
+/**
+ * core/WhatsAppService.php
+ *
+ * Servicio de notificaciones automáticas vía WhatsApp Business (Meta Cloud API).
+ * Usa Kapso AI como proxy autenticado: api.kapso.ai/meta/whatsapp/v24.0/{phone_id}/messages
+ *
+ * Solo envía mensajes usando Message Templates aprobados por Meta.
+ * Las notificaciones a clientes son siempre business-initiated → templates obligatorios.
+ *
+ * Uso:
+ *   WhatsAppService::notifyClient($clienteId, 'envio_registrado', $context);
+ */
+
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/Database.php';
+
+class WhatsAppService
+{
+    // ── Configuración ──────────────────────────────────────────────────────────
+
+    private static function apiKey(): string
+    {
+        return defined('KAPSO_API_KEY') ? KAPSO_API_KEY : '';
+    }
+
+    private static function phoneId(): string
+    {
+        return defined('KAPSO_PHONE_NUMBER_ID') ? KAPSO_PHONE_NUMBER_ID : '';
+    }
+
+    // ── Método principal ───────────────────────────────────────────────────────
+
+    /**
+     * Envía una notificación WA al contacto del cliente usando el template configurado.
+     *
+     * @param int    $clienteId  ID del cliente en la tabla clientes
+     * @param string $eventCode  Código de evento (debe tener template en whatsapp_templates)
+     * @param array  $context    Variables del contexto del evento (razon_social, codigo_envio, etc.)
+     */
+    public static function notifyClient(int $clienteId, string $eventCode, array $context = []): void
+    {
+        $pdo = Database::get();
+
+        // ── Cargar template del evento ─────────────────────────────────────────
+        $tplStmt = $pdo->prepare(
+            "SELECT template_name, language_code, param_keys, url_button_key FROM whatsapp_templates WHERE event_code = ? AND activo = 1"
+        );
+        $tplStmt->execute([$eventCode]);
+        $tpl = $tplStmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$tpl) {
+            error_log("[WhatsAppService] Sin template activo para evento: {$eventCode}");
+            return;
+        }
+
+        // ── Cargar datos del cliente ───────────────────────────────────────────
+        $cliStmt = $pdo->prepare(
+            "SELECT razon_social, contacto_telefono, whatsapp_opt_in FROM clientes WHERE id = ? AND deleted_at IS NULL"
+        );
+        $cliStmt->execute([$clienteId]);
+        $cliente = $cliStmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$cliente) {
+            error_log("[WhatsAppService] Cliente id={$clienteId} no encontrado");
+            return;
+        }
+
+        // ── Verificar opt-in ──────────────────────────────────────────────────
+        if (!$cliente['whatsapp_opt_in']) {
+            self::log($pdo, $clienteId, $eventCode, '', $tpl['template_name'], [], null, 'failed', 'opt_out', $context);
+            return;
+        }
+
+        // ── Resolver teléfono ─────────────────────────────────────────────────
+        // propuesta_aceptada: usar el contacto de la cotización (persona que negoció)
+        // demás eventos: usar el contacto principal del cliente empresa
+        $rawPhone = $cliente['contacto_telefono'];
+        if ($eventCode === 'propuesta_aceptada' && !empty($context['cotizacion_id'])) {
+            $cotStmt = $pdo->prepare("SELECT contacto_telefono FROM cotizaciones WHERE id = ?");
+            $cotStmt->execute([$context['cotizacion_id']]);
+            $cotPhone = $cotStmt->fetchColumn();
+            if ($cotPhone) $rawPhone = $cotPhone;
+        }
+
+        $phone = self::normalizePhone($rawPhone ?? '');
+
+        if (!$phone) {
+            error_log("[WhatsAppService] Sin número válido para cliente_id={$clienteId} evento={$eventCode}");
+            self::log($pdo, $clienteId, $eventCode, $rawPhone ?? '', $tpl['template_name'], [], null, 'failed', 'numero_invalido', $context);
+            return;
+        }
+
+        // ── Construir parámetros del template ─────────────────────────────────
+        $paramKeys = json_decode($tpl['param_keys'] ?? '[]', true) ?? [];
+        $params    = [];
+        foreach ($paramKeys as $key) {
+            if ($key === 'razon_social') {
+                $params[] = $cliente['razon_social'];
+            } elseif ($key === 'portal_url') {
+                $params[] = defined('APP_URL') ? APP_URL . '/portal/' : '';
+            } else {
+                $params[] = (string)($context[$key] ?? '');
+            }
+        }
+
+        // ── Enviar template (con documento si el contexto lo incluye) ─────────
+        $docUrl      = $context['doc_url']      ?? null;  // URL pública del PDF
+        $docFilename = $context['doc_filename']  ?? null;  // nombre visible del archivo
+
+        // Botón URL con sufijo dinámico: la plantilla define en whatsapp_templates.url_button_key
+        // la clave del contexto cuyo valor es el sufijo (ej: url_button_key='portal_token').
+        $btnParam = null;
+        if (!empty($tpl['url_button_key'])) {
+            $btnParam = (string)($context[$tpl['url_button_key']] ?? '');
+        }
+
+        $waId   = self::sendTemplate($phone, $tpl['template_name'], $params, $tpl['language_code'], $docUrl, $docFilename, $btnParam);
+        $estado = $waId ? 'sent' : 'failed';
+        $error  = $waId ? null   : 'No se obtuvo message_id de la API';
+
+        self::log($pdo, $clienteId, $eventCode, $phone, $tpl['template_name'], $params, $waId, $estado, $error, $context);
+    }
+
+    // ── Envío de template ──────────────────────────────────────────────────────
+
+    /**
+     * Llama a la API (Kapso proxy de Meta) y envía un template.
+     *
+     * @param string      $to           Número normalizado (ej: "51987654321")
+     * @param string      $templateName Nombre del template aprobado en Meta
+     * @param string[]    $params       Valores para {{1}}, {{2}}, … del body del template
+     * @param string      $lang         Código de idioma del template (ej: "es")
+     * @param string|null $docUrl       URL pública del PDF a adjuntar como header (opcional)
+     * @param string|null $docFilename  Nombre visible del archivo adjunto (opcional)
+     *
+     * @return string|null  WhatsApp message ID devuelto por la API, o null si falló
+     */
+    public static function sendTemplate(
+        string  $to,
+        string  $templateName,
+        array   $params         = [],
+        string  $lang           = 'es',
+        ?string $docUrl         = null,
+        ?string $docFilename    = null,
+        ?string $urlButtonParam = null   // sufijo dinámico del botón URL (ej: token del portal)
+    ): ?string {
+        $apiKey  = self::apiKey();
+        $phoneId = self::phoneId();
+
+        if (!$apiKey || !$phoneId) {
+            error_log('[WhatsAppService] Credenciales Kapso no configuradas en .env');
+            return null;
+        }
+
+        $components = [];
+
+        // Header con documento PDF (si aplica)
+        if ($docUrl) {
+            $components[] = [
+                'type'       => 'header',
+                'parameters' => [[
+                    'type'     => 'document',
+                    'document' => array_filter([
+                        'link'     => $docUrl,
+                        'filename' => $docFilename ?: basename($docUrl),
+                    ]),
+                ]],
+            ];
+        }
+
+        if (!empty($params)) {
+            $components[] = [
+                'type'       => 'body',
+                'parameters' => array_values(array_map(
+                    fn($v) => ['type' => 'text', 'text' => (string)$v],
+                    $params
+                )),
+            ];
+        }
+
+        // Botón URL con sufijo dinámico (la plantilla en Meta define la URL base + {{1}};
+        // aquí se envía solo el sufijo, ej. el token del portal).
+        if ($urlButtonParam !== null && $urlButtonParam !== '') {
+            $components[] = [
+                'type'       => 'button',
+                'sub_type'   => 'url',
+                'index'      => '0',
+                'parameters' => [['type' => 'text', 'text' => (string)$urlButtonParam]],
+            ];
+        }
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type'    => 'individual',
+            'to'                => $to,
+            'type'              => 'template',
+            'template'          => [
+                'name'       => $templateName,
+                'language'   => ['code' => $lang],
+                'components' => $components,
+            ],
+        ];
+
+        $url = "https://api.kapso.ai/meta/whatsapp/v24.0/{$phoneId}/messages";
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/json',
+                'Accept: application/json',
+                'X-API-Key: ' . $apiKey,
+            ],
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlErr) {
+            error_log("[WhatsAppService] cURL error: {$curlErr}");
+            return null;
+        }
+
+        $data = $response ? json_decode($response, true) : [];
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            return $data['messages'][0]['id'] ?? null;
+        }
+
+        $errMsg = $data['error']['message'] ?? $response;
+        error_log("[WhatsAppService] API error HTTP {$httpCode} template={$templateName} to={$to}: {$errMsg}");
+        return null;
+    }
+
+    // ── Utilities ──────────────────────────────────────────────────────────────
+
+    /**
+     * Normaliza un número de teléfono peruano al formato E.164 sin '+'.
+     * Acepta: "987654321", "+51987654321", "51987654321", "987 654 321"
+     * Devuelve "" si el número no es válido.
+     */
+    public static function normalizePhone(string $raw): string
+    {
+        $digits = preg_replace('/\D/', '', $raw);
+
+        // Quitar prefijo internacional duplicado
+        if (strlen($digits) === 11 && str_starts_with($digits, '51')) {
+            // ya tiene prefijo 51 + 9 dígitos → OK
+        } elseif (strlen($digits) === 9) {
+            $digits = '51' . $digits;
+        } else {
+            return '';  // longitud inesperada
+        }
+
+        // Verificar formato final: 51 + 9 dígitos, comenzando con 9 (móvil Perú)
+        if (!preg_match('/^519\d{8}$/', $digits)) {
+            return '';
+        }
+
+        return $digits;
+    }
+
+    // ── Logging ────────────────────────────────────────────────────────────────
+
+    private static function log(
+        \PDO    $pdo,
+        ?int    $clienteId,
+        string  $eventCode,
+        string  $telefono,
+        string  $templateName,
+        array   $params,
+        ?string $waId,
+        string  $estado,
+        ?string $errorMsg,
+        ?array  $context = null
+    ): void {
+        try {
+            // Guardamos el contexto (sin claves ruidosas de UI) para poder reintentar fielmente.
+            $ctxClean = null;
+            if (is_array($context) && $context) {
+                $drop = ['title', 'message', 'push_body', 'triggered_by'];
+                $ctxClean = array_diff_key($context, array_flip($drop));
+                $ctxClean = $ctxClean ? json_encode($ctxClean, JSON_UNESCAPED_UNICODE) : null;
+            }
+            $pdo->prepare("
+                INSERT INTO whatsapp_log
+                  (cliente_id, event_code, telefono, template_name, params_json, context_json, wa_message_id, estado, error_msg)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ")->execute([
+                $clienteId,
+                $eventCode,
+                $telefono,
+                $templateName,
+                $params ? json_encode($params, JSON_UNESCAPED_UNICODE) : null,
+                $ctxClean,
+                $waId,
+                $estado,
+                $errorMsg,
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[WhatsAppService] log() error: ' . $e->getMessage());
+        }
+    }
+}

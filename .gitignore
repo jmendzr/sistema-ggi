@@ -1,0 +1,42 @@
+# ─────────────────────────────────────────────────────────────
+#  GGI Sistema — .gitignore
+#  Excluye dependencias, archivos de usuarios, runtime y SECRETOS.
+# ─────────────────────────────────────────────────────────────
+
+# ── Secretos (NUNCA subir). El .env real vive FUERA de public_html. ──
+.env
+.env.*
+!.env.example
+# Configuración de correo editable desde la UI (runtime, no versionar)
+config/email_alerta.json
+
+# ── Dependencias (se reinstalan con `composer install`) ──
+/vendor/
+
+# ── Archivos subidos por clientes / documentación (varios cientos de MB) ──
+/documentaciones_clientes/
+/uploads/
+
+# ── Almacenamiento runtime, caché de PDF, temporales generados ──
+/storage/
+
+# ── Logs ──
+/logs/
+*.log
+
+# ── Basura del SO / editores ──
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# ── Temporales ──
+*.tmp
+*.bak
+*.cache
+
+# Tooling de Claude Code (no es parte de la app)
+.claude/
