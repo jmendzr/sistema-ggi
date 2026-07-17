@@ -67,6 +67,9 @@ define('ALLOWED_EXT',    ['pdf', 'jpg', 'jpeg', 'png', 'webp']);
 // --- SUNAT / API Perú ---
 define('SUNAT_API_URL',   'https://apiperu.dev/api/ruc');
 define('SUNAT_API_TOKEN', env('SUNAT_API_TOKEN', ''));
+// Credencial de la API de tracking de Olva Courier.
+// Debe definirse exclusivamente en .env; nunca en el código fuente.
+define('OLVA_TRACKING_API_KEY', env('OLVA_TRACKING_API_KEY', ''));
 define('DIAS_ALERTA_VENCIMIENTO', 90);
 define('DIAS_ALERTA_AUDITORIA',   60);
 

@@ -1640,7 +1640,10 @@ async function aplicarDatosSUNAT() {
   ];
   const campoMap = Object.fromEntries(campos.map(c => [c.key, c]));
 
-  const body = new URLSearchParams({ cliente_id: _clienteActual.id });
+  const body = new URLSearchParams({
+    cliente_id: _clienteActual.id,
+    _csrf: window.CSRF_TOKEN || document.querySelector('meta[name="csrf-token"]')?.content || ''
+  });
   const applied = [];
   chks.forEach(chk => {
     const key = chk.dataset.sunatCampo;

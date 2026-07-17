@@ -5,12 +5,13 @@ require_once __DIR__ . '/../../core/NotificationService.php';
 require_once __DIR__ . '/../../core/envio_notificar.php';
 session_init();
 require_login();
-session_write_close(); // Liberar lock: solo se necesitaba para autenticación
 // Ventas no puede cambiar el estado de envíos; lo gestionan operaciones y logística.
 require_role('gerente_general','gerente_operaciones','gestor_logistico','delivery');
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok'=>false]); exit; }
+
+csrf_verify();
 
 $estado_id  = (int)($_POST['estado_id'] ?? 0);
 $envio_id   = (int)($_POST['envio_id']  ?? 0);  // individual

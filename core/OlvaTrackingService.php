@@ -7,7 +7,6 @@
 class OlvaTrackingService {
 
     private const API_URL = 'https://reports.olvaexpress.pe/webservice/rest/getTrackingInformation';
-    private const API_KEY = 'a82e5d192fae9bbfee43a964024498e87dfecb884b67c7e95865a3bb07b607dd';
 
     // Estados técnicos que se filtran en la vista amigable
     private const ESTADOS_OCULTOS = [
@@ -94,12 +93,18 @@ class OlvaTrackingService {
         if (!preg_match('/^(\d+)-(\d{2})$/', trim($guia), $m)) {
             return null;
         }
+
+        // La credencial se administra fuera del repositorio, en .env.
+        // Si falta, no realizar una llamada incompleta a la API externa.
+        $api_key = defined('OLVA_TRACKING_API_KEY') ? OLVA_TRACKING_API_KEY : '';
+        if ($api_key === '') return null;
+
         [, $remito, $emision] = $m;
 
         $url = self::API_URL . '?' . http_build_query([
             'tracking' => $remito,
             'emision'  => $emision,
-            'apikey'   => self::API_KEY,
+            'apikey'   => $api_key,
             'details'  => '1',
         ]);
 

@@ -3,12 +3,13 @@ require_once __DIR__ . '/../../core/helpers.php';
 require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
-session_write_close();
 header('Content-Type: application/json; charset=utf-8');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['ok' => false]); exit;
 }
+
+csrf_verify();
 
 $cliente_id = (int)($_POST['cliente_id'] ?? 0);
 if (!$cliente_id) {
