@@ -41,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'contacto_nombre'   => trim($_POST['contacto_nombre'] ?? ''),
         'contacto_apellido' => trim($_POST['contacto_apellido'] ?? ''),
         'contacto_telefono' => trim($_POST['contacto_telefono'] ?? ''),
+        'horario_contacto'  => mb_substr(trim($_POST['horario_contacto'] ?? ''), 0, 120),
         'contacto_email'    => trim($_POST['contacto_email'] ?? ''),
         'contacto_cargo'    => trim($_POST['contacto_cargo'] ?? ''),
         'num_trabajadores'  => !empty($_POST['num_trabajadores']) ? (int)$_POST['num_trabajadores'] : null,
@@ -84,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               ruc=?, razon_social=?, direccion=?,
               departamento=?, provincia=?, distrito=?, ubigeo=?,
               contacto_nombre=?, contacto_apellido=?,
-              contacto_telefono=?, contacto_email=?, contacto_cargo=?,
+              contacto_telefono=?, horario_contacto=?, contacto_email=?, contacto_cargo=?,
               num_trabajadores=?,
               fecha_contrato=?, estado=?, notas=?
             WHERE id=?
@@ -92,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $data['ruc'], $data['razon_social'], $data['direccion'] ?: null,
             $data['departamento'] ?: null, $data['provincia'] ?: null, $data['distrito'] ?: null, $data['ubigeo'] ?: null,
             $data['contacto_nombre'], $data['contacto_apellido'],
-            $data['contacto_telefono'], $data['contacto_email'], $data['contacto_cargo'],
+            $data['contacto_telefono'], $data['horario_contacto'] ?: null, $data['contacto_email'], $data['contacto_cargo'],
             $data['num_trabajadores'],
             $data['fecha_contrato'] ?: null, $data['estado'], $data['notas'],
             $id,
@@ -350,6 +351,12 @@ require_once __DIR__ . '/../../templates/layout.php';
                  class="<?= isset($errors['contacto_telefono'])?'error':'' ?>"
                  placeholder="Ej: 999888777" value="<?= sanitize($data['contacto_telefono'] ?? '') ?>">
           <?php if (isset($errors['contacto_telefono'])): ?><div class="err-msg"><?= $errors['contacto_telefono'] ?></div><?php endif; ?>
+        </div>
+        <div class="field">
+          <label>Horario de contacto <span style="font-size:10px;color:var(--gris-texto);font-weight:400;">(preferencia del cliente)</span></label>
+          <input type="text" name="horario_contacto" maxlength="120" autocomplete="off"
+                 placeholder="Ej: No llamar después de las 5 PM"
+                 value="<?= sanitize($data['horario_contacto'] ?? '') ?>">
         </div>
       </div>
     </div>

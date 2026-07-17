@@ -69,6 +69,18 @@ $docs->execute([$id]);
 $docs = $docs->fetchAll();
 $docs_por_tipo = array_column($docs, null, 'tipo_documento');
 
+// Llamadas programadas abiertas de este cliente (historial único: incluye las
+// agendadas desde propuestas u otros módulos)
+$stmt = $pdo->prepare("
+    SELECT ll.*, CONCAT(u.nombre,' ',u.apellido) AS asignado_nombre
+    FROM llamadas_programadas ll
+    JOIN usuarios u ON u.id = ll.usuario_id
+    WHERE ll.cliente_id = ? AND ll.estado IN ('pendiente','notificada')
+    ORDER BY ll.fecha_hora ASC
+");
+$stmt->execute([$id]);
+$llamadas_abiertas = $stmt->fetchAll();
+
 // Counts para labels de pestañas (queries ligeras — no se cargan los datos completos)
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM certificados WHERE cliente_id=? AND deleted_at IS NULL");
 $stmt->execute([$id]); $cnt_certs = (int)$stmt->fetchColumn();
@@ -566,7 +578,7 @@ if ($from === 'dashboard') {
       <div class="meta-item"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> <strong><?= sanitize($c['contacto_nombre'].' '.$c['contacto_apellido']) ?></strong><?= $c['contacto_cargo'] ? ' — '.sanitize($c['contacto_cargo']) : '' ?></div>
       <?php endif; ?>
       <?php if ($c['contacto_telefono']): ?>
-      <div class="meta-item"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> <strong><?= sanitize($c['contacto_telefono']) ?></strong></div>
+      <div class="meta-item"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> <strong><?= sanitize($c['contacto_telefono']) ?></strong><?php if (!empty($c['horario_contacto'])): ?> <span style="color:var(--s-warn-tx,#92400e);font-size:11.5px;">· ⏰ <?= sanitize($c['horario_contacto']) ?></span><?php endif; ?></div>
       <?php endif; ?>
       <?php if ($ej_responsable): ?>
       <div class="meta-item">
@@ -606,12 +618,26 @@ if ($from === 'dashboard') {
       Portal
     </a>
     <?php endif; ?>
+    <button type="button" class="btn btn-outline btn-sm" onclick="ggiAbrirLlamada()" title="Agendar llamada con recordatorio">
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      Llamada
+    </button>
     <button type="button" class="btn btn-outline btn-sm" onclick="ggiAbrirEmpresa('edit', <?= (int)$id ?>)">
       <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       Editar
     </button>
   </div>
 </div>
+
+<?php
+// Agenda de llamadas: partial compartido (bloque de abiertas + modal + JS).
+$_llam_cliente_id = (int)$id;
+$_llam_cot_id     = 0;
+$_llam_empresa    = $c['razon_social'];
+$_llam_horario    = $c['horario_contacto'] ?? '';
+$_llam_abiertas   = $llamadas_abiertas;
+include __DIR__ . '/_llamada_modal.php';
+?>
 
 <!-- Tabs -->
 <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:20px;">

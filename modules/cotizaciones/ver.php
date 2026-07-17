@@ -12,6 +12,7 @@ $pdo  = Database::get();
 $stmt = $pdo->prepare("
     SELECT cot.*,
            COALESCE(cl.razon_social, cot.empresa_nombre) AS nombre_empresa,
+           cl.horario_contacto,
            COALESCE(cl.ruc, cot.empresa_ruc) AS ruc_empresa,
            COALESCE(cl.direccion, cot.empresa_direccion) AS dir_empresa,
            u.nombre AS creado_por_nombre,
@@ -301,6 +302,12 @@ ggi_breadcrumb(array_filter([
     </button>
     <?php endif; ?>
 
+    <?php if (!empty($cot['cliente_id'])): ?>
+    <button type="button" onclick="ggiAbrirLlamada()" class="btn btn-outline btn-sm" title="Agendar llamada sobre esta propuesta (recordatorio push)">
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      Llamada
+    </button>
+    <?php endif; ?>
     <button type="button" onclick="ggiAbrirPropuesta('duplicate', <?= (int)$id ?>)" class="btn btn-outline btn-sm">
       <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       Duplicar
@@ -308,6 +315,28 @@ ggi_breadcrumb(array_filter([
   </div>
 </div>
 <?php include __DIR__ . '/_propuesta_modal.php'; ?>
+
+<?php
+// Agenda de llamadas EN ESTA propuesta (modal en sitio, sin salir del módulo).
+// La llamada queda ligada a esta cotización pero vive en el historial único
+// (llamadas_programadas): la ficha del cliente también la muestra.
+if (!empty($cot['cliente_id'])) {
+    $_llam_st = $pdo->prepare("
+        SELECT ll.*, CONCAT(u.nombre,' ',u.apellido) AS asignado_nombre
+        FROM llamadas_programadas ll
+        JOIN usuarios u ON u.id = ll.usuario_id
+        WHERE ll.cotizacion_id = ? AND ll.estado IN ('pendiente','notificada')
+        ORDER BY ll.fecha_hora ASC
+    ");
+    $_llam_st->execute([(int)$id]);
+    $_llam_cliente_id = (int)$cot['cliente_id'];
+    $_llam_cot_id     = (int)$id;
+    $_llam_empresa    = $cot['nombre_empresa'];
+    $_llam_horario    = $cot['horario_contacto'] ?? '';
+    $_llam_abiertas   = $_llam_st->fetchAll();
+    include __DIR__ . '/../clientes/_llamada_modal.php';
+}
+?>
 
 
 

@@ -31,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'contacto_nombre'   => trim($_POST['contacto_nombre'] ?? ''),
         'contacto_apellido' => trim($_POST['contacto_apellido'] ?? ''),
         'contacto_telefono' => trim($_POST['contacto_telefono'] ?? ''),
+        'horario_contacto'  => mb_substr(trim($_POST['horario_contacto'] ?? ''), 0, 120),
         'contacto_email'    => trim($_POST['contacto_email'] ?? ''),
         'contacto_cargo'    => trim($_POST['contacto_cargo'] ?? ''),
         'fecha_contrato'    => $_POST['fecha_contrato'] ?? '',
@@ -63,13 +64,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare("
             INSERT INTO clientes
               (ruc, razon_social, direccion, departamento, provincia, distrito, ubigeo,
-               contacto_nombre, contacto_apellido, contacto_telefono, contacto_email, contacto_cargo,
+               contacto_nombre, contacto_apellido, contacto_telefono, horario_contacto, contacto_email, contacto_cargo,
                num_trabajadores,
                fecha_contrato, estado, notas,
                ejecutivo_id, created_by_user_id, responsible_user_id,
                creado_por)
             VALUES
-              (?,?,?,?,?,?,?,  ?,?,?,?,?,  ?,  ?,?,?,  ?,?,?,  ?)
+              (?,?,?,?,?,?,?,  ?,?,?,?,?,?,  ?,  ?,?,?,  ?,?,?,  ?)
         ")->execute([
             $data['ruc'],
             $data['razon_social'],
@@ -81,6 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $data['contacto_nombre']   ?: null,
             $data['contacto_apellido'] ?: null,
             $data['contacto_telefono'] ?: null,
+            $data['horario_contacto']  ?: null,
             $data['contacto_email']    ?: null,
             $data['contacto_cargo']    ?: null,
             $num_trab,
@@ -303,6 +305,12 @@ require_once __DIR__ . '/../../templates/layout.php';
           <input type="tel" id="contacto_telefono" name="contacto_telefono"
                  placeholder="9xx xxx xxx"
                  value="<?= sanitize($data['contacto_telefono'] ?? '') ?>">
+        </div>
+        <div class="field">
+          <label>Horario de contacto <span style="font-size:10px;color:var(--gris-texto);font-weight:400;">(preferencia del cliente)</span></label>
+          <input type="text" name="horario_contacto" maxlength="120" autocomplete="off"
+                 placeholder="Ej: No llamar después de las 5 PM"
+                 value="<?= sanitize($data['horario_contacto'] ?? '') ?>">
         </div>
       </div>
     </div>
