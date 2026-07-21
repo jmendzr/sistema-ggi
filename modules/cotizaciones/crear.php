@@ -1640,10 +1640,8 @@ async function aplicarDatosSUNAT() {
   ];
   const campoMap = Object.fromEntries(campos.map(c => [c.key, c]));
 
-  const body = new URLSearchParams({
-    cliente_id: _clienteActual.id,
-    _csrf: window.CSRF_TOKEN || document.querySelector('meta[name="csrf-token"]')?.content || ''
-  });
+  // ggiPost adjunta el _csrf vigente; aquí solo se arman los datos
+  const body = new URLSearchParams({ cliente_id: _clienteActual.id });
   const applied = [];
   chks.forEach(chk => {
     const key = chk.dataset.sunatCampo;
@@ -1661,10 +1659,8 @@ async function aplicarDatosSUNAT() {
   if (!applied.length) return;
 
   try {
-    const r = await fetch(`<?= APP_URL ?>/modules/clientes/ajax_actualizar_sunat.php`, {
-      method: 'POST', credentials: 'same-origin', body
-    });
-    const result = await r.json();
+    const _fd = new FormData(); body.forEach((v, k) => _fd.append(k, v));
+    const result = await ggiPost('<?= APP_URL ?>/modules/clientes/ajax_actualizar_sunat.php', _fd, { silent: true });
     if (result.ok) {
       // Actualizar _clienteActual con los nuevos valores
       applied.forEach(key => { _clienteActual[key] = s[key]; });

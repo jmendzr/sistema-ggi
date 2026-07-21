@@ -278,10 +278,6 @@ var AJAX_ESTADO  = '<?= APP_URL ?>/modules/envios/ajax_estado.php';
 var AJAX_ASUMIR  = '<?= APP_URL ?>/modules/envios/ajax_asumir.php';
 var APP_URL_BASE = '<?= APP_URL ?>/modules/envios/ver.php';
 
-function getCsrf() {
-  return document.querySelector('[name="_csrf"]')?.value || window.CSRF_TOKEN || '';
-}
-
 // ── Drag and drop ──
 var draggedCard = null;
 
@@ -320,14 +316,8 @@ document.querySelectorAll('.kanban-col').forEach(col => {
 
 async function moveCard(card, fromEstadoId, toEstadoId, targetBody) {
   const envioId = card.dataset.id;
-  const body = `envio_id=${envioId}&estado_id=${toEstadoId}&_csrf=${encodeURIComponent(getCsrf())}`;
   try {
-    const r = await fetch(AJAX_ESTADO, {
-      method: 'POST',
-      headers: {'Content-Type':'application/x-www-form-urlencoded','X-CSRF-TOKEN':getCsrf()},
-      body
-    });
-    const data = await r.json();
+    const data = await ggiPost(AJAX_ESTADO, { envio_id: envioId, estado_id: toEstadoId }, { silent: true });
     if (data.ok) {
       // Move DOM
       const fromBody = document.getElementById('col-' + fromEstadoId);
@@ -371,12 +361,7 @@ async function asumir(e, envioId) {
   btn.disabled = true;
   btn.innerHTML = '<svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
   try {
-    const r = await fetch(AJAX_ASUMIR, {
-      method: 'POST',
-      headers: {'Content-Type':'application/x-www-form-urlencoded','X-CSRF-TOKEN':getCsrf()},
-      body: `envio_id=${envioId}&_csrf=${encodeURIComponent(getCsrf())}`
-    });
-    const data = await r.json();
+    const data = await ggiPost(AJAX_ASUMIR, { envio_id: envioId }, { silent: true });
     if (data.ok) {
       if (typeof showToast==='function') showToast('Envío asumido.','ok');
       // Actualizar solo el botón en la card sin recargar

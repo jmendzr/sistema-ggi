@@ -550,8 +550,7 @@ function ggiEliminarPago(id, tipo, monto) {
       const fd = new FormData();
       fd.append('pago_id', id);
       fd.append('_csrf', document.querySelector('[name="_csrf"]')?.value || '');
-      const r    = await fetch('<?= APP_URL ?>/modules/pagos/ajax_eliminar.php', { method:'POST', headers:{'X-CSRF-TOKEN':window.CSRF_TOKEN||''}, body: fd });
-      const data = await r.json();
+      const data = await ggiPost('<?= APP_URL ?>/modules/pagos/ajax_eliminar.php', fd, { silent: true });
       if (data.ok) {
         if (typeof ggiToastUndo === 'function') ggiToastUndo('pagos', id, data.msg);
         else if (typeof showToast === 'function') showToast(data.msg, 'ok');
@@ -582,9 +581,7 @@ function subirVoucherTabla(pagoId, input) {
   fd.append('accion', 'subir_voucher');
   fd.append('pago_id', pagoId);
   fd.append('voucher', input.files[0]);
-  fd.append('_csrf', window.CSRF_TOKEN || '');
-  fetch(window.APP_URL + '/modules/pagos/ajax_pago.php', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd})
-    .then(function(r) { return r.json(); })
+  ggiPost(window.APP_URL + '/modules/pagos/ajax_pago.php', fd, { silent: true })
     .then(function(d) {
       if (d.ok) {
         if (typeof showToast === 'function') showToast(d.msg || 'Voucher subido.', 'ok');
@@ -685,9 +682,8 @@ function validarPagoGerente(pagoId) {
   document.getElementById('btn-confirmar-validar').onclick = function() {
     cerrarModalValidar();
     var fd = new FormData();
-    fd.append('accion','validar'); fd.append('pago_id', pagoId); fd.append('_csrf', window.CSRF_TOKEN||'');
-    fetch(window.APP_URL+'/modules/pagos/ajax_pago.php',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})
-      .then(function(r){return r.json();})
+    fd.append('accion','validar'); fd.append('pago_id', pagoId);
+    ggiPost(window.APP_URL+'/modules/pagos/ajax_pago.php', fd, { silent: true })
       .then(function(d){
         if(d.ok){
           if(typeof showToast==='function') showToast(d.msg||'Pago validado.','ok');
@@ -718,9 +714,8 @@ function rechazarPagoGerente(pagoId) {
     }
     cerrarModalRechazar();
     var fd = new FormData();
-    fd.append('accion','rechazar'); fd.append('pago_id',pagoId); fd.append('notas',nota); fd.append('_csrf',window.CSRF_TOKEN||'');
-    fetch(window.APP_URL+'/modules/pagos/ajax_pago.php',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})
-      .then(function(r){return r.json();})
+    fd.append('accion','rechazar'); fd.append('pago_id',pagoId); fd.append('notas',nota);
+    ggiPost(window.APP_URL+'/modules/pagos/ajax_pago.php', fd, { silent: true })
       .then(function(d){
         if(d.ok){
           if(typeof showToast==='function') showToast(d.msg||'Rechazado.','ok');

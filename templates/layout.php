@@ -1858,16 +1858,14 @@ session_write_close();
   function persistDismiss(hash, attempt) {
     attempt = attempt || 1;
     if (attempt > 3) return;
-    var fd = new FormData();
-    fd.append('ann_hash', hash);
-    fd.append('_csrf', (window.CSRF_TOKEN || document.querySelector('meta[name="csrf-token"]')?.content || ''));
-    fetch(DISMISS_URL, {
-      method: 'POST',
-      credentials: 'same-origin',
-      body: fd
-    }).then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-    }).catch(function() {
+    // ggiPost vive en layout_end.php; esta función solo corre al hacer clic,
+    // cuando ya está definida. El guard evita cualquier orden inesperado.
+    if (typeof ggiPost !== 'function') {
+      setTimeout(function() { persistDismiss(hash, attempt + 1); }, attempt * 2000);
+      return;
+    }
+    ggiPost(DISMISS_URL, { ann_hash: hash }, { silent: true }).then(function(j) {
+      if (j.ok) return;
       // Reintento con backoff: 2s, 4s
       setTimeout(function() { persistDismiss(hash, attempt + 1); }, attempt * 2000);
     });

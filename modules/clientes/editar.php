@@ -532,26 +532,12 @@ async function executePortalAction(accion) {
   const btns = area ? area.querySelectorAll('button') : [];
   btns.forEach(b => b.classList.add('portal-btn-spin'));
 
-  const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-  const fd = new FormData();
-  fd.append('cliente_id', '<?= $id ?>');
-  fd.append('accion', accion);
-  fd.append('_csrf', (csrfMeta && csrfMeta.getAttribute('content')) || window.CSRF_TOKEN || '');
-
   try {
-    const r    = await fetch('<?= APP_URL ?>/modules/clientes/portal_toggle.php', {
-      method:  'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body:    fd,
-    });
-    const data = await r.json();
+    // ggiPost adjunta el _csrf vigente y absorbe su rotación
+    const data = await ggiPost('<?= APP_URL ?>/modules/clientes/portal_toggle.php',
+                               { cliente_id: '<?= $id ?>', accion: accion }, { silent: true });
 
     if (data.ok) {
-      // Update CSRF
-      if (data.csrf) {
-        window.CSRF_TOKEN = data.csrf;
-        if (csrfMeta) csrfMeta.setAttribute('content', data.csrf);
-      }
       // Re-render portal section
       renderPortalArea(data);
       // Update tab button badge
@@ -660,14 +646,8 @@ function confirmarEliminar() {
     confirmText: 'Sí, eliminar',
     confirmColor: '#ef4444',
     onConfirm: () => {
-      const fd = new FormData();
-      fd.append('id', <?= $id ?>);
-      fd.append('csrf_token', '<?= csrf_token() ?>');
-      fetch('<?= APP_URL ?>/modules/clientes/eliminar.php', {
-        method: 'POST',
-        body: fd,
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-      }).then(r => r.json()).then(d => {
+      ggiPost('<?= APP_URL ?>/modules/clientes/eliminar.php', { id: <?= $id ?> }, { silent: true })
+      .then(d => {
         if (d.ok) {
           if (typeof showToast === 'function') showToast('Empresa eliminada.', 'ok');
           <?php if ($_ggi_embed): ?>

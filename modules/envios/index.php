@@ -460,12 +460,8 @@ async function asumir(e, id) {
   e.preventDefault();
   const form = e.target;
   try {
-    const r    = await fetch('<?= APP_URL ?>/modules/envios/ajax_asumir.php', {
-      method:  'POST',
-      headers: {'Content-Type':'application/x-www-form-urlencoded','X-CSRF-TOKEN':window.CSRF_TOKEN||''},
-      body:    'envio_id='+id+'&_csrf='+encodeURIComponent(document.querySelector('[name="_csrf"]')?.value||'')
-    });
-    const data = await r.json();
+    // ggiPost: helper global (adjunta el _csrf vigente)
+    const data = await ggiPost('<?= APP_URL ?>/modules/envios/ajax_asumir.php', { envio_id: id }, { silent: true });
     if (data.ok) {
       if (typeof showToast === 'function') showToast('Envío asumido correctamente.','ok');
       // Actualizar fila sin recargar: ocultar botón "Asumir" y actualizar gestor
@@ -609,12 +605,10 @@ ggiReady(() => {
     }
 
     try {
-      const r = await fetch(`<?= APP_URL ?>/modules/envios/ajax_estado.php`, {
-        method: 'POST',
-        headers: {'Content-Type':'application/x-www-form-urlencoded','X-CSRF-TOKEN':window.CSRF_TOKEN||''},
-        body: `envio_id=${d.id}&estado_id=${d.value}` + extra
-      });
-      const data = await r.json();
+      // extra puede traer parametros adicionales (motivo, detalle) como query string
+      const _p  = new URLSearchParams(`envio_id=${d.id}&estado_id=${d.value}` + extra);
+      const _fd = new FormData(); _p.forEach((v, k) => _fd.append(k, v));
+      const data = await ggiPost('<?= APP_URL ?>/modules/envios/ajax_estado.php', _fd, { silent: true });
       if (data.ok) {
         d.el.setAttribute('data-color', d.color);
         d.el.setAttribute('data-value', d.value);

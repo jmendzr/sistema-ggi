@@ -196,14 +196,9 @@ let _ncTemplates = [];
 let _ncSegOk = false;
 
 async function campPost(data) {
-  const body = new URLSearchParams(data);
-  body.set('csrf_token', CAMP_TOK());
-  const r = await fetch(CAMP_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-TOKEN': CAMP_TOK() },
-    body
-  });
-  return r.json();
+  // ggiPost: helper global. silent porque este módulo interpreta la respuesta
+  // y muestra sus propios mensajes.
+  return await ggiPost(CAMP_URL, data, { silent: true });
 }
 
 // ── Sincronizar métricas de una campaña ──

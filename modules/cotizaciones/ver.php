@@ -812,16 +812,11 @@ async function subirFirmada(input) {
   const fd = new FormData();
   fd.append('archivo', file);
   fd.append('cotizacion_id', '<?= $id ?>');
-  fd.append('_csrf', window.CSRF_TOKEN || '');
 
   try {
     if (pbar) pbar.style.width = '70%';
-    const res  = await fetch('<?= APP_URL ?>/modules/cotizaciones/ajax_subir_firmada.php', {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body: fd
-    });
-    const json = await res.json();
+    // ggiPost adjunta el _csrf vigente; silent porque abajo hay avisos propios
+    const json = await ggiPost('<?= APP_URL ?>/modules/cotizaciones/ajax_subir_firmada.php', fd, { silent: true });
     if (pbar) pbar.style.width = '100%';
 
     if (json.ok) {
@@ -1070,12 +1065,9 @@ async function submitFechaCert() {
   if (!v) { if (err) { err.textContent = 'Selecciona una fecha.'; err.style.display = 'block'; } return; }
   var btn = document.getElementById('fcert-save'); if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
   try {
-    var tok = document.querySelector('meta[name="csrf-token"]')?.content || '';
-    var body = new URLSearchParams({ cot_id: '<?= $id ?>', fecha_requerida_certificados: v, csrf_token: tok });
-    var r = await fetch('<?= APP_URL ?>/modules/cotizaciones/ajax_fecha_cert.php', {
-      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-TOKEN': tok }, body
-    });
-    var data = await r.json();
+    // ggiPost: adjunta el _csrf vigente. silent porque el error se pinta en el modal.
+    var data = await ggiPost('<?= APP_URL ?>/modules/cotizaciones/ajax_fecha_cert.php',
+                             { cot_id: '<?= $id ?>', fecha_requerida_certificados: v }, { silent: true });
     if (data.ok) {
       var disp = document.getElementById('fecha-cert-display');
       if (disp) { disp.setAttribute('data-fecha', data.fecha); var d = data.fecha.split('-'); disp.textContent = d[2] + '/' + d[1] + '/' + d[0]; }
@@ -1097,13 +1089,8 @@ async function confirmarDesistir() {
   if (list) list.innerHTML = '<li style="color:var(--gris-texto);">Cargando…</li>';
   if (m) m.classList.add('open');
   try {
-    var tok = document.querySelector('meta[name="csrf-token"]')?.content || '';
-    var r = await fetch('<?= APP_URL ?>/modules/cotizaciones/ajax_desistir.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-TOKEN': tok },
-      body: new URLSearchParams({ cot_id: '<?= $id ?>', preview: '1', csrf_token: tok })
-    });
-    var data = await r.json();
+    var data = await ggiPost('<?= APP_URL ?>/modules/cotizaciones/ajax_desistir.php',
+                             { cot_id: '<?= $id ?>', preview: '1' }, { silent: true });
     if (list) {
       list.innerHTML = '';
       var acciones = (data.ok && data.acciones && data.acciones.length)
@@ -1135,13 +1122,8 @@ async function submitDesistir() {
   var btn = document.getElementById('des-save');
   if (btn) { btn.disabled = true; btn.textContent = 'Procesando…'; }
   try {
-    var tok = document.querySelector('meta[name="csrf-token"]')?.content || '';
-    var r = await fetch('<?= APP_URL ?>/modules/cotizaciones/ajax_desistir.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-TOKEN': tok },
-      body: new URLSearchParams({ cot_id: '<?= $id ?>', motivo: motivo, csrf_token: tok })
-    });
-    var data = await r.json();
+    var data = await ggiPost('<?= APP_URL ?>/modules/cotizaciones/ajax_desistir.php',
+                             { cot_id: '<?= $id ?>', motivo: motivo }, { silent: true });
     if (data.ok) {
       var msg = 'Propuesta marcada como desistida.';
       if (data.certs_anulados)     msg += ' ' + data.certs_anulados + ' certificado(s) anulado(s).';
@@ -1189,19 +1171,10 @@ async function cambiarEstado(nuevoEstado, fechaRequerida) {
   }
 
   try {
-    const body = new URLSearchParams({
-      cot_id: '<?= $id ?>',
-      estado:  nuevoEstado,
-      csrf_token: document.querySelector('meta[name="csrf-token"]')?.content || ''
-    });
+    const datos = { cot_id: '<?= $id ?>', estado: nuevoEstado };
     // Fecha en que el cliente necesita sus certificados (obligatoria al aceptar)
-    if (nuevoEstado === 'aceptada' && fechaRequerida) body.set('fecha_requerida_certificados', fechaRequerida);
-    const r    = await fetch('<?= APP_URL ?>/modules/cotizaciones/ajax_estado_cot.php', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '' },
-      body
-    });
-    const data = await r.json();
+    if (nuevoEstado === 'aceptada' && fechaRequerida) datos.fecha_requerida_certificados = fechaRequerida;
+    const data = await ggiPost('<?= APP_URL ?>/modules/cotizaciones/ajax_estado_cot.php', datos, { silent: true });
 
     if (!data.ok) {
       // Revertir badge si hubo error
@@ -1428,26 +1401,11 @@ if (!window.ShortcutManager) {
     btn.disabled        = true;
     saving.style.display = 'inline';
 
-    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
-
-    var fd = new FormData();
-    fd.append('accion', 'guardar_nota');
-    fd.append('notas',  ta.value);
-    fd.append('_csrf',  csrfToken);
-
     try {
-      var r = await fetch(location.href, {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        body: fd
-      });
-      var d = await r.json();
+      // ggiPost adjunta el _csrf vigente y absorbe su rotación
+      var d = await ggiPost(location.href, { accion: 'guardar_nota', notas: ta.value }, { silent: true });
 
       if (d.ok) {
-        /* Refrescar el CSRF token en el meta tag para futuras peticiones */
-        if (d.csrf && csrfMeta) csrfMeta.setAttribute('content', d.csrf);
-
         /* Actualizar el texto en vista de lectura */
         if (d.notas) {
           /* Convertir saltos de línea a <br> como nl2br */

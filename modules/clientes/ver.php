@@ -486,14 +486,7 @@ function marcarRevisado() {
   btn.textContent = 'Guardando…';
   var fd = new FormData();
   fd.append('cliente_id', '<?= $id ?>');
-  fd.append('_csrf', '<?= csrf_token() ?>');
-  fetch('<?= APP_URL ?>/modules/clientes/ajax_revision.php', {
-    method: 'POST',
-    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    credentials: 'same-origin',
-    body: fd
-  })
-  .then(function(r){ return r.json(); })
+  ggiPost('<?= APP_URL ?>/modules/clientes/ajax_revision.php', fd, { silent: true })
   .then(function(d){
     if (d.ok) {
       if (typeof showToast === 'function') showToast('Cliente marcado como revisado.', 'ok');
@@ -1084,7 +1077,6 @@ include __DIR__ . '/_llamada_modal.php';
   var _act = <?= $_pact ? 'true' : 'false' ?>;
   var _url = <?= $_pact ? json_encode($_purl) : "''" ?>;
   var _cid = <?= (int)$id ?>;
-  function csrf(){ var m=document.querySelector('meta[name="csrf-token"]'); return window.CSRF_TOKEN || (m&&m.getAttribute('content')) || '<?= csrf_token() ?>'; }
   var IC = {
     copy:'<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
     ext:'<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>',
@@ -1116,11 +1108,8 @@ include __DIR__ . '/_llamada_modal.php';
     }
   }
   function doAction(pa){
-    var fd=new FormData(); fd.append('cliente_id',_cid); fd.append('accion',pa); fd.append('_csrf',csrf());
-    fetch('<?= APP_URL ?>/modules/clientes/portal_toggle.php',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})
-    .then(function(r){return r.json();})
+    ggiPost('<?= APP_URL ?>/modules/clientes/portal_toggle.php', { cliente_id: _cid, accion: pa }, { silent: true })
     .then(function(d){
-      if(d.csrf){ window.CSRF_TOKEN=d.csrf; var m=document.querySelector('meta[name="csrf-token"]'); if(m)m.setAttribute('content',d.csrf); }
       if(d.ok){
         _act=!!d.portal_activo; _url=d.portal_url||''; render();
         toast(d.msg||'Actualizado.','ok');
@@ -1228,14 +1217,7 @@ include __DIR__ . '/_llamada_modal.php';
 
       var fd = new FormData(this);
       fd.append('cliente_id', window.__doc_cliente_id);
-      fd.append('_csrf', window.CSRF_TOKEN || '');
-
-      fetch('<?= APP_URL ?>/modules/certificados/ajax_crear.php', {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        body: fd
-      })
-      .then(function(r) { return r.json(); })
+      ggiPost('<?= APP_URL ?>/modules/certificados/ajax_crear.php', fd, { silent: true })
       .then(function(data) {
         if (data.ok) {
           mantClose();
@@ -1496,16 +1478,10 @@ async function subirDocInlineFile(file, tipo, clienteId, versionActual) {
   fd.append('archivo',    file);
   fd.append('tipo',       tipo);
   fd.append('cliente_id', clienteId);
-  fd.append('_csrf',      window.CSRF_TOKEN || '');
 
   try {
     if (fill) fill.style.width = '70%';
-    const res  = await fetch(window.APP_URL + '/modules/documentos/subir.php', {
-      method:  'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body:    fd
-    });
-    const json = await res.json();
+    const json = await ggiPost(window.APP_URL + '/modules/documentos/subir.php', fd, { silent: true });
     if (fill) fill.style.width = '100%';
 
     if (json.ok) {
@@ -1661,13 +1637,9 @@ async function subirVoucherConArchivo(pagoId, file) {
   fd.append('accion',  'subir_voucher');
   fd.append('pago_id', pagoId);
   fd.append('voucher', file);
-  fd.append('_csrf',   window.CSRF_TOKEN || '');
 
   try {
-    var res  = await fetch(window.APP_URL + '/modules/pagos/ajax_pago.php', {
-      method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: fd
-    });
-    var data = await res.json();
+    var data = await ggiPost(window.APP_URL + '/modules/pagos/ajax_pago.php', fd, { silent: true });
     if (data.ok) {
       if (typeof showToast === 'function') showToast(data.msg || 'Voucher subido.', 'ok');
       try { actualizarPagoBadge(pagoId, 'pendiente_validacion', null); } catch(e) {}
@@ -1713,10 +1685,9 @@ function _abrirModalValPago(pagoId, tipoLabel) {
   document.getElementById('btn-val-confirmar').onclick = async function() {
     m.classList.remove('open');
     var fd = new FormData();
-    fd.append('accion', 'validar'); fd.append('pago_id', pagoId); fd.append('_csrf', window.CSRF_TOKEN || '');
+    fd.append('accion', 'validar'); fd.append('pago_id', pagoId);
     try {
-      var r    = await fetch(window.APP_URL + '/modules/pagos/ajax_pago.php', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd });
-      var data = await r.json();
+      var data = await ggiPost(window.APP_URL + '/modules/pagos/ajax_pago.php', fd, { silent: true });
       if (data.ok) {
         if (typeof showToast === 'function') showToast(data.msg || 'Pago validado.', 'ok');
         try { actualizarPagoBadge(pagoId, 'validado', null); } catch(e) {}
@@ -1746,10 +1717,9 @@ function _abrirModalRecPago(pagoId, tipoLabel) {
     if (!nota) { if (err) err.style.display = 'block'; return; }
     m.classList.remove('open');
     var fd = new FormData();
-    fd.append('accion', 'rechazar'); fd.append('pago_id', pagoId); fd.append('notas', nota); fd.append('_csrf', window.CSRF_TOKEN || '');
+    fd.append('accion', 'rechazar'); fd.append('pago_id', pagoId); fd.append('notas', nota);
     try {
-      var r    = await fetch(window.APP_URL + '/modules/pagos/ajax_pago.php', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd });
-      var data = await r.json();
+      var data = await ggiPost(window.APP_URL + '/modules/pagos/ajax_pago.php', fd, { silent: true });
       if (data.ok) {
         if (typeof showToast === 'function') showToast(data.msg || 'Pago rechazado.', 'ok');
         try { actualizarPagoBadge(pagoId, 'rechazado', nota); } catch(e) {}
@@ -1794,14 +1764,7 @@ window.generarAttendance = function(clienteId) {
 
   var fd = new FormData();
   fd.append('cliente_id', clienteId);
-  fd.append('_csrf', '<?= csrf_token() ?>');
-
-  fetch(window.APP_URL + '/modules/clientes/generar_attendance.php', {
-    method: 'POST',
-    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    body: fd,
-  })
-  .then(function(r){ return r.json(); })
+  ggiPost(window.APP_URL + '/modules/clientes/generar_attendance.php', fd, { silent: true })
   .then(function(data) {
     msg.style.display = 'block';
     if (data.ok) {
@@ -1903,14 +1866,7 @@ window.generarApplication = function() {
   // ISOs seleccionados
   document.querySelectorAll('#modal-application input[name="app_iso[]"]:checked')
     .forEach(function(cb) { fd.append('isos[]', cb.value); });
-  fd.append('_csrf', '<?= csrf_token() ?>');
-
-  fetch(window.APP_URL + '/modules/clientes/generar_application.php', {
-    method: 'POST',
-    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    body: fd,
-  })
-  .then(function(r){ return r.json(); })
+  ggiPost(window.APP_URL + '/modules/clientes/generar_application.php', fd, { silent: true })
   .then(function(data) {
     document.getElementById('modal-application').classList.remove('open');
     var msg  = document.getElementById('app-msg');
@@ -2157,12 +2113,7 @@ window.generarActa = function() {
   fd.append('cliente_id', clienteId);
   fd.append('alcance', alcance);
   isosSeleccionados.forEach(function(id){ fd.append('isos[]', id); });
-  fd.append('csrf_token', '<?= csrf_token() ?>');
-
-  fetch(window.APP_URL + '/modules/clientes/generar_acta_alcance.php', {
-    method:'POST', body:fd, headers:{'X-Requested-With':'XMLHttpRequest'},
-  })
-  .then(function(r){ return r.json(); })
+  ggiPost(window.APP_URL + '/modules/clientes/generar_acta_alcance.php', fd, { silent: true })
   .then(function(data) {
     btn.disabled = false;
     btn.textContent = 'Regenerar';
@@ -2264,14 +2215,7 @@ window.abrirConfirmacionCambios = function(docId, msgId) {
 window.aprobarActaDirecto = function(docId, msgId) {
   var fd = new FormData();
   fd.append('doc_id', docId);
-  fd.append('csrf_token', '<?= csrf_token() ?>');
-
-  fetch(window.APP_URL + '/modules/clientes/confirmar_acta_alcance.php', {
-    method: 'POST',
-    body: fd,
-    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-  })
-  .then(function(r) { return r.json(); })
+  ggiPost(window.APP_URL + '/modules/clientes/confirmar_acta_alcance.php', fd, { silent: true })
   .then(function(data) {
     if (data.ok) {
       if (typeof showToast === 'function') showToast(data.msg || 'Aprobado correctamente.', 'ok');
@@ -2377,14 +2321,7 @@ window.confirmarActaOld = function(docId, cotCodigo, msgId, cardId, alcanceData)
   btnConfirmOld.addEventListener('click', function() {
     var fd = new FormData();
     fd.append('doc_id', docId);
-    fd.append('csrf_token', '<?= csrf_token() ?>');
-
-    fetch(window.APP_URL + '/modules/clientes/confirmar_acta_alcance.php', {
-      method: 'POST',
-      body: fd,
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    })
-    .then(function(r) { return r.json(); })
+    ggiPost(window.APP_URL + '/modules/clientes/confirmar_acta_alcance.php', fd, { silent: true })
     .then(function(data) {
       close();
       if (data.ok) {
@@ -2477,14 +2414,7 @@ window.solicitarCambiosActa = function(docId, msgId) {
     var fd = new FormData();
     fd.append('doc_id', docId);
     fd.append('cambios_notas', cambios);
-    fd.append('csrf_token', '<?= csrf_token() ?>');
-
-    fetch(window.APP_URL + '/modules/clientes/solicitar_cambios_acta.php', {
-      method: 'POST',
-      body: fd,
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    })
-    .then(function(r) { return r.json(); })
+    ggiPost(window.APP_URL + '/modules/clientes/solicitar_cambios_acta.php', fd, { silent: true })
     .then(function(data) {
       close();
       if (data.ok) {
