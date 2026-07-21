@@ -38,7 +38,17 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
     font-size: .74rem; font-weight: 700; color: #fff; letter-spacing: .3px;
+    position: relative;
   }
+  /* Punto de estado. En WhatsApp Business no existe "en línea": lo que sí
+     se puede saber es si la ventana de 24 h sigue abierta, que es lo que
+     de verdad determina si se puede escribir. */
+  .ib-av::after {
+    content: ''; position: absolute; right: -1px; bottom: -1px;
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--tx3); border: 2px solid var(--bg-surface);
+  }
+  .ib-av.viva::after { background: var(--gr, #2DB140); }
   .ib-av.c0 { background: #6366F1 } .ib-av.c1 { background: #0EA5E9 }
   .ib-av.c2 { background: #10B981 } .ib-av.c3 { background: #F59E0B }
   .ib-av.c4 { background: #EC4899 } .ib-av.c5 { background: #8B5CF6 }
@@ -46,29 +56,42 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
   /* ── Columna 1 ── */
   .ib-head {
-    padding: 14px 16px 12px; border-bottom: 1px solid var(--brd); flex-shrink: 0;
+    padding: 10px 14px 8px; border-bottom: 1px solid var(--brd); flex-shrink: 0;
   }
-  .ib-head-t { font-size: .95rem; font-weight: 700; color: var(--tx); margin-bottom: 12px; }
-  .ib-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ib-head-r { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .ib-head-t { font-size: .88rem; font-weight: 700; color: var(--tx); }
+  .ib-icon {
+    width: 30px; height: 30px; border: none; background: transparent; border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--tx2); cursor: pointer;
+  }
+  .ib-icon:hover { background: var(--bg-hover); color: var(--tx); }
+  .ib-icon svg { width: 17px; height: 17px; }
+
+  .ib-pills { display: flex; gap: 5px; flex-wrap: wrap; }
   .ib-pill {
-    font: inherit; font-size: .74rem; font-weight: 600; padding: 5px 11px;
+    font: inherit; font-size: .7rem; font-weight: 600; padding: 3px 9px;
     border-radius: 999px; border: 1px solid var(--brd); background: transparent;
     color: var(--tx2); cursor: pointer; transition: background .15s, color .15s, border-color .15s;
-    min-height: 30px;
+    line-height: 1.5;
   }
   .ib-pill:hover { background: var(--bg-hover); color: var(--tx); }
   .ib-pill.on { background: var(--ac); border-color: var(--ac); color: #fff; }
-  .ib-pill b { font-weight: 700; opacity: .85; margin-left: 3px; }
+  .ib-pill b { font-weight: 700; opacity: .8; margin-left: 3px; }
 
-  .ib-search { padding: 10px 16px; border-bottom: 1px solid var(--brd); position: relative; flex-shrink: 0; }
+  .ib-search { padding: 8px 14px 10px; border-bottom: 1px solid var(--brd); flex-shrink: 0;
+               display: flex; gap: 6px; align-items: center; }
+  .ib-search-in { position: relative; flex: 1; min-width: 0; }
   .ib-search input {
-    width: 100%; padding: 8px 12px 8px 34px; font: inherit; font-size: .82rem;
+    width: 100%; padding: 8px 12px 8px 32px; font: inherit; font-size: .8rem;
     border: 1px solid var(--brd); border-radius: 9px;
     background: var(--bg-input); color: var(--tx);
   }
   .ib-search input:focus { outline: 2px solid var(--ac-soft); outline-offset: 0; border-color: var(--ac); }
-  .ib-search svg { position: absolute; left: 26px; top: 50%; transform: translateY(-50%);
-                   width: 15px; height: 15px; color: var(--tx3); pointer-events: none; }
+  .ib-search-in svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+                      width: 15px; height: 15px; color: var(--tx3); pointer-events: none; }
+  .ib-icon-brd { border: 1px solid var(--brd); border-radius: 9px; width: 34px; height: 34px; flex-shrink: 0; }
+  .ib-icon-brd.on { background: var(--ac); border-color: var(--ac); color: #fff; }
 
   .ib-item {
     display: flex; gap: 11px; width: 100%; text-align: left; padding: 11px 16px;
@@ -78,15 +101,44 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
   .ib-item:hover { background: var(--bg-hover); }
   .ib-item.sel { background: var(--ac-soft); border-left-color: var(--ac); }
-  .ib-item-body { flex: 1; min-width: 0; }
-  .ib-item-r1 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .ib-item-n  { font-size: .83rem; font-weight: 700; color: var(--tx);
+  /* display:flex column es IMPRESCINDIBLE: sin él los <span> hijos quedan
+     inline, el teléfono y el mensaje se pegan al costado del nombre y
+     text-overflow no aplica, provocando scroll horizontal. */
+  .ib-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .ib-item-r1 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; }
+  .ib-item-n  { font-size: .83rem; font-weight: 700; color: var(--tx); min-width: 0;
                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ib-item-t  { font-size: .68rem; color: var(--tx3); flex-shrink: 0; }
-  .ib-item-ph { font-size: .72rem; color: var(--tx3); margin-top: 1px; }
-  .ib-item-p  { font-size: .76rem; color: var(--tx2); margin-top: 3px;
+  .ib-item-t  { font-size: .68rem; color: var(--tx3); flex-shrink: 0; white-space: nowrap; }
+  .ib-item-ph { display: block; font-size: .72rem; color: var(--tx3); margin-top: 1px;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ib-item-p  { display: block; font-size: .76rem; color: var(--tx2); margin-top: 3px;
                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ib-item-m  { display: flex; gap: 5px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+
+  /* ── Etiquetas ── */
+  .ib-etq { font-size: .62rem; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+            display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .ib-etq::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .ib-etq.ok      { background: var(--s-ok-bg);      color: var(--s-ok-tx); }
+  .ib-etq.info    { background: var(--s-info-bg);    color: var(--s-info-tx); }
+  .ib-etq.warn    { background: var(--s-warn-bg);    color: var(--s-warn-tx); }
+  .ib-etq.purple  { background: var(--s-purple-bg);  color: var(--s-purple-tx); }
+  .ib-etq.neutral { background: var(--s-neutral-bg); color: var(--s-neutral-tx); }
+
+  .ib-etq-quitar { background: none; border: none; padding: 0 0 0 2px; cursor: pointer;
+                   color: inherit; font-size: .8rem; line-height: 1; opacity: .65; }
+  .ib-etq-quitar:hover { opacity: 1; }
+
+  /* Menú de etiquetas y de nueva conversación */
+  .ib-pop { position: absolute; z-index: 50; background: var(--bg-surface); border: 1px solid var(--brd);
+            border-radius: 11px; box-shadow: 0 8px 28px rgba(0,0,0,.13); padding: 6px; min-width: 232px; }
+  .ib-pop-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+                 padding: 7px 9px; border: none; background: transparent; border-radius: 7px;
+                 cursor: pointer; font: inherit; font-size: .78rem; color: var(--tx); }
+  .ib-pop-item:hover { background: var(--bg-hover); }
+  .ib-pop-item small { display: block; color: var(--tx3); font-size: .7rem; }
+  .ib-pop input { width: 100%; padding: 7px 10px; font: inherit; font-size: .8rem; margin-bottom: 4px;
+                  border: 1px solid var(--brd); border-radius: 8px; background: var(--bg-input); color: var(--tx); }
 
   .ib-tag { font-size: .64rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
   .ib-tag.libre { background: var(--s-warn-bg); color: var(--s-warn-tx); }
@@ -146,7 +198,19 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-box input:disabled { opacity: .55; cursor: not-allowed; }
 
   /* ── Columna 3: contexto ── */
+  .ib-ctx-head { padding: 13px 17px; border-bottom: 1px solid var(--brd);
+                 font-size: .88rem; font-weight: 700; color: var(--tx); }
   .ib-ctx-s { padding: 15px 17px; border-bottom: 1px solid var(--brd); }
+
+  /* Caja de estado, como en la referencia */
+  .ib-estado { background: var(--bg-surface2); border: 1px solid var(--brd);
+               border-radius: 10px; padding: 11px 13px; margin-bottom: 10px; }
+  .ib-punto { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+              background: var(--tx3); margin-right: 7px; vertical-align: middle; }
+  .ib-punto.viva { background: var(--gr, #2DB140); }
+  .ib-resolver { width: 100%; background: none; border: none; padding: 6px 0; cursor: pointer;
+                 font: inherit; font-size: .8rem; font-weight: 600; color: var(--ac); text-align: left; }
+  .ib-resolver:hover { text-decoration: underline; }
   .ib-ctx-t { font-size: .64rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
               color: var(--tx3); margin-bottom: 9px; display: flex; align-items: center; gap: 6px; }
   .ib-ctx-t svg { width: 13px; height: 13px; }
@@ -176,18 +240,30 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   <!-- ══ Lista ══ -->
   <div class="ib-col ib-lista-col">
     <div class="ib-head">
-      <div class="ib-head-t">Conversaciones</div>
+      <div class="ib-head-r">
+        <span class="ib-head-t">Conversaciones</span>
+        <button type="button" class="ib-icon" id="ib-nueva" title="Nueva conversación" aria-label="Nueva conversación">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h8M8 14h5M21 12a8 8 0 01-8 8H7l-4 3V12a8 8 0 018-8h2a8 8 0 018 8z"/></svg>
+        </button>
+      </div>
       <div class="ib-pills">
         <button type="button" class="ib-pill on" data-f="todas">Todas<b data-c="todas"></b></button>
         <button type="button" class="ib-pill" data-f="mias">Mías<b data-c="mias"></b></button>
         <button type="button" class="ib-pill" data-f="sin_asignar">Sin asignar<b data-c="sin_asignar"></b></button>
+        <button type="button" class="ib-pill" data-f="sin_persona">Sin persona<b data-c="sin_persona"></b></button>
+        <button type="button" class="ib-pill" id="ib-etq-activa" style="display:none"></button>
       </div>
     </div>
     <div class="ib-search">
-      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/>
-      </svg>
-      <input type="search" id="ib-q" placeholder="Buscar empresa, teléfono o mensaje…" aria-label="Buscar conversación">
+      <span class="ib-search-in">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/>
+        </svg>
+        <input type="search" id="ib-q" placeholder="Buscar conversación…" aria-label="Buscar conversación">
+      </span>
+      <button type="button" class="ib-icon ib-icon-brd" id="ib-filtro-etq" title="Filtrar por etiqueta" aria-label="Filtrar por etiqueta">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M3 6l0 5.2a2 2 0 00.6 1.4l7.8 7.8a2 2 0 002.8 0l5.2-5.2a2 2 0 000-2.8l-7.8-7.8A2 2 0 0010.2 4L5 4a2 2 0 00-2 2z"/></svg>
+      </button>
     </div>
     <div class="ib-scroll" id="ib-lista"></div>
   </div>
@@ -210,7 +286,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
 <script>
 (function () {
-  var st = { f: 'todas', q: '', sel: null };
+  var st = { f: 'todas', q: '', sel: null, etq: 0, etqActuales: [] };
   var $ = function (s) { return document.querySelector(s); };
 
   function esc(s) {
@@ -258,7 +334,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
   // ── Lista ──
   function lista(mantener) {
-    fetch('ajax.php?accion=lista&filtro=' + encodeURIComponent(st.f) + '&q=' + encodeURIComponent(st.q),
+    fetch('ajax.php?accion=lista&filtro=' + encodeURIComponent(st.f)
+          + '&q=' + encodeURIComponent(st.q)
+          + '&etiqueta=' + (st.etq || 0),
           { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
@@ -278,14 +356,19 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
             : '<span class="ib-tag libre">Libre</span>';
           var viejo = (it.dias_asignada !== null && it.dias_asignada >= 3)
             ? '<span class="ib-tag viejo">' + it.dias_asignada + ' d sin mover</span>' : '';
+          var etqs = (it.etiquetas || []).map(function (e) {
+            return '<span class="ib-etq ' + esc(e.color || 'neutral') + '">' + esc(e.nombre) + '</span>';
+          }).join('');
+
           return '<button type="button" class="ib-item' + (st.sel === it.id ? ' sel' : '') + '" data-id="' + it.id + '">'
-            + '<span class="ib-av ' + colorDe(it.telefono) + '">' + esc(ini(it.titulo)) + '</span>'
+            + '<span class="ib-av ' + colorDe(it.telefono) + (it.ventana_abierta ? ' viva' : '') + '">'
+            +   esc(ini(it.titulo)) + '</span>'
             + '<span class="ib-item-body">'
             +   '<span class="ib-item-r1"><span class="ib-item-n">' + esc(it.titulo) + '</span>'
             +   '<span class="ib-item-t">' + relativo(it.cuando) + '</span></span>'
             +   '<span class="ib-item-ph">+' + esc(it.telefono) + '</span>'
             +   '<span class="ib-item-p">' + esc(it.preview) + '</span>'
-            +   '<span class="ib-item-m">' + tag + viejo
+            +   '<span class="ib-item-m">' + tag + viejo + etqs
             +     (it.no_leidos ? '<span class="ib-unread">' + it.no_leidos + '</span>' : '')
             +   '</span>'
             + '</span></button>';
@@ -299,7 +382,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     $('#ib').classList.add('abierto');
     fetch('ajax.php?accion=hilo&id=' + id, { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
-      .then(function (j) { if (j.ok) { chat(j); ctx(j); lista(true); } })
+      .then(function (j) {
+        if (!j.ok) return;
+        st.etqActuales = j.etiquetas || [];
+        chat(j); ctx(j); lista(true);
+      })
       .catch(function () {});
   }
 
@@ -352,7 +439,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     $('#ib-chat').innerHTML =
         '<div class="ib-chat-head">'
-      +   '<span class="ib-av ' + colorDe(c.telefono) + '">' + esc(ini(c.titulo)) + '</span>'
+      +   '<span class="ib-av ' + colorDe(c.telefono) + (c.ventana_abierta ? ' viva' : '') + '">'
+      +     esc(ini(c.titulo)) + '</span>'
       +   '<div style="flex:1;min-width:0">'
       +     '<div class="ib-chat-n">' + esc(c.titulo)
       +       (c.cliente_id ? ' <a href="../clientes/ver.php?id=' + c.cliente_id + '" title="Abrir ficha de la empresa" aria-label="Abrir ficha de la empresa">'
@@ -435,11 +523,132 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       }).join(''));
     }
 
-    h += sec('Ventana de 24 h', iReloj, c.ventana_abierta
-      ? '<span class="ib-tag mia">Abierta</span>'
-      : '<span class="ib-tag libre">Vencida</span>');
+    var iEtq = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M3 6l0 5.2a2 2 0 00.6 1.4l7.8 7.8a2 2 0 002.8 0l5.2-5.2a2 2 0 000-2.8l-7.8-7.8A2 2 0 0010.2 4L5 4a2 2 0 00-2 2z"/></svg>';
+    var puestas = (j.etiquetas || []).map(function (e) {
+      return '<span class="ib-etq ' + esc(e.color || 'neutral') + '">' + esc(e.nombre)
+           + '<button type="button" class="ib-etq-quitar" data-quitar="' + e.id + '" '
+           + 'title="Quitar etiqueta" aria-label="Quitar etiqueta ' + esc(e.nombre) + '">&times;</button></span>';
+    }).join(' ');
 
-    $('#ib-ctx').innerHTML = h;
+    h += sec('Etiquetas', iEtq,
+        '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;">'
+      + (puestas || '<span class="ib-ctx-s2">Sin etiquetas</span>') + '</div>'
+      + '<button type="button" class="btn btn-ghost ib-btn-sm" id="ib-add-etq">+ Editar</button>');
+
+    h += sec('Ventana', iReloj, c.ventana_abierta
+      ? '<span class="ib-etq ok">Ventana abierta</span>'
+      : '<span class="ib-etq warn">Ventana vencida</span>');
+
+    var iEstado = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+    var resuelta = c.estado === 'resuelta';
+    h += sec('Estado', iEstado,
+        '<div class="ib-estado">'
+      +   '<div class="ib-ctx-v"><span class="ib-punto' + (resuelta ? '' : ' viva') + '"></span>'
+      +     (resuelta ? 'Resuelta' : 'Abierta') + '</div>'
+      +   '<div class="ib-ctx-s2">' + (resuelta ? 'Cerrada para atención.' : 'Activa para atención.') + '</div>'
+      + '</div>'
+      + '<button type="button" class="ib-resolver" id="ib-resolver" data-estado="' + esc(c.estado) + '">'
+      +   (resuelta ? '↺ Reabrir conversación' : '✓ Resolver conversación') + '</button>');
+
+    $('#ib-ctx').innerHTML = '<div class="ib-ctx-head">Contexto</div>' + h;
+  }
+
+  // ── Menús emergentes ───────────────────────────────────────────────────────
+  function cerrarPop() {
+    var p = document.getElementById('ib-pop');
+    if (p) p.remove();
+  }
+
+  function abrirPop(ancla, html) {
+    cerrarPop();
+    var r = ancla.getBoundingClientRect();
+    var d = document.createElement('div');
+    d.className = 'ib-pop';
+    d.id = 'ib-pop';
+    d.innerHTML = html;
+    document.body.appendChild(d);
+    // position:fixed para no depender del contenedor con overflow del inbox
+    d.style.position = 'fixed';
+    d.style.top  = Math.min(r.bottom + 6, window.innerHeight - d.offsetHeight - 10) + 'px';
+    d.style.left = Math.min(r.left, window.innerWidth - d.offsetWidth - 10) + 'px';
+    return d;
+  }
+
+  // Etiquetas de la conversación abierta
+  function popEtiquetas(ancla) {
+    if (!st.sel) return;
+    fetch('ajax.php?accion=etiquetas', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) return;
+        var puestas = (st.etqActuales || []).map(function (e) { return e.id; });
+        abrirPop(ancla, j.items.map(function (e) {
+          var on = puestas.indexOf(e.id) !== -1;
+          return '<button type="button" class="ib-pop-item" data-etq="' + e.id + '" data-on="' + (on ? 1 : 0) + '">'
+               + '<span class="ib-etq ' + esc(e.color) + '">' + esc(e.nombre) + '</span>'
+               + (on ? '<span style="margin-left:auto;color:var(--ac)">✓</span>' : '') + '</button>';
+        }).join(''));
+      });
+  }
+
+  // Filtro por etiqueta
+  function popFiltroEtiquetas(ancla) {
+    fetch('ajax.php?accion=etiquetas', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) return;
+        var d = abrirPop(ancla,
+            '<input type="search" id="ib-etqq" placeholder="Buscar etiqueta…" aria-label="Buscar etiqueta">'
+          + '<div id="ib-etql"></div>');
+
+        function pintar(txt) {
+          txt = (txt || '').toLowerCase();
+          d.querySelector('#ib-etql').innerHTML =
+              '<button type="button" class="ib-pop-item" data-fetq="0">'
+            + '<span style="color:var(--tx2)">Todas las etiquetas</span>'
+            + (st.etq ? '' : '<span style="margin-left:auto;color:var(--ac)">✓</span>') + '</button>'
+            + j.items.filter(function (e) { return e.nombre.toLowerCase().indexOf(txt) !== -1; })
+                .map(function (e) {
+                  return '<button type="button" class="ib-pop-item" data-fetq="' + e.id + '" data-nom="' + esc(e.nombre) + '">'
+                       + '<span class="ib-etq ' + esc(e.color) + '">' + esc(e.nombre) + '</span>'
+                       + (st.etq === e.id ? '<span style="margin-left:auto;color:var(--ac)">✓</span>' : '') + '</button>';
+                }).join('');
+        }
+        pintar('');
+        var inp = d.querySelector('#ib-etqq');
+        inp.focus();
+        inp.addEventListener('input', function () { pintar(inp.value); });
+      });
+  }
+
+  // Nueva conversación: busca empresa por nombre/RUC/teléfono
+  function popNueva(ancla) {
+    var d = abrirPop(ancla,
+        '<input type="search" id="ib-nq" placeholder="Empresa, RUC o teléfono…" aria-label="Buscar contacto">'
+      + '<div id="ib-nres"><div class="ib-pop-item" style="color:var(--tx3)">Escribe para buscar…</div></div>');
+
+    var inp = d.querySelector('#ib-nq'); inp.focus();
+    var t;
+    inp.addEventListener('input', function () {
+      clearTimeout(t);
+      t = setTimeout(function () {
+        fetch('ajax.php?accion=buscar_contacto&q=' + encodeURIComponent(inp.value.trim()),
+              { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            var box = d.querySelector('#ib-nres');
+            if (!box) return;
+            box.innerHTML = (j.items && j.items.length)
+              ? j.items.map(function (c) {
+                  return '<button type="button" class="ib-pop-item" data-tel="' + esc(c.contacto_telefono) + '">'
+                       + '<span>' + esc(c.razon_social)
+                       + '<small>+' + esc(c.contacto_telefono) + (c.ruc ? ' · RUC ' + esc(c.ruc) : '') + '</small></span>'
+                       + '</button>';
+                }).join('')
+              : '<div class="ib-pop-item" style="color:var(--tx3)">Sin resultados</div>';
+          });
+      }, 280);
+    });
   }
 
   // ── Acciones ──
@@ -455,6 +664,85 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
 
   document.addEventListener('click', function (e) {
+    // ── Menús emergentes ──
+    if (e.target.closest('#ib-nueva'))     { popNueva(e.target.closest('#ib-nueva')); return; }
+    if (e.target.closest('#ib-filtro-etq')){ popFiltroEtiquetas(e.target.closest('#ib-filtro-etq')); return; }
+    if (e.target.closest('#ib-add-etq'))   { popEtiquetas(e.target.closest('#ib-add-etq')); return; }
+
+    var elegido = e.target.closest('[data-tel]');
+    if (elegido) {
+      cerrarPop();
+      ggiPost('ajax.php', { accion: 'abrir_contacto', telefono: elegido.dataset.tel })
+        .then(function (j) { if (j.ok) { lista(); abrir(j.id); } });
+      return;
+    }
+
+    var fEtq = e.target.closest('[data-fetq]');
+    if (fEtq) {
+      cerrarPop();
+      st.etq = parseInt(fEtq.dataset.fetq, 10) || 0;
+      var chip = $('#ib-etq-activa');
+      if (chip) {
+        chip.style.display = st.etq ? '' : 'none';
+        chip.textContent   = st.etq ? (fEtq.dataset.nom || 'Etiqueta') + ' ✕' : '';
+        chip.classList.toggle('on', !!st.etq);
+      }
+      var bEtq = $('#ib-filtro-etq');
+      if (bEtq) bEtq.classList.toggle('on', !!st.etq);
+      lista();
+      return;
+    }
+
+    var tog = e.target.closest('[data-etq]');
+    if (tog) {
+      cerrarPop();
+      ggiPost('ajax.php', {
+        accion: 'etiquetar', id: st.sel,
+        etiqueta_id: tog.dataset.etq,
+        activar: tog.dataset.on === '1' ? '' : '1'
+      }).then(function (j) { if (j.ok) { abrir(st.sel); lista(); } });
+      return;
+    }
+
+    var res = e.target.closest('#ib-resolver');
+    if (res) {
+      var vuelve = res.dataset.estado === 'resuelta';
+      ggiPost('ajax.php', { accion: vuelve ? 'reabrir' : 'resolver', id: st.sel }).then(function (j) {
+        if (!j.ok) return;
+        if (typeof showToast === 'function') {
+          showToast(vuelve ? 'Conversación reabierta' : 'Conversación resuelta', 'ok');
+        }
+        // Al resolver sale del listado (que excluye resueltas): se limpia el hilo
+        if (!vuelve) {
+          st.sel = null;
+          $('#ib').classList.remove('abierto');
+          $('#ib-ctx').innerHTML = '';
+          $('#ib-chat').innerHTML = '<div class="ib-empty">Elige una conversación para ver el hilo</div>';
+        }
+        else abrir(st.sel);
+        lista();
+      });
+      return;
+    }
+
+    var quitar = e.target.closest('[data-quitar]');
+    if (quitar) {
+      ggiPost('ajax.php', { accion: 'etiquetar', id: st.sel, etiqueta_id: quitar.dataset.quitar, activar: '' })
+        .then(function (j) { if (j.ok) { abrir(st.sel); lista(); } });
+      return;
+    }
+
+    // Quitar el filtro de etiqueta desde su propio chip
+    if (e.target.closest('#ib-etq-activa')) {
+      st.etq = 0;
+      var c2 = $('#ib-etq-activa');
+      if (c2) { c2.style.display = 'none'; c2.classList.remove('on'); }
+      lista();
+      return;
+    }
+
+    if (!e.target.closest('.ib-pop')) cerrarPop();
+
     var p = e.target.closest('.ib-pill');
     if (p) {
       document.querySelectorAll('.ib-pill').forEach(function (b) { b.classList.remove('on'); });

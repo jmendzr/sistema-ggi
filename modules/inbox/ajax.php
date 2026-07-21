@@ -66,6 +66,99 @@ if ($accion === 'asignar' || $accion === 'liberar') {
     exit;
 }
 
+// ══ Resolver / reabrir conversación ══════════════════════════════════════════
+if ($accion === 'resolver' || $accion === 'reabrir') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;
+    }
+    csrf_verify();
+
+    $id = (int) ($_POST['id'] ?? 0);
+    if (!$id) { echo json_encode(['ok' => false, 'msg' => 'ID inválido']); exit; }
+
+    if ($accion === 'resolver') {
+        // Resolver libera la conversación: si quedara asignada, nadie más
+        // podría retomarla cuando el cliente vuelva a escribir.
+        $pdo->prepare("UPDATE wa_conversaciones
+                          SET estado = 'resuelta', asignado_a = NULL, asignado_at = NULL
+                        WHERE id = ?")->execute([$id]);
+    } else {
+        $pdo->prepare("UPDATE wa_conversaciones SET estado = 'abierta' WHERE id = ?")->execute([$id]);
+    }
+
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+// ══ Etiquetas: catálogo ══════════════════════════════════════════════════════
+if ($accion === 'etiquetas') {
+    echo json_encode([
+        'ok'    => true,
+        'items' => $pdo->query("SELECT id, nombre, color FROM wa_etiquetas WHERE activo = 1 ORDER BY nombre")
+                       ->fetchAll(PDO::FETCH_ASSOC),
+    ]);
+    exit;
+}
+
+// ══ Etiquetas: poner / quitar ════════════════════════════════════════════════
+if ($accion === 'etiquetar') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;
+    }
+    csrf_verify();
+
+    $conv = (int) ($_POST['id'] ?? 0);
+    $etq  = (int) ($_POST['etiqueta_id'] ?? 0);
+    $on   = !empty($_POST['activar']);
+
+    if (!$conv || !$etq) { echo json_encode(['ok' => false, 'msg' => 'Datos inválidos']); exit; }
+
+    if ($on) {
+        $pdo->prepare("INSERT IGNORE INTO wa_conversacion_etiquetas (conversacion_id, etiqueta_id) VALUES (?, ?)")
+            ->execute([$conv, $etq]);
+    } else {
+        $pdo->prepare("DELETE FROM wa_conversacion_etiquetas WHERE conversacion_id = ? AND etiqueta_id = ?")
+            ->execute([$conv, $etq]);
+    }
+
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+// ══ Nueva conversación: buscar contacto y abrir/crear el hilo ════════════════
+if ($accion === 'buscar_contacto') {
+    $q = trim($_GET['q'] ?? '');
+    if (mb_strlen($q) < 2) { echo json_encode(['ok' => true, 'items' => []]); exit; }
+
+    $like = '%' . $q . '%';
+    $st = $pdo->prepare(
+        "SELECT id, razon_social, ruc, contacto_telefono
+           FROM clientes
+          WHERE deleted_at IS NULL
+            AND contacto_telefono IS NOT NULL AND contacto_telefono <> ''
+            AND (razon_social LIKE ? OR ruc LIKE ? OR contacto_telefono LIKE ?)
+          ORDER BY razon_social LIMIT 15"
+    );
+    $st->execute([$like, $like, $like]);
+
+    echo json_encode(['ok' => true, 'items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+    exit;
+}
+
+if ($accion === 'abrir_contacto') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;
+    }
+    csrf_verify();
+
+    $tel = preg_replace('/\D/', '', $_POST['telefono'] ?? '');
+    if (strlen($tel) < 9) { echo json_encode(['ok' => false, 'msg' => 'Teléfono inválido']); exit; }
+    if (strlen($tel) === 9) $tel = '51' . $tel;   // móvil peruano sin prefijo
+
+    echo json_encode(['ok' => true, 'id' => WaInbox::ensureConversacion($pdo, $tel)]);
+    exit;
+}
+
 // ══ Enviar mensaje ═══════════════════════════════════════════════════════════
 if ($accion === 'enviar') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -139,6 +232,15 @@ if ($accion === 'lista') {
 
     if ($filtro === 'mias')            { $where[] = 'c.asignado_a = ?'; $args[] = $yo; }
     elseif ($filtro === 'sin_asignar') { $where[] = 'c.asignado_a IS NULL'; }
+    // "Sin persona": el número no está vinculado a ninguna empresa del sistema
+    elseif ($filtro === 'sin_persona') { $where[] = 'c.cliente_id IS NULL'; }
+
+    $etq = (int) ($_GET['etiqueta'] ?? 0);
+    if ($etq) {
+        $where[] = 'EXISTS (SELECT 1 FROM wa_conversacion_etiquetas x
+                             WHERE x.conversacion_id = c.id AND x.etiqueta_id = ?)';
+        $args[]  = $etq;
+    }
 
     if ($buscar !== '') {
         $where[] = '(c.telefono LIKE ? OR cl.razon_social LIKE ? OR c.ultimo_mensaje_preview LIKE ?)';
@@ -158,8 +260,25 @@ if ($accion === 'lista') {
     );
     $st->execute($args);
 
+    $filas = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    // Etiquetas de toda la página en UNA consulta, no una por fila
+    $etqPorConv = [];
+    $ids = array_column($filas, 'id');
+    if ($ids) {
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $qe = $pdo->prepare("SELECT x.conversacion_id, e.nombre, e.color
+                               FROM wa_conversacion_etiquetas x
+                               JOIN wa_etiquetas e ON e.id = x.etiqueta_id AND e.activo = 1
+                              WHERE x.conversacion_id IN ($ph)");
+        $qe->execute($ids);
+        foreach ($qe as $e) {
+            $etqPorConv[$e['conversacion_id']][] = ['nombre' => $e['nombre'], 'color' => $e['color']];
+        }
+    }
+
     $items = [];
-    foreach ($st as $r) {
+    foreach ($filas as $r) {
         $items[] = [
             'id'        => (int) $r['id'],
             'telefono'  => $r['telefono'],
@@ -173,20 +292,23 @@ if ($accion === 'lista') {
             // Sin liberación automática, una conversación estancada debe notarse
             'dias_asignada'   => $r['asignado_at'] ? (int) floor((time() - strtotime($r['asignado_at'])) / 86400) : null,
             'ventana_abierta' => WaInbox::ventanaAbierta($r['ventana_expira_at']),
+            'etiquetas'       => $etqPorConv[$r['id']] ?? [],
         ];
     }
 
     $c = $pdo->prepare(
-        "SELECT COUNT(*) todas, SUM(asignado_a = ?) mias, SUM(asignado_a IS NULL) sin_asignar
+        "SELECT COUNT(*) todas, SUM(asignado_a = ?) mias,
+                SUM(asignado_a IS NULL) sin_asignar, SUM(cliente_id IS NULL) sin_persona
            FROM wa_conversaciones WHERE estado <> 'resuelta'"
     );
     $c->execute([$yo]);
     $cn = $c->fetch(PDO::FETCH_ASSOC) ?: [];
 
     echo json_encode(['ok' => true, 'items' => $items, 'conteos' => [
-        'todas' => (int) ($cn['todas'] ?? 0),
-        'mias'  => (int) ($cn['mias'] ?? 0),
+        'todas'       => (int) ($cn['todas'] ?? 0),
+        'mias'        => (int) ($cn['mias'] ?? 0),
         'sin_asignar' => (int) ($cn['sin_asignar'] ?? 0),
+        'sin_persona' => (int) ($cn['sin_persona'] ?? 0),
     ]]);
     exit;
 }
@@ -243,6 +365,13 @@ if ($accion === 'hilo') {
         $ctx['envios'] = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
+    $qe = $pdo->prepare("SELECT e.id, e.nombre, e.color
+                           FROM wa_conversacion_etiquetas x
+                           JOIN wa_etiquetas e ON e.id = x.etiqueta_id AND e.activo = 1
+                          WHERE x.conversacion_id = ? ORDER BY e.nombre");
+    $qe->execute([$id]);
+    $etiquetas = $qe->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
     $pdo->prepare("UPDATE wa_conversaciones SET no_leidos = 0 WHERE id = ?")->execute([$id]);
 
     echo json_encode(['ok' => true, 'conv' => [
@@ -258,7 +387,8 @@ if ($accion === 'hilo') {
         'puede_liberar'   => ((int) $conv['asignado_a']) === $yo || $esJefe,
         'ventana_abierta' => WaInbox::ventanaAbierta($conv['ventana_expira_at']),
         'ventana_expira'  => $conv['ventana_expira_at'],
-    ], 'mensajes' => $mensajes, 'contexto' => $ctx]);
+        'estado'          => $conv['estado'],
+    ], 'mensajes' => $mensajes, 'contexto' => $ctx, 'etiquetas' => $etiquetas]);
     exit;
 }
 
