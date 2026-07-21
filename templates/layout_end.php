@@ -1531,22 +1531,34 @@ function _csrfUpdate(newToken) {
 window.ggiPost = function (url, datos, opciones) {
   opciones = opciones || {};
 
-  var fd = (datos instanceof FormData) ? datos : new FormData();
-  if (!(datos instanceof FormData) && datos) {
-    Object.keys(datos).forEach(function (k) { fd.append(k, datos[k]); });
-  }
-  fd.set('_csrf', _csrfToken());
-
   function avisar(m) {
     if (opciones.silent) return;
     if (typeof showToast === 'function') showToast(m, 'error');
   }
 
+  var cabeceras = { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': _csrfToken() };
+  var cuerpo;
+
+  if (opciones.json) {
+    // Endpoints que leen el cuerpo crudo con json_decode(php://input).
+    // Ahí el token no puede viajar como campo: va solo en la cabecera,
+    // que csrf_verify() también acepta.
+    cabeceras['Content-Type'] = 'application/json';
+    cuerpo = JSON.stringify(datos || {});
+  } else {
+    var fd = (datos instanceof FormData) ? datos : new FormData();
+    if (!(datos instanceof FormData) && datos) {
+      Object.keys(datos).forEach(function (k) { fd.append(k, datos[k]); });
+    }
+    fd.set('_csrf', _csrfToken());
+    cuerpo = fd;
+  }
+
   return fetch(url, {
     method: 'POST',
-    body: fd,
+    body: cuerpo,
     credentials: 'same-origin',
-    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': _csrfToken() }
+    headers: cabeceras
   })
   .then(function (r) {
     return r.json().then(

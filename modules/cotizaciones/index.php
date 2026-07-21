@@ -625,12 +625,8 @@ ggiReady(() => {
 async function enviarEstado(cotId, estado, selEl, prev, motivo, color, label) {
   const labelFinal = label || estado;
   try {
-    const r    = await fetch('<?= APP_URL ?>/modules/cotizaciones/ajax_estado_cot.php', {
-      method:  'POST',
-      headers: {'Content-Type':'application/x-www-form-urlencoded','X-CSRF-TOKEN':window.CSRF_TOKEN||''},
-      body:    `cot_id=${cotId}&estado=${estado}&rechazo_motivo=${encodeURIComponent(motivo)}`
-    });
-    const data = await r.json();
+    const data = await ggiPost('<?= APP_URL ?>/modules/cotizaciones/ajax_estado_cot.php',
+                               { cot_id: cotId, estado: estado, rechazo_motivo: motivo }, { silent: true });
     if (data.ok) {
       if (selEl) {
         if (['aceptada','rechazada','vencida'].includes(estado)) {
@@ -948,12 +944,8 @@ ggiReady(() => {
       const resultado = document.getElementById('seg-resultado').value;
       if (!notas) { document.getElementById('seg-notas').style.borderColor='#ef4444'; return; }
       document.getElementById('seg-notas').style.borderColor='';
-      const r = await fetch('<?= APP_URL ?>/modules/cotizaciones/ajax_seguimiento.php', {
-        method: 'POST',
-        headers: {'Content-Type':'application/x-www-form-urlencoded','X-CSRF-TOKEN':window.CSRF_TOKEN||''},
-        body: `cotizacion_id=${cotId}&tipo=${tipo}&notas=${encodeURIComponent(notas)}&resultado=${resultado}`
-      });
-      const data = await r.json();
+      const data = await ggiPost('<?= APP_URL ?>/modules/cotizaciones/ajax_seguimiento.php',
+                                 { cotizacion_id: cotId, tipo: tipo, notas: notas, resultado: resultado }, { silent: true });
       document.getElementById('modal-seguimiento').classList.remove('open');
       if (typeof showToast==='function') showToast(data.ok ? 'Seguimiento registrado.' : (data.msg||'Error.'), data.ok ? 'ok' : 'error');
     });

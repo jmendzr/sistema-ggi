@@ -322,9 +322,7 @@ function ggiEliminarAuditoria(id, fecha, resultado) {
     onConfirmar: async function() {
       const fd = new FormData();
       fd.append('auditoria_id', id);
-      fd.append('_csrf', document.querySelector('[name="_csrf"]')?.value || '');
-      const r    = await fetch('<?= APP_URL ?>/modules/auditorias/ajax_eliminar.php', { method:'POST', headers:{'X-CSRF-TOKEN':window.CSRF_TOKEN||''}, body: fd });
-      const data = await r.json();
+      const data = await ggiPost('<?= APP_URL ?>/modules/auditorias/ajax_eliminar.php', fd, { silent: true });
       if (data.ok) {
         if (typeof ggiToastUndo === 'function') ggiToastUndo('auditorias', id, data.msg);
         else if (typeof showToast === 'function') showToast(data.msg, 'ok');
@@ -342,12 +340,8 @@ document.addEventListener('estado-sel-change', async function(e) {
   if (e.detail.module !== 'auditorias') return;
   const d = e.detail;
   try {
-    const r = await fetch('<?= APP_URL ?>/modules/auditorias/ajax_resultado.php', {
-      method: 'POST',
-      headers: {'Content-Type':'application/x-www-form-urlencoded','X-CSRF-TOKEN':window.CSRF_TOKEN||''},
-      body: `aud_id=${d.id}&resultado=${d.value}`
-    });
-    const data = await r.json();
+    const data = await ggiPost('<?= APP_URL ?>/modules/auditorias/ajax_resultado.php',
+                               { aud_id: d.id, resultado: d.value }, { silent: true });
     if (data.ok) {
       d.el.setAttribute('data-color', d.color);
       d.el.setAttribute('data-value', d.value);

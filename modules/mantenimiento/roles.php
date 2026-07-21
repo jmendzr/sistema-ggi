@@ -526,12 +526,9 @@ function togglePermiso(cb) {
   label.classList.add('saving');
   cb.disabled = true;
 
-  fetch(AJAX, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
-    body: JSON.stringify({ accion: 'toggle', rol: cb.dataset.rol, modulo: cb.dataset.modulo, activo: cb.checked ? 1 : 0 })
-  })
-  .then(r => r.json())
+  // json:true — este endpoint lee el cuerpo crudo con json_decode(php://input)
+  ggiPost(AJAX, { accion: 'toggle', rol: cb.dataset.rol, modulo: cb.dataset.modulo, activo: cb.checked ? 1 : 0 },
+          { json: true, silent: true })
   .then(data => {
     label.classList.remove('saving');
     cb.disabled = false;
@@ -602,12 +599,7 @@ function guardarRol(e) {
     color:       document.getElementById('f-color').value,
   };
 
-  fetch(AJAX, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
-    body: JSON.stringify(data)
-  })
-  .then(r => r.json())
+  ggiPost(AJAX, data, { json: true, silent: true })
   .then(res => {
     btn.disabled = false;
     txt.textContent = 'Guardar cambios';
@@ -669,12 +661,7 @@ function crearRol(e) {
     color:       document.getElementById('cn-color').value,
   };
 
-  fetch(AJAX, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
-    body: JSON.stringify(data)
-  })
-  .then(r => r.json())
+  ggiPost(AJAX, data, { json: true, silent: true })
   .then(res => {
     btn.disabled = false;
     txt.textContent = 'Crear rol';
@@ -708,12 +695,7 @@ function confirmarEliminar(nombre, label) {
 }
 
 function ejecutarEliminar(nombre) {
-  fetch(AJAX, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
-    body: JSON.stringify({ accion: 'eliminar_rol', nombre })
-  })
-  .then(r => r.json())
+  ggiPost(AJAX, { accion: 'eliminar_rol', nombre: nombre }, { json: true, silent: true })
   .then(res => {
     if (res.ok) {
       mostrarToast('Rol eliminado', 'ok');

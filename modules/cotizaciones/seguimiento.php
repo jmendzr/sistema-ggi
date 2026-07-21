@@ -521,12 +521,8 @@ async function guardarSeguimiento(cotId) {
     const body = new URLSearchParams({
       cotizacion_id: cotId, tipo, resultado, notas, proxima_accion: proxima
     });
-    const r = await fetch('<?= APP_URL ?>/modules/cotizaciones/ajax_seguimiento.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-TOKEN': CSRF },
-      body: body.toString()
-    });
-    const data = await r.json();
+    const _fd = new FormData(); body.forEach((v, k) => _fd.append(k, v));
+    const data = await ggiPost('<?= APP_URL ?>/modules/cotizaciones/ajax_seguimiento.php', _fd, { silent: true });
     if (data.ok) {
       if (typeof showToast === 'function') showToast('Seguimiento registrado.', 'ok');
       // Limpiar formulario y añadir entrada al historial sin recargar

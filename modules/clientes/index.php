@@ -482,12 +482,8 @@ function ggiEliminarCliente(id) {
       if (e.detail.module !== 'clientes') return;
       const d = e.detail;
       try {
-        const r = await fetch('<?= APP_URL ?>/modules/clientes/ajax_estado_cliente.php', {
-          method:  'POST',
-          headers: {'Content-Type':'application/x-www-form-urlencoded','X-CSRF-TOKEN':window.CSRF_TOKEN||''},
-          body:    `cliente_id=${d.id}&estado=${d.value}`
-        });
-        const data = await r.json();
+        const data = await ggiPost('<?= APP_URL ?>/modules/clientes/ajax_estado_cliente.php',
+                                   { cliente_id: d.id, estado: d.value }, { silent: true });
         if (data.ok) {
           d.el.setAttribute('data-color', d.color);
           d.el.setAttribute('data-value', d.value);

@@ -124,11 +124,7 @@ async function ggiGuardarLlamada() {
     fd.append('fecha_hora', fecha.replace('T', ' '));
     fd.append('aviso_min', document.getElementById('llamada-aviso').value);
     fd.append('nota', document.getElementById('llamada-nota').value.trim());
-    fd.append('_csrf', window.CSRF_TOKEN || document.querySelector('[name="_csrf"]')?.value || '');
-    const r = await fetch('<?= APP_URL ?>/modules/clientes/ajax_llamada.php', {
-      method: 'POST', headers: {'X-CSRF-TOKEN': window.CSRF_TOKEN || ''}, body: fd
-    });
-    const d = await r.json();
+    const d = await ggiPost('<?= APP_URL ?>/modules/clientes/ajax_llamada.php', fd, { silent: true });
     if (d.ok) {
       showToast(d.mensaje || 'Llamada agendada.', 'ok');
       ggiCerrarLlamadaModal();
@@ -152,11 +148,7 @@ async function ggiLlamadaAccion(id, accion) {
     const fd = new FormData();
     fd.append('accion', accion);
     fd.append('llamada_id', id);
-    fd.append('_csrf', window.CSRF_TOKEN || document.querySelector('[name="_csrf"]')?.value || '');
-    const r = await fetch('<?= APP_URL ?>/modules/clientes/ajax_llamada.php', {
-      method: 'POST', headers: {'X-CSRF-TOKEN': window.CSRF_TOKEN || ''}, body: fd
-    });
-    const d = await r.json();
+    const d = await ggiPost('<?= APP_URL ?>/modules/clientes/ajax_llamada.php', fd, { silent: true });
     if (d.ok) {
       showToast(d.mensaje, 'ok');
       document.getElementById('llamada-row-' + id)?.remove();
