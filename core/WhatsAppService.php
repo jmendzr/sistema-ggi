@@ -27,6 +27,26 @@ class WhatsAppService
      */
     private static ?string $lastError = null;
 
+    /**
+     * Reconstruye el texto que efectivamente vio el cliente, sustituyendo
+     * {{1}}, {{2}}… del cuerpo de la plantilla por los parámetros enviados.
+     * Se guarda en el hilo del inbox para que el ejecutivo lea el mensaje real
+     * y no solo el nombre técnico de la plantilla.
+     */
+    private static function renderTemplateTexto(?string $body, array $params, string $templateName): string
+    {
+        if ($body === null || trim($body) === '') {
+            return 'Plantilla: ' . $templateName;
+        }
+
+        $i = 0;
+        foreach ($params as $valor) {
+            $body = str_replace('{{' . (++$i) . '}}', (string) $valor, $body);
+        }
+
+        return $body;
+    }
+
     /** Motivo del último fallo de envío (null si el último intento fue bien). */
     public static function lastError(): ?string
     {
@@ -97,7 +117,7 @@ class WhatsAppService
 
         // ── Cargar template del evento ─────────────────────────────────────────
         $tplStmt = $pdo->prepare(
-            "SELECT template_name, language_code, param_keys, url_button_key FROM whatsapp_templates WHERE event_code = ? AND activo = 1"
+            "SELECT template_name, language_code, param_keys, url_button_key, body_text FROM whatsapp_templates WHERE event_code = ? AND activo = 1"
         );
         $tplStmt->execute([$eventCode]);
         $tpl = $tplStmt->fetch(\PDO::FETCH_ASSOC);
@@ -173,6 +193,15 @@ class WhatsAppService
         $error  = $waId ? null   : (self::lastError() ?? 'No se obtuvo message_id de la API');
 
         self::log($pdo, $clienteId, $eventCode, $phone, $tpl['template_name'], $params, $waId, $estado, $error, $context);
+
+        // El ejecutivo debe ver en el hilo lo que el sistema ya le dijo al cliente,
+        // o responderá a ciegas. enviado_por = NULL marca "automático".
+        require_once __DIR__ . '/WaInbox.php';
+        WaInbox::registrarSaliente(
+            $pdo, $phone, $waId, 'template',
+            self::renderTemplateTexto($tpl['body_text'] ?? null, $params, $tpl['template_name']),
+            $tpl['template_name'], null, $estado, $error
+        );
     }
 
     // ── Envío de template ──────────────────────────────────────────────────────

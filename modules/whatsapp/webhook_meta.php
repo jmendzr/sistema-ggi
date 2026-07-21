@@ -18,6 +18,7 @@
 
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../core/Database.php';
+require_once __DIR__ . '/../../core/WaInbox.php';
 
 $verify_token = defined('WA_WEBHOOK_VERIFY_TOKEN') ? WA_WEBHOOK_VERIFY_TOKEN : env('WA_WEBHOOK_VERIFY_TOKEN', '');
 
@@ -110,6 +111,11 @@ try {
                         : 'failed';
                 }
 
+                // Hilo del inbox: se actualiza SIEMPRE, antes del corte de whatsapp_log.
+                // Los mensajes escritos por un ejecutivo no existen en whatsapp_log
+                // (esa tabla es solo de notificaciones automáticas).
+                WaInbox::actualizarEstado($pdo, $wa_id, $estado_interno, $error_msg);
+
                 // Actualizar solo si el nuevo estado es "más avanzado" que el actual
                 $order = ['queued' => 0, 'sent' => 1, 'delivered' => 2, 'read' => 3, 'failed' => 4];
                 $current = $pdo->prepare("SELECT estado FROM whatsapp_log WHERE wa_message_id = ?");
@@ -177,6 +183,11 @@ try {
                     INSERT IGNORE INTO whatsapp_inbound (wa_message_id, telefono, cliente_id, tipo, texto)
                     VALUES (?, ?, ?, ?, ?)
                 ")->execute([$wa_id, $from, $cliente_id, $tipo, $texto]);
+
+                // Hilo del inbox multiagente: crea/actualiza la conversación y
+                // reabre la ventana de 24h de Meta.
+                $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
+                WaInbox::registrarEntrante($pdo, $from, $wa_id, $tipo, $texto, $phoneNumberId);
             }
         }
     }
