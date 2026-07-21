@@ -244,19 +244,13 @@ function wlRetry(btn, id) {
   const original = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = 'Enviando…';
-  const fd = new FormData();
-  fd.append('id', id);
-  fd.append('_csrf', window.CSRF_TOKEN || '<?= csrf_token() ?>');
-  fetch('<?= APP_URL ?>/modules/notificaciones/log_retry.php', {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body: fd
-  })
-  .then(r => r.json())
+  // ggiPost: adjunta el _csrf y absorbe su rotación. silent porque este
+  // sitio muestra su propio aviso con GGIToast.
+  ggiPost('<?= APP_URL ?>/modules/notificaciones/log_retry.php', { id: id }, { silent: true })
   .then(d => {
-      if (d.csrf) window.CSRF_TOKEN = d.csrf;
-      if (typeof GGIToast !== 'undefined') GGIToast[d.ok ? 'success' : 'error'](d.msg);
-      else alert(d.msg);
+      const msg = d.msg || d.mensaje || (d.ok ? 'Reintentado.' : 'No se pudo reintentar.');
+      if (typeof GGIToast !== 'undefined') GGIToast[d.ok ? 'success' : 'error'](msg);
+      else alert(msg);
       if (d.ok) {
           const row = btn.closest('tr');
           if (row) row.style.opacity = '.5';
@@ -265,12 +259,6 @@ function wlRetry(btn, id) {
           btn.disabled = false;
           btn.innerHTML = original;
       }
-  })
-  .catch(() => {
-      btn.disabled = false;
-      btn.innerHTML = original;
-      if (typeof GGIToast !== 'undefined') GGIToast.error('Error de red al reintentar.');
-      else alert('Error de red al reintentar.');
   });
 }
 </script>

@@ -628,14 +628,10 @@ const NR = (function () {
 
     // ── Comunicación ────────────────────────────────────────────────────
     async function post(body) {
+        // ggiPost: helper global. silent porque este módulo tiene su propio toast.
         const fd = new FormData();
         Object.entries(body).forEach(([k, v]) => v != null && fd.append(k, v));
-        fd.append('_csrf', CSRF);
-        const r = await fetch(location.pathname, {
-            method: 'POST', body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        });
-        return r.json();
+        return await ggiPost(location.pathname, fd, { silent: true });
     }
 
     function toast(msg, type = 'ok') {

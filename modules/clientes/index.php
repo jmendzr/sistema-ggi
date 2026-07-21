@@ -531,19 +531,10 @@ function ggiEliminarCliente(id) {
       const accion = activo ? 'desactivar' : 'activar';
       btnEl.classList.add('loading');
 
-      const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-      const fd = new FormData();
-      fd.append('cliente_id', clienteId);
-      fd.append('accion', accion);
-      fd.append('_csrf', (csrfMeta && csrfMeta.getAttribute('content')) || window.CSRF_TOKEN || '');
-
+      // ggiPost: adjunta el _csrf, absorbe su rotación y avisa si falla
       try {
-        const r    = await fetch('<?= APP_URL ?>/modules/clientes/portal_toggle.php', {
-          method:  'POST',
-          headers: { 'X-Requested-With': 'XMLHttpRequest' },
-          body:    fd,
-        });
-        const data = await r.json();
+        const data = await ggiPost('<?= APP_URL ?>/modules/clientes/portal_toggle.php',
+                                   { cliente_id: clienteId, accion: accion });
         if (data.ok) {
           const nuevoActivo = !!data.portal_activo;
           btnEl.dataset.activo = nuevoActivo ? '1' : '0';
@@ -551,16 +542,8 @@ function ggiEliminarCliente(id) {
             ? 'Portal activo — clic para desactivar'
             : 'Portal inactivo — clic para activar';
           btnEl.className = 'btn-ic cli-portal-btn ' + (nuevoActivo ? 'portal-on' : 'portal-off');
-          if (data.csrf) {
-            window.CSRF_TOKEN = data.csrf;
-            if (csrfMeta) csrfMeta.setAttribute('content', data.csrf);
-          }
           if (typeof showToast === 'function') showToast(data.msg, 'ok');
-        } else {
-          if (typeof showToast === 'function') showToast(data.msg || 'Error.', 'error');
         }
-      } catch(e) {
-        if (typeof showToast === 'function') showToast('Error de conexión.', 'error');
       } finally {
         btnEl.classList.remove('loading');
       }

@@ -1549,17 +1549,32 @@ window.ggiPost = function (url, datos, opciones) {
     headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': _csrfToken() }
   })
   .then(function (r) {
-    return r.json().catch(function () {
-      return { ok: false, msg: 'El servidor respondió algo inesperado (HTTP ' + r.status + ')' };
-    });
+    return r.json().then(
+      function (j) { return { http: r.ok, j: j }; },
+      function ()  { return { http: r.ok, j: { _sinJson: true, _status: r.status } }; }
+    );
   })
-  .then(function (j) {
-    j = j || {};
+  .then(function (res) {
+    var j = res.j || {};
     if (j.csrf) _csrfUpdate(j.csrf);
-    if (j.ok !== true && j.success !== true) {
-      avisar(j.msg || j.mensaje || j.error || 'No se pudo completar la acción');
+
+    // Solo se considera fallo lo EXPLÍCITO. Los endpoints del sistema no
+    // comparten una forma de respuesta única; si se tratara como error todo
+    // lo que no traiga ok:true, las respuestas con otra forma dispararían
+    // avisos falsos.
+    var falla = !res.http || j.ok === false || j.success === false
+             || (j.error && j.ok === undefined && j.success === undefined);
+
+    if (falla) {
+      var m = j.msg || j.mensaje || j.error
+           || (j._sinJson ? 'El servidor respondió algo inesperado (HTTP ' + j._status + ')'
+                          : 'No se pudo completar la acción');
+      avisar(m);
       j.ok = false;
+    } else if (j.ok === undefined) {
+      j.ok = true;   // respuesta sin campo de estado → se asume correcta
     }
+
     return j;
   })
   .catch(function () {
@@ -2901,19 +2916,9 @@ async function mantToggleRow(id, btn) {
   const _confirmed1 = await ggiConfirm(accion + ' registro', '¿' + accion + ' este registro?', { type: esActivo ? 'warning' : 'info', confirmText: accion });
   if (!_confirmed1) return;
 
-  const fd = new FormData();
-  fd.append('accion', 'toggle');
-  fd.append('id', id);
-  fd.append('_csrf', _csrfToken());
-
   try {
-    const res  = await fetch(window.location.pathname, {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body: fd
-    });
-    const json = await res.json();
-    if (json.csrf) _csrfUpdate(json.csrf);
+    // silent: los avisos de esta función son propios (incluye "_noaction")
+    const json = await ggiPost(window.location.pathname, { accion: 'toggle', id: id }, { silent: true });
     // Si hay un mensaje de aviso (incluyendo "no puedes desactivarte"), mostrarlo y salir
     if (json.msg && (!json.ok || json._noaction)) { showToast(json.msg, json.ok ? 'ok' : 'error'); return; }
 
@@ -2946,18 +2951,9 @@ async function mantToggleRow(id, btn) {
 async function mantDeleteRow(id) {
   const _confirmed2 = await ggiConfirm('Eliminar registro', '¿Eliminar este registro? Esta acción no se puede deshacer.', { type: 'danger', confirmText: 'Eliminar' });
   if (!_confirmed2) return;
-  const fd = new FormData();
-  fd.append('accion', 'eliminar');
-  fd.append('id', id);
-  fd.append('_csrf', _csrfToken());
   try {
-    const res  = await fetch(window.location.pathname, {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body: fd
-    });
-    const json = await res.json();
-    if (json.csrf) _csrfUpdate(json.csrf);
+    // silent: esta función muestra sus propios mensajes de éxito y error
+    const json = await ggiPost(window.location.pathname, { accion: 'eliminar', id: id }, { silent: true });
     if (json.ok || json.ok === undefined) {
       const tr = document.querySelector('tr[data-mant-id="' + id + '"]');
       if (tr) tr.remove();
@@ -3486,23 +3482,13 @@ window.ggiToastUndo = function(modulo, id, msg) {
     action: {
       label: 'Deshacer',
       onClick: async function() {
-        try {
-          var fd = new FormData();
-          fd.append('modulo', modulo);
-          fd.append('id', id);
-          fd.append('_csrf', window.CSRF_TOKEN || document.querySelector('[name="_csrf"]')?.value || '');
-          var rr = await fetch('<?= APP_URL ?>/modules/ajax_restaurar.php', {
-            method:'POST', headers:{'X-CSRF-TOKEN':window.CSRF_TOKEN||''}, body: fd
-          });
-          var dd = await rr.json();
-          if (dd.ok) {
-            if (typeof window.invalidatePageCache === 'function') window.invalidatePageCache(location.href);
-            location.reload();
-          } else {
-            showToast(dd.mensaje || 'No se pudo deshacer.', 'error');
-          }
-        } catch(e) {
-          showToast('Error de conexión al deshacer.', 'error');
+        // ggiPost lee el token vigente de la meta tag: window.CSRF_TOKEN
+        // puede haber quedado obsoleto tras una navegación SPA.
+        var dd = await ggiPost('<?= APP_URL ?>/modules/ajax_restaurar.php',
+                               { modulo: modulo, id: id });
+        if (dd.ok) {
+          if (typeof window.invalidatePageCache === 'function') window.invalidatePageCache(location.href);
+          location.reload();
         }
       }
     }
@@ -3522,11 +3508,8 @@ window.ggiEliminar = async function(url, formData, onSuccess, titulo, labelTipo)
   formData.forEach(function(v, k) { fdPreview.append(k, v); });
   fdPreview.set('preview', '1');
 
-  var info = null;
-  try {
-    var rPrev = await fetch(url, { method:'POST', headers:{'X-CSRF-TOKEN':window.CSRF_TOKEN||''}, body: fdPreview });
-    info = await rPrev.json();
-  } catch(e) { info = null; }
+  // silent: el error se muestra abajo con el mensaje propio de esta función
+  var info = await ggiPost(url, fdPreview, { silent: true });
 
   if (info && !info.ok) {
     if (typeof showToast === 'function') showToast(info.msg || 'Error al verificar el registro.', 'error');
@@ -3581,8 +3564,8 @@ window.ggiEliminar = async function(url, formData, onSuccess, titulo, labelTipo)
     try {
       // Step 2 — eliminar definitivamente
       formData.set('preview', '0');
-      var r    = await fetch(url, { method:'POST', headers:{'X-CSRF-TOKEN':window.CSRF_TOKEN||''}, body: formData });
-      var data = await r.json();
+      // silent: los avisos de esta función son propios (incluye "Deshacer")
+      var data = await ggiPost(url, formData, { silent: true });
       if (data.ok) {
         // "Deshacer": módulo desde la URL del endpoint, id desde el primer campo *_id.
         // El endpoint de restauración valida ventana de tiempo y autoría (deleted_by).

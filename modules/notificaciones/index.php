@@ -306,18 +306,10 @@ var FILTRO_ACT  = '<?= $filtro ?>';
 
 // ── Petición AJAX genérica ──
 async function notifAjax(accion, id = 0) {
-    const fd = new FormData();
-    fd.append('accion', accion);
-    fd.append('_csrf', CSRF_TOKEN);
-    if (id) fd.append('id', id);
-    fd.append('filtro', FILTRO_ACT);
-
-    const r = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        body: fd
-    });
-    return r.ok ? r.json() : null;
+    // ggiPost: helper global (adjunta _csrf, absorbe su rotación, avisa si falla)
+    const datos = { accion: accion, filtro: FILTRO_ACT };
+    if (id) datos.id = id;
+    return await ggiPost(API_URL, datos);
 }
 
 // ── Actualizar badges globales (sidebar + header) ──
