@@ -1511,6 +1511,63 @@ function _csrfUpdate(newToken) {
   if (m) m.setAttribute('content', newToken);
 }
 
+/**
+ * ggiPost(url, datos, opciones) — ÚNICA forma de hacer POST autenticado.
+ *
+ * Cada módulo repetía a mano el mismo baile (FormData + _csrf + fetch +
+ * parseo + error), con variantes distintas del nombre del campo y de la
+ * clave del mensaje de error. Equivocarse en cualquiera de las dos produce
+ * un 403 que la interfaz se traga en silencio: la acción no ocurre y el
+ * usuario no se entera. Este helper lo centraliza:
+ *
+ *  - Adjunta el _csrf vigente (campo Y cabecera).
+ *  - Marca la petición como AJAX para que el backend responda JSON.
+ *  - Absorbe la rotación de token (json.csrf).
+ *  - Normaliza el error venga como msg, mensaje o error, y lo MUESTRA.
+ *
+ * Devuelve siempre un objeto (nunca lanza), con .ok booleano.
+ * Pasar {silent:true} para manejar el error por cuenta propia.
+ */
+window.ggiPost = function (url, datos, opciones) {
+  opciones = opciones || {};
+
+  var fd = (datos instanceof FormData) ? datos : new FormData();
+  if (!(datos instanceof FormData) && datos) {
+    Object.keys(datos).forEach(function (k) { fd.append(k, datos[k]); });
+  }
+  fd.set('_csrf', _csrfToken());
+
+  function avisar(m) {
+    if (opciones.silent) return;
+    if (typeof showToast === 'function') showToast(m, 'error');
+  }
+
+  return fetch(url, {
+    method: 'POST',
+    body: fd,
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': _csrfToken() }
+  })
+  .then(function (r) {
+    return r.json().catch(function () {
+      return { ok: false, msg: 'El servidor respondió algo inesperado (HTTP ' + r.status + ')' };
+    });
+  })
+  .then(function (j) {
+    j = j || {};
+    if (j.csrf) _csrfUpdate(j.csrf);
+    if (j.ok !== true && j.success !== true) {
+      avisar(j.msg || j.mensaje || j.error || 'No se pudo completar la acción');
+      j.ok = false;
+    }
+    return j;
+  })
+  .catch(function () {
+    avisar('Sin conexión con el servidor');
+    return { ok: false, msg: 'Sin conexión' };
+  });
+};
+
 
 // ── Tema claro/oscuro ──
 var TEMA_ICONS = {

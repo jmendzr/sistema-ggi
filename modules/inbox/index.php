@@ -211,7 +211,6 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 <script>
 (function () {
   var st = { f: 'todas', q: '', sel: null };
-  var CSRF = <?= json_encode(csrf_token()) ?>;
   var $ = function (s) { return document.querySelector(s); };
 
   function esc(s) {
@@ -399,16 +398,15 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
 
   // ── Acciones ──
+  // Usa el helper global ggiPost: adjunta el _csrf correcto y muestra el error
+  // si lo hay, en vez de fallar en silencio.
   function accionar(accion, id) {
-    var fd = new FormData();
-    fd.append('accion', accion); fd.append('id', id); fd.append('csrf_token', CSRF);
-    fetch('ajax.php', { method: 'POST', body: fd, credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        if (!j.ok && j.msg && window.showToast) showToast(j.msg, 'error');
-        abrir(id);
-      })
-      .catch(function () {});
+    ggiPost('ajax.php', { accion: accion, id: id }).then(function (j) {
+      if (j.ok && typeof showToast === 'function') {
+        showToast(accion === 'asignar' ? 'Conversación asignada' : 'Conversación liberada', 'ok');
+      }
+      abrir(id);
+    });
   }
 
   document.addEventListener('click', function (e) {
