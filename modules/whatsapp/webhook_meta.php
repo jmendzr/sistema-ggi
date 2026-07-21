@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $token = $_GET['hub_verify_token'] ?? $_GET['hub.verify_token'] ?? '';
     $challenge = $_GET['hub_challenge'] ?? $_GET['hub.challenge']   ?? '';
 
-    if ($mode === 'subscribe' && $verify_token && $token === $verify_token) {
+    if ($mode === 'subscribe' && $verify_token && hash_equals($verify_token, (string) $token)) {
         http_response_code(200);
         echo $challenge;
     } else {
@@ -45,6 +45,25 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $raw = file_get_contents('php://input');
 if (!$raw) { http_response_code(200); exit; }
+
+// ── Verificar firma HMAC-SHA256 del payload (X-Hub-Signature-256) ─────────────
+// Meta firma cada POST con el App Secret. Sin esto, cualquiera que conozca la
+// URL puede inyectar estados y mensajes falsos.
+// Solo se exige con el proveedor nativo: los webhooks proxeados por Kapso no
+// vienen firmados con NUESTRO app secret, así que hoy este bloque es no-op.
+$_app_secret = defined('META_APP_SECRET') ? META_APP_SECRET : '';
+$_es_meta    = strtolower(trim(defined('WA_PROVIDER') ? WA_PROVIDER : 'kapso')) === 'meta';
+
+if ($_es_meta && $_app_secret !== '') {
+    $recibida = $_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '';
+    $esperada = 'sha256=' . hash_hmac('sha256', $raw, $_app_secret);
+
+    if ($recibida === '' || !hash_equals($esperada, $recibida)) {
+        error_log('[wa-webhook] firma invalida o ausente; payload descartado');
+        http_response_code(401);
+        exit;
+    }
+}
 
 $data = json_decode($raw, true);
 if (!$data) { http_response_code(200); exit; }
