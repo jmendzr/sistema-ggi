@@ -329,18 +329,26 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       : '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-asignar">Asignármela</button>';
 
     // Meta solo admite texto libre dentro de las 24h desde el último entrante
-    var pie = !c.ventana_abierta
-      ? '<div class="ib-warn">'
-        + '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">'
-        + '<circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>'
-        + '<span class="ib-warn-b"><strong>Ventana de 24 h vencida</strong>'
-        + 'Solo se pueden enviar plantillas aprobadas hasta que el contacto responda.</span>'
-        + '<button type="button" class="btn btn-primary ib-btn-sm" disabled title="Disponible en la próxima fase">Enviar plantilla</button>'
-        + '</div>'
-      : '<div class="ib-box">'
-        + '<input type="text" placeholder="' + (c.es_mia ? 'Escribe un mensaje…' : 'Asígnate la conversación para responder') + '" disabled aria-label="Mensaje">'
-        + '<button type="button" class="btn btn-primary ib-btn-sm" disabled title="Disponible en la próxima fase">Enviar</button>'
-        + '</div>';
+    var pie;
+    if (!c.ventana_abierta) {
+      pie = '<div class="ib-warn">'
+          + '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">'
+          + '<circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>'
+          + '<span class="ib-warn-b"><strong>Ventana de 24 h vencida</strong>'
+          + 'Solo se pueden enviar plantillas aprobadas hasta que el contacto responda.</span>'
+          + '<button type="button" class="btn btn-primary ib-btn-sm" disabled title="Envío de plantillas: próxima entrega">Enviar plantilla</button>'
+          + '</div>';
+    } else if (!c.es_mia) {
+      pie = '<div class="ib-box">'
+          + '<input type="text" placeholder="' + (c.asignado_a ? 'La atiende ' + esc(c.asignado_nombre) : 'Asígnate la conversación para responder') + '" disabled aria-label="Mensaje">'
+          + '<button type="button" class="btn btn-primary ib-btn-sm" disabled>Enviar</button>'
+          + '</div>';
+    } else {
+      pie = '<div class="ib-box">'
+          + '<input type="text" id="ib-texto" placeholder="Escribe un mensaje…" aria-label="Mensaje" maxlength="4096" autocomplete="off">'
+          + '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-enviar">Enviar</button>'
+          + '</div>';
+    }
 
     $('#ib-chat').innerHTML =
         '<div class="ib-chat-head">'
@@ -358,6 +366,30 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       + '<div class="ib-foot">' + pie + '</div>';
 
     var m = $('#ib-msgs'); if (m) m.scrollTop = m.scrollHeight;
+
+    var t = $('#ib-texto');
+    if (t) { t.focus(); t.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
+    }); }
+  }
+
+  // ── Envío ──
+  function enviar() {
+    var inp = $('#ib-texto'), btn = $('#ib-enviar');
+    if (!inp || !st.sel) return;
+
+    var texto = inp.value.trim();
+    if (!texto) return;
+
+    inp.disabled = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+
+    ggiPost('ajax.php', { accion: 'enviar', id: st.sel, texto: texto }).then(function (j) {
+      if (j.ok) inp.value = '';
+      // Se recarga el hilo en ambos casos: si falló, el mensaje queda
+      // registrado como fallido con el motivo real de Meta a la vista.
+      abrir(st.sel);
+    });
   }
 
   function ctx(j) {
@@ -417,6 +449,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     }
     if (e.target.closest('#ib-asignar')) { accionar('asignar', st.sel); return; }
     if (e.target.closest('#ib-liberar')) { accionar('liberar', st.sel); return; }
+    if (e.target.closest('#ib-enviar'))  { enviar(); return; }
     var it = e.target.closest('.ib-item');
     if (it) abrir(parseInt(it.dataset.id, 10));
   });

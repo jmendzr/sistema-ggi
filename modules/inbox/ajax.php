@@ -66,6 +66,69 @@ if ($accion === 'asignar' || $accion === 'liberar') {
     exit;
 }
 
+// ══ Enviar mensaje ═══════════════════════════════════════════════════════════
+if ($accion === 'enviar') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;
+    }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $id    = (int) ($_POST['id'] ?? 0);
+    $texto = trim($_POST['texto'] ?? '');
+
+    if (!$id)          { echo json_encode(['ok' => false, 'msg' => 'Conversación inválida']); exit; }
+    if ($texto === '') { echo json_encode(['ok' => false, 'msg' => 'Escribe un mensaje']); exit; }
+    // WhatsApp corta los mensajes de texto en 4096 caracteres
+    if (mb_strlen($texto) > 4096) {
+        echo json_encode(['ok' => false, 'msg' => 'El mensaje supera los 4096 caracteres']); exit;
+    }
+
+    $q = $pdo->prepare("SELECT telefono, asignado_a, ventana_expira_at, phone_number_id
+                          FROM wa_conversaciones WHERE id = ?");
+    $q->execute([$id]);
+    $conv = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+
+    // El candado: solo escribe quien la tiene asignada. Gerencia tampoco pisa
+    // una conversación ajena sin reasignarla antes — si no, el bloqueo no sirve.
+    if ((int) $conv['asignado_a'] !== $yo) {
+        echo json_encode([
+            'ok'  => false,
+            'msg' => $conv['asignado_a'] ? 'La conversación está asignada a otro ejecutivo'
+                                         : 'Asígnate la conversación para responder',
+        ]);
+        exit;
+    }
+
+    // Regla de Meta: fuera de las 24 h solo se admiten plantillas aprobadas.
+    // Se valida aquí y no solo en la interfaz, para que no dependa del navegador.
+    if (!WaInbox::ventanaAbierta($conv['ventana_expira_at'])) {
+        echo json_encode([
+            'ok'  => false,
+            'msg' => 'La ventana de 24 h venció. Solo se pueden enviar plantillas aprobadas.',
+            'ventana_vencida' => true,
+        ]);
+        exit;
+    }
+
+    $waId = WhatsAppService::sendText($conv['telefono'], $texto);
+
+    WaInbox::registrarSaliente(
+        $pdo, $conv['telefono'], $waId, 'text', $texto,
+        null, $yo, $waId ? 'sent' : 'failed',
+        $waId ? null : WhatsAppService::lastError(), $conv['phone_number_id']
+    );
+
+    if (!$waId) {
+        echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar']);
+        exit;
+    }
+
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
 // ══ Listado ══════════════════════════════════════════════════════════════════
 if ($accion === 'lista') {
     $filtro = $_GET['filtro'] ?? 'todas';

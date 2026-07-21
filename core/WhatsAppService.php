@@ -218,6 +218,91 @@ class WhatsAppService
      *
      * @return string|null  WhatsApp message ID devuelto por la API, o null si falló
      */
+    /**
+     * Envía un mensaje de TEXTO LIBRE (no plantilla).
+     *
+     * Solo es válido dentro de la ventana de servicio de 24 h de Meta, contada
+     * desde el último mensaje entrante del cliente. Fuera de ella la API
+     * rechaza el envío (error 131047) y hay que usar una plantilla aprobada.
+     * Quien llama debe verificar la ventana ANTES: aquí no se puede saber.
+     *
+     * @return string|null  message_id de WhatsApp, o null si falló
+     *                      (el motivo queda en self::lastError()).
+     */
+    public static function sendText(string $to, string $texto): ?string
+    {
+        self::$lastError = null;
+
+        $apiKey  = self::apiKey();
+        $phoneId = self::phoneId();
+
+        if (!$apiKey || !$phoneId) {
+            self::$lastError = 'Credenciales de WhatsApp (' . self::provider() . ') no configuradas en .env';
+            error_log('[WhatsAppService] ' . self::$lastError);
+            return null;
+        }
+
+        $texto = trim($texto);
+        if ($texto === '') {
+            self::$lastError = 'El mensaje está vacío';
+            return null;
+        }
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type'    => 'individual',
+            'to'                => $to,
+            'type'              => 'text',
+            // preview_url=false: evita que WhatsApp genere tarjetas de enlaces
+            // que descuadran el hilo del inbox.
+            'text'              => ['preview_url' => false, 'body' => $texto],
+        ];
+
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/messages");
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/json',
+                'Accept: application/json',
+                self::authHeader(),
+            ],
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlErr) {
+            self::$lastError = "Error de red: {$curlErr}";
+            error_log("[WhatsAppService] cURL error (texto): {$curlErr}");
+            return null;
+        }
+
+        $data = $response ? json_decode($response, true) : [];
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            $id = $data['messages'][0]['id'] ?? null;
+            if (!$id) {
+                self::$lastError = mb_substr('HTTP ' . $httpCode . ' sin message_id: ' . (string) $response, 0, 400);
+            }
+            return $id;
+        }
+
+        $e      = $data['error'] ?? [];
+        $errMsg = $e['message'] ?? (string) $response;
+        if (!empty($e['code']))                  $errMsg .= ' [code ' . $e['code'] . ']';
+        if (!empty($e['error_data']['details'])) $errMsg .= ' — ' . $e['error_data']['details'];
+
+        self::$lastError = mb_substr('HTTP ' . $httpCode . ': ' . $errMsg, 0, 400);
+        error_log("[WhatsAppService] API error texto HTTP {$httpCode} to={$to}: {$errMsg}");
+
+        return null;
+    }
+
     public static function sendTemplate(
         string  $to,
         string  $templateName,
