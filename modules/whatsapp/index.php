@@ -39,17 +39,35 @@ $cuentas = [
         'phone_id' => defined('KAPSO_PHONE_ID_2')      ? KAPSO_PHONE_ID_2      : '',
     ],
     [
+        // Este número ya opera en Meta nativo → inbox propio, no el iframe de Kapso.
         'key'      => 'cuenta3',
         'fallback' => 'GGI Notificaciones',
+        'nativo'   => true,
         'token'    => defined('KAPSO_EMBED_TOKEN_3')   ? KAPSO_EMBED_TOKEN_3   : '',
         'api_key'  => defined('KAPSO_API_KEY')         ? KAPSO_API_KEY         : '',
         'phone_id' => defined('KAPSO_PHONE_NUMBER_ID') ? KAPSO_PHONE_NUMBER_ID : '',
     ],
 ];
 
-// Enriquecer cada cuenta con datos de la API
+/** Igual que la anterior pero contra Graph API (número ya migrado a Meta nativo). */
+function meta_phone_info(string $phone_id): array {
+    if (!$phone_id || !defined('META_WA_TOKEN') || !META_WA_TOKEN) return [];
+    $ver = defined('META_WA_VERSION') ? META_WA_VERSION : 'v21.0';
+    $url = "https://graph.facebook.com/{$ver}/{$phone_id}?fields=verified_name,display_phone_number,quality_rating";
+    $ctx = stream_context_create(['http' => [
+        'method'  => 'GET',
+        'header'  => 'Authorization: Bearer ' . META_WA_TOKEN . "\r\nAccept: application/json\r\n",
+        'timeout' => 5,
+    ]]);
+    $raw = @file_get_contents($url, false, $ctx);
+    return $raw ? (json_decode($raw, true) ?? []) : [];
+}
+
+// Enriquecer cada cuenta con datos de la API que corresponda
 foreach ($cuentas as &$c) {
-    $info = kapso_phone_info($c['api_key'], $c['phone_id']);
+    $info = !empty($c['nativo'])
+        ? meta_phone_info($c['phone_id'])
+        : kapso_phone_info($c['api_key'], $c['phone_id']);
     $c['nombre']  = $info['verified_name']       ?? '';
     $c['telefono']= $info['display_phone_number'] ?? $c['fallback'];
     $c['calidad'] = strtolower($info['quality_rating'] ?? 'unknown');
@@ -240,7 +258,9 @@ $wa_icon_path = '<path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.0
   <div class="wa-panels">
     <?php foreach ($cuentas as $i => $c): ?>
     <div class="wa-panel <?= $i === 0 ? 'active' : '' ?>" id="panel-<?= $c['key'] ?>">
-      <?php if (!empty($c['token'])): ?>
+      <?php if (!empty($c['nativo'])): ?>
+        <?php include __DIR__ . '/_inbox_nativo.php'; ?>
+      <?php elseif (!empty($c['token'])): ?>
         <iframe
           src="https://inbox.kapso.ai/embed/<?= htmlspecialchars($c['token'], ENT_QUOTES) ?>?mode=light"
           allow="microphone; clipboard-write"
