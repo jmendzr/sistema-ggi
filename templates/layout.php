@@ -30,6 +30,7 @@ $_can_metas          = can('metas');
 $_can_reportes       = can('reportes');
 $_can_notificaciones = can('notificaciones');
 $_can_whatsapp       = can('whatsapp');
+$_can_inbox          = can('inbox');
 $_can_historial      = has_role('gerente_general');
 $_can_mantenimiento  = can('mantenimiento');
 
@@ -1930,6 +1931,12 @@ session_write_close();
         <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Dashboard
       </a>
+      <?php if ($_can_inbox): ?>
+      <a href="<?= APP_URL ?>/modules/inbox/index.php" data-label="Inbox" class="nav-item <?= ($active_menu??'')==='inbox' ? 'active':'' ?>">
+        <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.42-4.03 8-9 8a9.9 9.9 0 01-4.29-.96L3 20l1.4-3.7A7.6 7.6 0 013 12c0-4.42 4.03-8 9-8s9 3.58 9 8z"/></svg>
+        Inbox
+      </a>
+      <?php endif; ?>
     </div>
   </div>
 

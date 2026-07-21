@@ -45,3 +45,8 @@ CREATE TABLE IF NOT EXISTS wa_mensajes (
 -- Cuerpo de la plantilla, para reconstruir en el hilo el texto que vio el cliente.
 -- Se rellena sincronizando desde GET /{WABA_ID}/message_templates.
 ALTER TABLE whatsapp_templates ADD COLUMN body_text TEXT NULL AFTER param_keys;
+
+-- Permiso del nuevo modulo Inbox (la tabla de permisos es rol_permisos)
+INSERT INTO rol_permisos (rol, modulo, activo) VALUES
+  ('gerente_operaciones', 'inbox', 1),
+  ('ejecutivo_ventas',    'inbox', 1);

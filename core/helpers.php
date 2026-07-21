@@ -159,8 +159,10 @@ function can(string $modulo, string $accion = 'ver'): bool {
 
     // ── Fallback: permisos hardcodeados originales (tabla no instalada) ──
     static $_hc = [
-        'gerente_operaciones' => ['clientes','certificados','cotizaciones','envios','auditorias','documentos','reportes','comunicaciones','notificaciones','bonos','metas','pagos','whatsapp','mantenimiento'],
-        'ejecutivo_ventas'    => ['clientes','certificados','cotizaciones','envios','documentos','comunicaciones','notificaciones','bonos','metas','pagos'],
+        'gerente_operaciones' => ['clientes','certificados','cotizaciones','envios','auditorias','documentos','reportes','comunicaciones','notificaciones','bonos','metas','pagos','whatsapp','inbox','mantenimiento'],
+        // 'inbox' (bandeja multiagente) sí lo tienen los ejecutivos; 'whatsapp'
+        // (bandejas embebidas de Kapso) sigue siendo solo de gerencia.
+        'ejecutivo_ventas'    => ['clientes','certificados','cotizaciones','envios','documentos','comunicaciones','notificaciones','bonos','metas','pagos','inbox'],
         'gestor_logistico'    => ['envios','certificados','notificaciones'],
         'delivery'            => ['envios','clientes_ver','notificaciones'],
     ];
