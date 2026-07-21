@@ -384,12 +384,25 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     inp.disabled = true;
     if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
 
-    ggiPost('ajax.php', { accion: 'enviar', id: st.sel, texto: texto }).then(function (j) {
-      if (j.ok) inp.value = '';
-      // Se recarga el hilo en ambos casos: si falló, el mensaje queda
-      // registrado como fallido con el motivo real de Meta a la vista.
-      abrir(st.sel);
-    });
+    // Restaura la caja pase lo que pase, para que nunca quede en "Enviando…"
+    function restaurar() {
+      if (!document.body.contains(inp)) return;   // el hilo ya se re-renderizó
+      inp.disabled = false;
+      if (btn) { btn.disabled = false; btn.textContent = 'Enviar'; }
+      inp.focus();
+    }
+
+    ggiPost('ajax.php', { accion: 'enviar', id: st.sel, texto: texto })
+      .then(function (j) {
+        if (j.ok) inp.value = '';
+        // Se recarga el hilo en ambos casos: si falló, el mensaje queda
+        // registrado como fallido con el motivo real de Meta a la vista.
+        abrir(st.sel);
+      })
+      .catch(function () {
+        if (typeof showToast === 'function') showToast('No se pudo enviar el mensaje', 'error');
+      })
+      .then(restaurar);
   }
 
   function ctx(j) {
@@ -465,3 +478,5 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   lista();
 })();
 </script>
+
+<?php require_once __DIR__ . '/../../templates/layout_end.php'; ?>
