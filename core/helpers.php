@@ -287,7 +287,11 @@ function gg_notif_icono(string $tipo): array {
 }
 
 function csrf_verify(): void {
-    $token_post    = $_POST['_csrf']               ?? '';
+    // El nombre canónico del campo es '_csrf', pero por el sistema hay JS que
+    // lo manda como 'csrf_token'. Antes cada endpoint afectado normalizaba a
+    // mano (5 copias del mismo parche) y el que se olvidaba devolvía un 403
+    // mudo. Se acepta aquí, en un solo lugar, para toda la aplicación.
+    $token_post    = ($_POST['_csrf'] ?? '') ?: ($_POST['csrf_token'] ?? '');
     $token_header  = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     $token_session = $_SESSION['csrf_token']       ?? '';
 

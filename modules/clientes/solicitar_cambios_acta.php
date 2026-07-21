@@ -12,9 +12,6 @@ header('Content-Type: application/json; charset=utf-8');
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['ok' => false, 'msg' => 'Método no permitido.']); exit;
 }
-if (empty($_POST['_csrf'])) {
-    $_POST['_csrf'] = $_POST['csrf_token'] ?? '';
-}
 csrf_verify();
 
 $doc_id = (int)($_POST['doc_id'] ?? 0);
