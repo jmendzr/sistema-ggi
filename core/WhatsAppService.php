@@ -20,6 +20,19 @@ require_once __DIR__ . '/Database.php';
 
 class WhatsAppService
 {
+    /**
+     * Motivo del último fallo de sendTemplate(), para poder persistirlo en
+     * whatsapp_log. Sin esto el error real solo llegaba al error_log de PHP y
+     * en la base quedaba un genérico imposible de diagnosticar.
+     */
+    private static ?string $lastError = null;
+
+    /** Motivo del último fallo de envío (null si el último intento fue bien). */
+    public static function lastError(): ?string
+    {
+        return self::$lastError;
+    }
+
     // ── Configuración ──────────────────────────────────────────────────────────
 
     /**
@@ -157,7 +170,7 @@ class WhatsAppService
 
         $waId   = self::sendTemplate($phone, $tpl['template_name'], $params, $tpl['language_code'], $docUrl, $docFilename, $btnParam);
         $estado = $waId ? 'sent' : 'failed';
-        $error  = $waId ? null   : 'No se obtuvo message_id de la API';
+        $error  = $waId ? null   : (self::lastError() ?? 'No se obtuvo message_id de la API');
 
         self::log($pdo, $clienteId, $eventCode, $phone, $tpl['template_name'], $params, $waId, $estado, $error, $context);
     }
@@ -185,11 +198,14 @@ class WhatsAppService
         ?string $docFilename    = null,
         ?string $urlButtonParam = null   // sufijo dinámico del botón URL (ej: token del portal)
     ): ?string {
+        self::$lastError = null;
+
         $apiKey  = self::apiKey();
         $phoneId = self::phoneId();
 
         if (!$apiKey || !$phoneId) {
-            error_log('[WhatsAppService] Credenciales Kapso no configuradas en .env');
+            self::$lastError = 'Credenciales de WhatsApp (' . self::provider() . ') no configuradas en .env';
+            error_log('[WhatsAppService] ' . self::$lastError);
             return null;
         }
 
@@ -264,6 +280,7 @@ class WhatsAppService
         curl_close($ch);
 
         if ($curlErr) {
+            self::$lastError = "Error de red: {$curlErr}";
             error_log("[WhatsAppService] cURL error: {$curlErr}");
             return null;
         }
@@ -271,10 +288,23 @@ class WhatsAppService
         $data = $response ? json_decode($response, true) : [];
 
         if ($httpCode >= 200 && $httpCode < 300) {
-            return $data['messages'][0]['id'] ?? null;
+            $id = $data['messages'][0]['id'] ?? null;
+            if (!$id) {
+                self::$lastError = mb_substr('HTTP ' . $httpCode . ' sin message_id: ' . (string) $response, 0, 400);
+                error_log("[WhatsAppService] {$templateName}: " . self::$lastError);
+            }
+            return $id;
         }
 
-        $errMsg = $data['error']['message'] ?? $response;
+        // Detalle completo de Meta: message + code + error_data.details, que es
+        // donde viene el motivo real (plantilla inexistente, no aprobada, etc.)
+        $e      = $data['error'] ?? [];
+        $errMsg = $e['message'] ?? (string) $response;
+        if (!empty($e['code']))                  $errMsg .= ' [code ' . $e['code'] . ']';
+        if (!empty($e['error_data']['details'])) $errMsg .= ' — ' . $e['error_data']['details'];
+
+        // whatsapp_log.error_msg es varchar(400): recortar el total, no solo el detalle
+        self::$lastError = mb_substr('HTTP ' . $httpCode . ': ' . $errMsg, 0, 400);
         error_log("[WhatsAppService] API error HTTP {$httpCode} template={$templateName} to={$to}: {$errMsg}");
         return null;
     }
