@@ -3,7 +3,10 @@
  * core/WhatsAppService.php
  *
  * Servicio de notificaciones automáticas vía WhatsApp Business (Meta Cloud API).
- * Usa Kapso AI como proxy autenticado: api.kapso.ai/meta/whatsapp/v24.0/{phone_id}/messages
+ * Proveedor conmutable por WA_PROVIDER (.env):
+ *   'kapso' → api.kapso.ai/meta/whatsapp/v24.0/{phone_id}/messages   (X-API-Key)
+ *   'meta'  → graph.facebook.com/{v}/{phone_id}/messages             (Bearer token)
+ * El payload es idéntico en ambos casos (Kapso solo proxea a Meta).
  *
  * Solo envía mensajes usando Message Templates aprobados por Meta.
  * Las notificaciones a clientes son siempre business-initiated → templates obligatorios.
@@ -19,14 +22,51 @@ class WhatsAppService
 {
     // ── Configuración ──────────────────────────────────────────────────────────
 
+    /**
+     * Proveedor activo: 'kapso' (proxy, por defecto) o 'meta' (Cloud API nativa).
+     * El formato del payload es el MISMO en ambos (Kapso solo proxea a Meta);
+     * solo cambian la URL base y el header de autenticación.
+     */
+    private static function provider(): string
+    {
+        $p = defined('WA_PROVIDER') ? WA_PROVIDER : 'kapso';
+        return strtolower(trim((string) $p)) === 'meta' ? 'meta' : 'kapso';
+    }
+
+    /** Credencial del proveedor activo (token de Meta o API key de Kapso). */
     private static function apiKey(): string
     {
+        if (self::provider() === 'meta') {
+            return defined('META_WA_TOKEN') ? META_WA_TOKEN : '';
+        }
         return defined('KAPSO_API_KEY') ? KAPSO_API_KEY : '';
     }
 
+    /** Phone Number ID del proveedor activo. */
     private static function phoneId(): string
     {
+        if (self::provider() === 'meta') {
+            return defined('META_WA_PHONE_NUMBER_ID') ? META_WA_PHONE_NUMBER_ID : '';
+        }
         return defined('KAPSO_PHONE_NUMBER_ID') ? KAPSO_PHONE_NUMBER_ID : '';
+    }
+
+    /** Base del endpoint de mensajes según proveedor. */
+    private static function apiBase(): string
+    {
+        if (self::provider() === 'meta') {
+            $v = defined('META_WA_VERSION') ? META_WA_VERSION : 'v21.0';
+            return 'https://graph.facebook.com/' . $v;
+        }
+        return 'https://api.kapso.ai/meta/whatsapp/v24.0';
+    }
+
+    /** Header de autenticación según proveedor. */
+    private static function authHeader(): string
+    {
+        return self::provider() === 'meta'
+            ? 'Authorization: Bearer ' . self::apiKey()
+            : 'X-API-Key: ' . self::apiKey();
     }
 
     // ── Método principal ───────────────────────────────────────────────────────
@@ -202,7 +242,8 @@ class WhatsAppService
             ],
         ];
 
-        $url = "https://api.kapso.ai/meta/whatsapp/v24.0/{$phoneId}/messages";
+        // URL según proveedor activo (kapso proxy | meta Cloud API nativa)
+        $url = self::apiBase() . "/{$phoneId}/messages";
 
         $ch = curl_init($url);
         curl_setopt_array($ch, [
@@ -213,7 +254,7 @@ class WhatsAppService
             CURLOPT_HTTPHEADER     => [
                 'Content-Type: application/json',
                 'Accept: application/json',
-                'X-API-Key: ' . $apiKey,
+                self::authHeader(),
             ],
         ]);
 

@@ -98,3 +98,14 @@ define('WA_WEBHOOK_VERIFY_TOKEN', env('WA_WEBHOOK_VERIFY_TOKEN', ''));
 define('KAPSO_PHONE_NUMBER_ID', env('KAPSO_PHONE_NUMBER_ID', ''));
 define('KAPSO_API_KEY',         env('KAPSO_API_KEY',         ''));
 define('KAPSO_EMBED_TOKEN_3',   env('KAPSO_EMBED_TOKEN_3',   ''));
+
+// ── WhatsApp: proveedor activo ────────────────────────────────────────────────
+//  'kapso' = proxy actual (por defecto)  |  'meta' = Cloud API nativa de Meta.
+//  El payload es idéntico en ambos (Kapso solo proxeaba a Meta); cambian la URL
+//  base y el header de autenticación. Cutover/rollback = cambiar WA_PROVIDER.
+define('WA_PROVIDER',             env('WA_PROVIDER',             'kapso'));
+define('META_WA_VERSION',         env('META_WA_VERSION',         'v21.0'));
+define('META_WA_PHONE_NUMBER_ID', env('META_WA_PHONE_NUMBER_ID', ''));
+define('META_WA_TOKEN',           env('META_WA_TOKEN',           ''));
+define('META_WA_WABA_ID',         env('META_WA_WABA_ID',         ''));
+define('META_APP_SECRET',         env('META_APP_SECRET',         '')); // firma de webhooks
