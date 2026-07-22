@@ -141,6 +141,15 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
               color: var(--tx3); padding: 6px 9px 4px; }
   .ib-pop-item small { white-space: normal; line-height: 1.35; }
 
+  /* Vista previa del adjunto */
+  .ib-prev { display: flex; align-items: center; justify-content: center;
+             background: var(--bg-surface2); border: 1px solid var(--brd);
+             border-radius: 10px; padding: 12px; margin-bottom: 10px; min-height: 120px; }
+  .ib-prev-img { max-width: 100%; max-height: 320px; border-radius: 8px; display: block; }
+  .ib-prev-doc { font-size: .9rem; font-weight: 600; color: var(--tx); text-align: center; }
+  .ib-prev-meta { font-size: .74rem; color: var(--tx2); margin-bottom: 12px; word-break: break-word; }
+  .ib-prev-nota { font-size: .78rem; color: var(--tx2); margin-bottom: 8px; }
+
   /* Formulario de plantilla */
   .ib-plt-prev { background: var(--bg-surface2); border: 1px solid var(--brd); border-radius: 10px;
                  padding: 12px 14px; font-size: .84rem; line-height: 1.5; color: var(--tx);
@@ -685,27 +694,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       // Repintar con formato en cada cambio
       t.addEventListener('input', function () { repintar(t); });
 
-      // Adjuntar: el pie de foto es lo que haya escrito en la caja
+      // Adjuntar: primero vista previa, como WhatsApp. Enviar de golpe no da
+      // oportunidad de revisar el archivo ni de acompañarlo con un mensaje.
       var file = $('#ib-file');
       if (file) file.addEventListener('change', function () {
         if (!file.files || !file.files[0] || !st.sel) return;
-        var fd = new FormData();
-        fd.append('accion', 'adjuntar');
-        fd.append('id', st.sel);
-        fd.append('archivo', file.files[0]);
-        fd.append('texto', textoActual().trim());
-
-        if (typeof showToast === 'function') showToast('Enviando archivo…', 'ok');
-        ggiPost('ajax.php', fd).then(function (j) {
-          file.value = '';
-          if (j.ok) {
-            var box = $('#ib-texto');
-            if (box) box.innerHTML = '';
-            // Aviso cuando el formato se degradó (p. ej. GIF enviado como archivo)
-            if (j.aviso && typeof showToast === 'function') showToast(j.aviso, 'warn', 7000);
-          }
-          abrir(st.sel);
-        });
+        previewAdjunto(file.files[0], file);
       });
 
       // Pegar SIEMPRE como texto plano: si no, entra HTML del portapapeles
@@ -807,6 +801,81 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     abrirPop(ancla, '<div class="ib-emojis">' + EMOJIS.map(function (x) {
       return '<button type="button" data-emoji="' + x + '" aria-label="' + x + '">' + x + '</button>';
     }).join('') + '</div>');
+  }
+
+  // ── Vista previa del adjunto antes de enviarlo ─────────────────────────────
+  function previewAdjunto(archivo, inputFile) {
+    var url  = URL.createObjectURL(archivo);
+    var mime = archivo.type || '';
+    var kb   = archivo.size / 1024;
+    var peso = kb < 1024 ? Math.round(kb) + ' KB' : (kb / 1024).toFixed(1) + ' MB';
+
+    // El sticker no admite pie de foto: Meta rechaza el mensaje si se manda
+    var esSticker = mime === 'image/webp';
+    var esGif     = mime === 'image/gif';
+
+    var vista;
+    if (mime.indexOf('image/') === 0) {
+      vista = '<img src="' + url + '" alt="Vista previa" class="ib-prev-img">';
+    } else if (mime.indexOf('video/') === 0) {
+      vista = '<video src="' + url + '" class="ib-prev-img" controls preload="metadata"></video>';
+    } else if (mime.indexOf('audio/') === 0) {
+      vista = '<audio src="' + url + '" controls style="width:100%"></audio>';
+    } else {
+      vista = '<div class="ib-prev-doc">📄 ' + esc(archivo.name) + '</div>';
+    }
+
+    mantOpen('Enviar archivo',
+        '<div class="ib-prev">' + vista + '</div>'
+      + '<div class="ib-prev-meta">' + esc(archivo.name) + ' · ' + peso
+      + (esSticker ? ' · se enviará como <b>sticker</b>' : '')
+      + (esGif ? ' · <b>GIF</b>: WhatsApp no lo anima, se enviará como archivo' : '')
+      + '</div>'
+      + (esSticker
+          ? '<p class="ib-prev-nota">Los stickers no admiten texto acompañante.</p>'
+          : '<label class="ib-plt-f"><span>Mensaje (opcional)</span>'
+            + '<input type="text" id="ib-prev-txt" maxlength="1024" placeholder="Añade un mensaje…"></label>')
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
+      + '<button type="button" class="ggi-btn-confirm-cancel" id="ib-prev-cancel">Cancelar</button>'
+      + '<button type="button" class="ggi-btn-confirm-action" id="ib-prev-ok">Enviar</button>'
+      + '</div>');
+
+    // Arrastrar el texto ya escrito en la caja, si lo había
+    var pie = document.getElementById('ib-prev-txt');
+    if (pie) { pie.value = textoActual().trim(); pie.focus(); }
+
+    function limpiar() {
+      URL.revokeObjectURL(url);
+      if (inputFile) inputFile.value = '';
+    }
+
+    var cancelar = document.getElementById('ib-prev-cancel');
+    if (cancelar) cancelar.addEventListener('click', function () {
+      limpiar();
+      if (typeof ggiModalClose === 'function') ggiModalClose();
+    });
+
+    var ok = document.getElementById('ib-prev-ok');
+    if (ok) ok.addEventListener('click', function () {
+      ok.disabled = true; ok.textContent = 'Enviando…';
+
+      var fd = new FormData();
+      fd.append('accion', 'adjuntar');
+      fd.append('id', st.sel);
+      fd.append('archivo', archivo);
+      fd.append('texto', pie ? pie.value.trim() : '');
+
+      ggiPost('ajax.php', fd).then(function (j) {
+        ok.disabled = false; ok.textContent = 'Enviar';
+        if (!j.ok) return;
+        limpiar();
+        if (typeof ggiModalClose === 'function') ggiModalClose();
+        var caja = $('#ib-texto');
+        if (caja) caja.innerHTML = '';
+        if (j.aviso && typeof showToast === 'function') showToast(j.aviso, 'warn', 7000);
+        abrir(st.sel);
+      });
+    });
   }
 
   // ── Plantillas (única vía fuera de la ventana de 24 h) ─────────────────────
