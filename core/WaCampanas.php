@@ -39,12 +39,15 @@ class WaCampanas
         \PDO $pdo, string $nombre, string $plantilla, string $idioma,
         array $paramKeys, string $segmento, array $dest, int $usuarioId
     ): array {
+        // template_id es NOT NULL y viene de la época de Kapso, donde el id era
+        // distinto del nombre. En Meta el nombre ES el identificador, así que se
+        // guarda el mismo valor en ambas columnas.
         $pdo->prepare(
             "INSERT INTO whatsapp_campanas
-                (nombre, template_name, template_lang, param_keys, segmento,
+                (nombre, template_id, template_name, template_lang, param_keys, segmento,
                  total_destinatarios, estado, creado_por)
-             VALUES (?, ?, ?, ?, ?, 0, 'encolada', ?)"
-        )->execute([$nombre, $plantilla, $idioma, json_encode($paramKeys), $segmento, $usuarioId]);
+             VALUES (?, ?, ?, ?, ?, ?, 0, 'encolada', ?)"
+        )->execute([$nombre, $plantilla, $plantilla, $idioma, json_encode($paramKeys), $segmento, $usuarioId]);
 
         $campanaId = (int) $pdo->lastInsertId();
 
