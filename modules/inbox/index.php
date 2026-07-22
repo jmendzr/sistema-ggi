@@ -164,6 +164,17 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-plt-busca input:focus { outline: none; border-color: var(--ac); box-shadow: 0 0 0 3px var(--ac-soft); }
 
   .ib-plt-lista { max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+
+  /* Encabezado de categoría: separa Utilidad de Marketing y explica por qué
+     importa la diferencia, en vez de solo etiquetar. */
+  .ib-plt-grupo { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+                  padding: 12px 2px 2px; }
+  .ib-plt-grupo:first-child { padding-top: 2px; }
+  .ib-plt-grupo b { font-size: .72rem; font-weight: 700; text-transform: uppercase;
+                    letter-spacing: .07em; color: var(--tx2); }
+  .ib-plt-grupo span { font-size: .72rem; color: var(--tx3); }
+  .ib-plt-grupo.mk b { color: var(--s-warn-tx); }
+  .ib-plt-grupo.mk span { color: var(--s-warn-tx); opacity: .85; }
   .ib-plt-card { display: block; width: 100%; text-align: left; padding: 12px 14px; cursor: pointer;
                  background: var(--bg-surface); border: 1px solid var(--brd); border-radius: 12px;
                  font: inherit; transition: border-color .13s, box-shadow .13s; }
@@ -1227,7 +1238,24 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       return;
     }
 
-    cont.innerHTML = vis.map(function (p) {
+    // Separadas por categoría: Marketing cuesta más por mensaje y exige
+    // consentimiento. Mezcladas, es fácil mandar la cara sin querer.
+    var grupos = [
+      { cat: 'UTILITY',   t: 'Utilidad',  d: 'Avisos de un trámite en curso' },
+      { cat: 'MARKETING', t: 'Marketing', d: 'Cuestan más y requieren consentimiento del cliente' }
+    ];
+
+    cont.innerHTML = grupos.map(function (g) {
+      var items = vis.filter(function (p) { return (p.categoria || 'UTILITY') === g.cat; });
+      if (!items.length) return '';
+      return '<div class="ib-plt-grupo ' + (g.cat === 'MARKETING' ? 'mk' : '') + '">'
+           + '<b>' + g.t + '</b><span>' + g.d + '</span></div>'
+           + tarjetas(items);
+    }).join('');
+  }
+
+  function tarjetas(lista) {
+    return lista.map(function (p) {
       var i = _plt.indexOf(p);
       // Vista previa con las variables resaltadas: se entiende de un vistazo
       // qué datos hay que completar antes de enviar.

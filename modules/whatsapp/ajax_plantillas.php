@@ -29,7 +29,7 @@ if ($accion === 'sincronizar') {
 
     // Guardar estado y cuerpo para que el diagnóstico funcione aunque después
     // no haya conexión con Meta
-    $upd = $pdo->prepare("UPDATE whatsapp_templates SET estado_meta = ?, body_text = ?
+    $upd = $pdo->prepare("UPDATE whatsapp_templates SET estado_meta = ?, body_text = ?, categoria = ?
                            WHERE template_name = ? AND language_code = ?");
     $n = 0;
     foreach ($meta as $t) {
@@ -37,7 +37,7 @@ if ($accion === 'sincronizar') {
         foreach ($t['components'] ?? [] as $c) {
             if (($c['type'] ?? '') === 'BODY') $body = $c['text'] ?? '';
         }
-        $upd->execute([$t['status'] ?? null, $body, $t['name'], $t['language']]);
+        $upd->execute([$t['status'] ?? null, $body, $t['category'] ?? null, $t['name'], $t['language']]);
         $n += $upd->rowCount();
     }
 

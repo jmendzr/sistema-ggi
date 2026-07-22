@@ -227,7 +227,7 @@ if ($accion === 'plantillas') {
     // Solo las APROBADAS en Meta. Ofrecer una rechazada (o inexistente) sería
     // enviar al ejecutivo a un fallo garantizado.
     $st = $pdo->query(
-        "SELECT event_code, template_name, language_code, param_keys, body_text
+        "SELECT event_code, template_name, language_code, param_keys, body_text, categoria
            FROM whatsapp_templates
           WHERE activo = 1 AND estado_meta = 'APPROVED'
             AND body_text IS NOT NULL AND body_text <> ''
@@ -243,6 +243,9 @@ if ($accion === 'plantillas') {
             'cuerpo'   => $r['body_text'],
             'claves'   => $claves,          // nombres legibles de {{1}}, {{2}}…
             'n_params' => count($claves),
+            // La categoría no es cosmética: Marketing cuesta más por mensaje y
+            // exige consentimiento del cliente.
+            'categoria'=> $r['categoria'] ?: 'UTILITY',
         ];
     }
 

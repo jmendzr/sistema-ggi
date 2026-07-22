@@ -45,3 +45,7 @@ ALTER TABLE whatsapp_campanas ADD COLUMN template_lang VARCHAR(10) NULL AFTER te
 ALTER TABLE whatsapp_campanas ADD COLUMN param_keys    TEXT        NULL AFTER template_lang;
 ALTER TABLE whatsapp_campanas ADD COLUMN iniciada_at   DATETIME    NULL AFTER estado;
 ALTER TABLE whatsapp_campanas ADD COLUMN finalizada_at DATETIME    NULL AFTER iniciada_at;
+
+-- Categoria real de la plantilla en Meta (UTILITY/MARKETING/AUTHENTICATION).
+-- No es cosmetica: Marketing cuesta mas por mensaje y exige consentimiento.
+ALTER TABLE whatsapp_templates ADD COLUMN categoria VARCHAR(20) NULL AFTER estado_meta;
