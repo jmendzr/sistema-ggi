@@ -226,13 +226,65 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   /* Botón: reutiliza el canónico .btn del design system */
   .ib-btn-sm { font-size: .76rem; padding: 6px 13px; min-height: 34px; }
 
-  @media (max-width: 1180px) { .ib { grid-template-columns: 300px minmax(0,1fr); } .ib-ctx { display: none; } }
+  /* Volver a la lista: solo en móvil, donde la lista queda oculta */
+  .ib-volver { display: none; }
+
+  /* Barra de formato y emojis */
+  .ib-barra { display: flex; align-items: center; gap: 2px; margin-bottom: 8px; flex-wrap: wrap; }
+  .ib-fmt {
+    min-width: 32px; height: 30px; padding: 0 7px; border: none; background: transparent;
+    border-radius: 7px; cursor: pointer; color: var(--tx2); font: inherit; font-size: .85rem;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .ib-fmt:hover:not(:disabled) { background: var(--bg-hover); color: var(--tx); }
+  .ib-fmt:disabled { opacity: .4; cursor: not-allowed; }
+  .ib-barra-sep { width: 1px; height: 18px; background: var(--brd); margin: 0 5px; }
+
+  .ib-emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 232px; overflow-y: auto; }
+  .ib-emojis button {
+    border: none; background: transparent; font-size: 1.15rem; line-height: 1;
+    padding: 5px; border-radius: 6px; cursor: pointer; min-height: 32px;
+  }
+  .ib-emojis button:hover { background: var(--bg-hover); }
+
+  .ib-linkico { border: none; background: transparent; padding: 0; cursor: pointer;
+                color: var(--ac); display: inline-flex; align-items: center; }
+  /* .ib-ctx-a pasó de <a> a <button>: hay que reponer lo que el botón no hereda */
+  .ib-ctx-a { width: 100%; border: none; background: transparent; cursor: pointer;
+              font: inherit; align-items: center; }
+
+  /* Paneles colapsables */
+  .ib.sin-lista { grid-template-columns: 0 minmax(0, 1fr) 296px; }
+  .ib.sin-lista .ib-lista-col { display: none; }
+  .ib.sin-ctx   { grid-template-columns: 340px minmax(0, 1fr) 0; }
+  .ib.sin-ctx .ib-ctx { display: none; }
+  .ib.sin-lista.sin-ctx { grid-template-columns: 0 minmax(0, 1fr) 0; }
+
+  @media (max-width: 1180px) {
+    .ib, .ib.sin-lista, .ib.sin-ctx { grid-template-columns: 300px minmax(0,1fr); }
+    .ib-ctx { display: none; }
+    .ib-solo-desk { display: none; }
+  }
+
   @media (max-width: 768px) {
-    .ib { grid-template-columns: 1fr; height: calc(100dvh - 50px - 24px); border-radius: 12px; }
+    .ib, .ib.sin-lista, .ib.sin-ctx { grid-template-columns: 1fr; }
+    .ib { height: calc(100dvh - 50px - 24px); border-radius: 12px; }
     .ib-chat-col { display: none; }
     .ib.abierto .ib-lista-col { display: none; }
     .ib.abierto .ib-chat-col  { display: flex; }
-    .ib-b { max-width: 86%; }
+    .ib-volver { display: inline-flex; }
+    /* En móvil la lista ocupa todo: el colapsar no aplica */
+    .ib.sin-lista .ib-lista-col { display: flex; }
+    .ib-b { max-width: 88%; }
+    /* 16px evita el zoom automático de iOS al enfocar el campo */
+    .ib-box input, .ib-search input { font-size: 16px; }
+    .ib-fmt { min-width: 38px; height: 38px; }
+    .ib-emojis { grid-template-columns: repeat(7, 1fr); }
+    .ib-emojis button { min-height: 40px; font-size: 1.3rem; }
+    .ib-pop { max-width: calc(100vw - 24px); }
+    .ib-item { padding: 12px 14px; }
+    .ib-msgs { padding: 14px 12px; }
+    .ib-foot { padding: 10px 12px calc(10px + var(--safe-bottom, 0px)); }
   }
 </style>
 
@@ -241,14 +293,17 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   <div class="ib-col ib-lista-col">
     <div class="ib-head">
       <div class="ib-head-r">
-        <span class="ib-head-t">Conversaciones</span>
+        <button type="button" class="ib-icon" data-panel="lista" title="Ocultar lista de conversaciones" aria-label="Ocultar lista de conversaciones">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+        </button>
+        <span class="ib-head-t" style="flex:1">Conversaciones</span>
         <button type="button" class="ib-icon" id="ib-nueva" title="Nueva conversación" aria-label="Nueva conversación">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h8M8 14h5M21 12a8 8 0 01-8 8H7l-4 3V12a8 8 0 018-8h2a8 8 0 018 8z"/></svg>
         </button>
       </div>
       <div class="ib-pills">
         <button type="button" class="ib-pill on" data-f="todas">Todas<b data-c="todas"></b></button>
-        <button type="button" class="ib-pill" data-f="mias">Mías<b data-c="mias"></b></button>
+        <button type="button" class="ib-pill" data-f="mias">A mi cargo<b data-c="mias"></b></button>
         <button type="button" class="ib-pill" data-f="sin_asignar">Sin asignar<b data-c="sin_asignar"></b></button>
         <button type="button" class="ib-pill" data-f="sin_persona">Sin persona<b data-c="sin_persona"></b></button>
         <button type="button" class="ib-pill" id="ib-etq-activa" style="display:none"></button>
@@ -351,7 +406,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
         c.innerHTML = j.items.map(function (it) {
           var tag = it.asignado_a
-            ? (it.es_mia ? '<span class="ib-tag mia">Mía</span>'
+            ? (it.es_mia ? '<span class="ib-tag mia">A mi cargo</span>'
                          : '<span class="ib-tag otro">' + esc(it.asignado_nombre || 'Asignada') + '</span>')
             : '<span class="ib-tag libre">Libre</span>';
           var viejo = (it.dias_asignada !== null && it.dias_asignada >= 3)
@@ -411,9 +466,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     // Acción de asignación: el candado que pediste
     var accion = c.asignado_a
       ? (c.puede_liberar
-          ? '<button type="button" class="btn btn-ghost ib-btn-sm" id="ib-liberar">Liberar</button>'
+          ? '<button type="button" class="btn btn-ghost ib-btn-sm" id="ib-liberar">Soltar</button>'
           : '<span class="ib-tag otro">Atiende ' + esc(c.asignado_nombre) + '</span>')
-      : '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-asignar">Asignármela</button>';
+      : '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-asignar">Tomar conversación</button>';
 
     // Meta solo admite texto libre dentro de las 24h desde el último entrante
     var pie;
@@ -431,7 +486,16 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<button type="button" class="btn btn-primary ib-btn-sm" disabled>Enviar</button>'
           + '</div>';
     } else {
-      pie = '<div class="ib-box">'
+      pie = '<div class="ib-barra">'
+          + '<button type="button" class="ib-fmt" data-fmt="*" title="Negrita (*texto*)" aria-label="Negrita"><b>B</b></button>'
+          + '<button type="button" class="ib-fmt" data-fmt="_" title="Cursiva (_texto_)" aria-label="Cursiva"><i>I</i></button>'
+          + '<button type="button" class="ib-fmt" data-fmt="~" title="Tachado (~texto~)" aria-label="Tachado"><s>S</s></button>'
+          + '<button type="button" class="ib-fmt" data-fmt="```" title="Monoespaciado" aria-label="Monoespaciado">&lt;/&gt;</button>'
+          + '<span class="ib-barra-sep"></span>'
+          + '<button type="button" class="ib-fmt" id="ib-emoji" title="Emojis" aria-label="Insertar emoji">☺</button>'
+          + '<button type="button" class="ib-fmt" id="ib-adjunto" title="Adjuntar archivo (próxima entrega)" aria-label="Adjuntar archivo" disabled>📎</button>'
+          + '</div>'
+          + '<div class="ib-box">'
           + '<input type="text" id="ib-texto" placeholder="Escribe un mensaje…" aria-label="Mensaje" maxlength="4096" autocomplete="off">'
           + '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-enviar">Enviar</button>'
           + '</div>';
@@ -439,16 +503,26 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     $('#ib-chat').innerHTML =
         '<div class="ib-chat-head">'
+      +   '<button type="button" class="ib-icon ib-volver" id="ib-volver" title="Volver a la lista" aria-label="Volver a la lista">'
+      +     '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+      +     '<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>'
+      +   '</button>'
       +   '<span class="ib-av ' + colorDe(c.telefono) + (c.ventana_abierta ? ' viva' : '') + '">'
       +     esc(ini(c.titulo)) + '</span>'
       +   '<div style="flex:1;min-width:0">'
       +     '<div class="ib-chat-n">' + esc(c.titulo)
-      +       (c.cliente_id ? ' <a href="../clientes/ver.php?id=' + c.cliente_id + '" title="Abrir ficha de la empresa" aria-label="Abrir ficha de la empresa">'
+      +       (c.cliente_id ? ' <button type="button" class="ib-linkico" data-ver="../clientes/ver.php?id=' + c.cliente_id + '" '
+      +         'data-titulo="' + esc(c.titulo) + '" title="Abrir ficha de la empresa" aria-label="Abrir ficha de la empresa">'
       +         '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
-      +         '<path stroke-linecap="round" stroke-linejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg></a>' : '')
+      +         '<path stroke-linecap="round" stroke-linejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg></button>' : '')
       +     '</div>'
       +     '<div class="ib-chat-ph">+' + esc(c.telefono) + '</div>'
       +   '</div>' + accion
+      +   '<button type="button" class="ib-icon ib-solo-desk" data-panel="ctx" '
+      +     'title="Mostrar u ocultar el panel de contexto" aria-label="Mostrar u ocultar el panel de contexto">'
+      +     '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+      +     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>'
+      +   '</button>'
       + '</div>'
       + '<div class="ib-scroll ib-msgs" id="ib-msgs">' + cuerpo + '</div>'
       + '<div class="ib-foot">' + pie + '</div>';
@@ -459,6 +533,38 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     if (t) { t.focus(); t.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
     }); }
+  }
+
+  // ── Formato y emojis ───────────────────────────────────────────────────────
+  // WhatsApp interpreta *negrita*, _cursiva_, ~tachado~ y ```mono``` como
+  // texto plano: no hace falta nada del lado de la API, solo insertar marcas.
+  function envolver(marca) {
+    var i = $('#ib-texto');
+    if (!i) return;
+    var a = i.selectionStart, b = i.selectionEnd, v = i.value;
+    var sel = v.slice(a, b) || 'texto';
+    i.value = v.slice(0, a) + marca + sel + marca + v.slice(b);
+    i.focus();
+    i.setSelectionRange(a + marca.length, a + marca.length + sel.length);
+  }
+
+  function insertar(txt) {
+    var i = $('#ib-texto');
+    if (!i) return;
+    var a = i.selectionStart, b = i.selectionEnd;
+    i.value = i.value.slice(0, a) + txt + i.value.slice(b);
+    i.focus();
+    i.setSelectionRange(a + txt.length, a + txt.length);
+  }
+
+  var EMOJIS = ('😀 😃 😄 😁 😅 😂 🙂 😉 😊 😍 😘 🤗 🤔 😐 😴 😎 🥳 😢 😭 😡 '
+    + '👍 👎 👌 🙏 👏 💪 🤝 👋 ✍️ 🫡 ❤️ 🔥 ⭐ ✅ ❌ ⚠️ ℹ️ 📌 📎 📄 '
+    + '📅 ⏰ 📦 🚚 💰 💳 🧾 🏢 📞 📧 🔒 🎯 🎉 🙌 ✨').split(' ');
+
+  function popEmojis(ancla) {
+    abrirPop(ancla, '<div class="ib-emojis">' + EMOJIS.map(function (x) {
+      return '<button type="button" data-emoji="' + x + '" aria-label="' + x + '">' + x + '</button>';
+    }).join('') + '</div>');
   }
 
   // ── Envío ──
@@ -506,20 +612,26 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         '<div class="ib-ctx-v">' + esc(c.contacto || 'Sin nombre registrado') + '</div>'
       + '<div class="ib-ctx-s2">+' + esc(c.telefono) + '</div>');
 
+    // Todo se abre en modal (ggiOpenForm): salir del inbox perdería el hilo
+    // que el ejecutivo está atendiendo.
     h += sec('Empresa', iEmp, c.cliente_id
-      ? '<a class="ib-ctx-a" href="../clientes/ver.php?id=' + c.cliente_id + '"><span>' + esc(c.titulo) + '</span><span>↗</span></a>'
+      ? '<button type="button" class="ib-ctx-a" data-ver="../clientes/ver.php?id=' + c.cliente_id + '" '
+        + 'data-titulo="' + esc(c.titulo) + '"><span>' + esc(c.titulo) + '</span><span>↗</span></button>'
         + (c.ruc ? '<div class="ib-ctx-s2">RUC ' + esc(c.ruc) + '</div>' : '')
       : '<div class="ib-ctx-s2">Número no vinculado a ninguna empresa</div>');
 
     if (x.propuestas.length) {
       h += sec('Propuestas', '', x.propuestas.map(function (p) {
-        return '<a class="ib-ctx-a" href="../cotizaciones/ver.php?id=' + p.id + '"><span>' + esc(p.numero) + '</span>'
-             + '<span style="color:var(--tx3)">' + esc(p.estado) + '</span></a>';
+        return '<button type="button" class="ib-ctx-a" data-ver="../cotizaciones/ver.php?id=' + p.id + '" '
+             + 'data-titulo="Propuesta ' + esc(p.numero) + '"><span>' + esc(p.numero) + '</span>'
+             + '<span style="color:var(--tx3)">' + esc(p.estado) + '</span></button>';
       }).join(''));
     }
     if (x.envios.length) {
       h += sec('Envíos', '', x.envios.map(function (e) {
-        return '<a class="ib-ctx-a" href="../envios/index.php"><span>' + esc(e.codigo_envio || '—') + '</span><span>↗</span></a>';
+        return '<button type="button" class="ib-ctx-a" data-ver="../envios/ver.php?id=' + e.id + '" '
+             + 'data-titulo="Envío ' + esc(e.codigo_envio || '') + '"><span>' + esc(e.codigo_envio || '—') + '</span>'
+             + '<span>↗</span></button>';
       }).join(''));
     }
 
@@ -664,6 +776,30 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
 
   document.addEventListener('click', function (e) {
+    // Empresa / propuesta / envío en modal: salir del inbox perdería el hilo
+    var ver = e.target.closest('[data-ver]');
+    if (ver) {
+      if (typeof ggiOpenForm === 'function') ggiOpenForm(ver.dataset.ver, ver.dataset.titulo || '');
+      else window.open(ver.dataset.ver, '_blank');
+      return;
+    }
+
+    // Volver a la lista (móvil)
+    if (e.target.closest('#ib-volver')) {
+      $('#ib').classList.remove('abierto');
+      st.sel = null;
+      return;
+    }
+
+    // Colapsar / mostrar paneles laterales
+    var tg = e.target.closest('[data-panel]');
+    if (tg) {
+      var cual = tg.dataset.panel;
+      $('#ib').classList.toggle('sin-' + cual);
+      try { localStorage.setItem('ib_sin_' + cual, $('#ib').classList.contains('sin-' + cual) ? '1' : ''); } catch (_) {}
+      return;
+    }
+
     // ── Menús emergentes ──
     if (e.target.closest('#ib-nueva'))     { popNueva(e.target.closest('#ib-nueva')); return; }
     if (e.target.closest('#ib-filtro-etq')){ popFiltroEtiquetas(e.target.closest('#ib-filtro-etq')); return; }
@@ -751,6 +887,15 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     if (e.target.closest('#ib-asignar')) { accionar('asignar', st.sel); return; }
     if (e.target.closest('#ib-liberar')) { accionar('liberar', st.sel); return; }
     if (e.target.closest('#ib-enviar'))  { enviar(); return; }
+
+    // Formato de WhatsApp: envuelve la selección con los marcadores
+    var fmt = e.target.closest('.ib-fmt[data-fmt]');
+    if (fmt) { envolver(fmt.dataset.fmt); return; }
+
+    if (e.target.closest('#ib-emoji')) { popEmojis(e.target.closest('#ib-emoji')); return; }
+
+    var emo = e.target.closest('[data-emoji]');
+    if (emo) { insertar(emo.dataset.emoji); return; }
     var it = e.target.closest('.ib-item');
     if (it) abrir(parseInt(it.dataset.id, 10));
   });
@@ -762,6 +907,13 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   // Polling: el monolito no tiene websockets. Pausa con la pestaña oculta.
   setInterval(function () { if (!document.hidden) lista(true); }, 8000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) lista(true); });
+
+  // Restaurar paneles colapsados de la sesión anterior
+  try {
+    ['lista', 'ctx'].forEach(function (k) {
+      if (localStorage.getItem('ib_sin_' + k)) $('#ib').classList.add('sin-' + k);
+    });
+  } catch (_) {}
 
   lista();
 })();
