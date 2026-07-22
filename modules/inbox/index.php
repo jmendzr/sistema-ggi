@@ -210,6 +210,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-adj small { font-weight: 400; opacity: .75; font-size: .7rem; }
   .ib-img { display: block; max-width: 100%; max-height: 300px; border-radius: 9px;
             cursor: pointer; background: rgba(127,127,127,.12); }
+  /* Los stickers van sin fondo y más chicos, como en WhatsApp */
+  .ib-sticker { max-width: 150px; max-height: 150px; background: transparent; }
   .ib-doc { display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px;
             border-radius: 9px; background: rgba(127,127,127,.14);
             color: inherit; text-decoration: none; font-weight: 600; font-size: .8rem; }
@@ -558,7 +560,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       if (m.media) {
         var src = 'media.php?id=' + m.media;
         if (m.tipo === 'image' || m.tipo === 'sticker') {
-          cuerpoMsg += '<img class="ib-img" src="' + src + '" loading="lazy" '
+          cuerpoMsg += '<img class="ib-img' + (m.tipo === 'sticker' ? ' ib-sticker' : '') + '" src="' + src + '" loading="lazy" '
                      + 'alt="' + esc(m.tipo === 'sticker' ? 'Sticker' : 'Imagen recibida') + '" '
                      + 'data-ggi-preview="' + src + '">';
         } else if (m.tipo === 'video') {
@@ -617,7 +619,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<span class="ib-barra-sep"></span>'
           + '<button type="button" class="ib-fmt" id="ib-emoji" title="Emojis" aria-label="Insertar emoji">☺</button>'
           + '<button type="button" class="ib-fmt" id="ib-adjunto" title="Adjuntar archivo" aria-label="Adjuntar archivo">📎</button>'
-          + '<input type="file" id="ib-file" hidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx">'
+          + '<input type="file" id="ib-file" hidden '
+          + 'accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,audio/*,'
+          + '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">'
           + '</div>'
           + '<div class="ib-box">'
           // contenteditable, no <input>: un input no puede mostrar el texto
@@ -697,6 +701,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           if (j.ok) {
             var box = $('#ib-texto');
             if (box) box.innerHTML = '';
+            // Aviso cuando el formato se degradó (p. ej. GIF enviado como archivo)
+            if (j.aviso && typeof showToast === 'function') showToast(j.aviso, 'warn', 7000);
           }
           abrir(st.sel);
         });

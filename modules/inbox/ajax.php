@@ -285,24 +285,50 @@ if ($accion === 'adjuntar') {
     $tmp    = $_FILES['archivo']['tmp_name'];
     $nombre = $_FILES['archivo']['name'] ?? 'archivo';
     $mime   = mime_content_type($tmp) ?: 'application/octet-stream';
+    $peso   = filesize($tmp);
+    $aviso  = null;
 
-    // Límites de Meta: 5 MB imágenes, 16 MB audio/video, 100 MB documentos
-    $max = str_starts_with($mime, 'image/') ? 5 * 1024 * 1024
-         : (preg_match('#^(audio|video)/#', $mime) ? 16 * 1024 * 1024 : 100 * 1024 * 1024);
-    if (filesize($tmp) > $max) {
-        echo json_encode(['ok' => false, 'msg' => 'El archivo supera el límite de WhatsApp para su tipo']); exit;
+    // Cada formato va por un tipo distinto de la API, no todos son "imagen":
+    //  - webp  → sticker (WhatsApp solo anima stickers en ese formato)
+    //  - gif   → Meta NO admite image/gif; se manda como documento para que
+    //            al menos llegue. Animado solo funciona con MP4.
+    //  - mp4   → video (es la forma real de mandar un "GIF" que se mueva)
+    if ($mime === 'image/webp') {
+        $tipo = 'sticker';
+    } elseif ($mime === 'image/gif') {
+        $tipo  = 'document';
+        $aviso = 'WhatsApp no admite GIF animado: se envió como archivo. Para que se vea animado, adjunta un MP4.';
+    } elseif (str_starts_with($mime, 'image/')) {
+        $tipo = 'image';
+    } elseif (str_starts_with($mime, 'video/')) {
+        $tipo = 'video';
+    } elseif (str_starts_with($mime, 'audio/')) {
+        $tipo = 'audio';
+    } else {
+        $tipo = 'document';
     }
 
-    $tipo = str_starts_with($mime, 'image/') ? 'image'
-          : (str_starts_with($mime, 'video/') ? 'video'
-          : (str_starts_with($mime, 'audio/') ? 'audio' : 'document'));
+    // Límites de Meta por tipo
+    $max = match ($tipo) {
+        'sticker' => 500 * 1024,             // 500 KB animado / 100 KB estático
+        'image'   => 5 * 1024 * 1024,
+        'video', 'audio' => 16 * 1024 * 1024,
+        default   => 100 * 1024 * 1024,
+    };
+    if ($peso > $max) {
+        echo json_encode(['ok' => false, 'msg' => $tipo === 'sticker'
+            ? 'Los stickers no pueden superar 500 KB'
+            : 'El archivo supera el límite de WhatsApp para su tipo']);
+        exit;
+    }
 
     $mediaId = WhatsAppService::uploadMedia($tmp, $mime);
     if (!$mediaId) {
         echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo subir']); exit;
     }
 
-    $pie  = trim($_POST['texto'] ?? '');
+    // Los stickers no admiten pie de foto: si se manda, Meta rechaza el envío
+    $pie  = $tipo === 'sticker' ? '' : trim($_POST['texto'] ?? '');
     $waId = WhatsAppService::sendMedia($conv['telefono'], $tipo, $mediaId, $pie ?: null, $nombre);
 
     $convId = WaInbox::registrarSaliente(
@@ -318,7 +344,7 @@ if ($accion === 'adjuntar') {
     }
 
     echo $waId
-        ? json_encode(['ok' => true])
+        ? json_encode(['ok' => true, 'aviso' => $aviso])
         : json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar']);
     exit;
 }
