@@ -255,6 +255,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-editable b { font-weight: 700; }
   .ib-editable i { font-style: italic; }
   .ib-editable s { text-decoration: line-through; }
+  /* Marcadores (* _ ~) atenuados: siguen ahí para no descuadrar el cursor,
+     pero se ven como una guía y no como parte del mensaje. */
+  .ib-editable .ib-mk { opacity: .38; font-weight: 400; }
 
   /* ── Columna 3: contexto ── */
   .ib-ctx-head { padding: 13px 17px; border-bottom: 1px solid var(--brd);
@@ -780,11 +783,23 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   // campo no cambia de longitud al aplicar estilos, y las posiciones del
   // cursor siguen siendo válidas. Si se ocultaran, el cursor saltaría.
   function formatoVivo(txt) {
+    // Los marcadores NO se borran (eso cambiaría la longitud del texto y el
+    // cursor saltaría en cada tecla), pero se atenúan con .ib-mk para que se
+    // note que el formato ya se aplicó.
+    var mk = function (c) { return '<span class="ib-mk">' + c + '</span>'; };
     return esc(txt)
-      .replace(/```([\s\S]+?)```/g, '<code class="ib-mono">```$1```</code>')
-      .replace(/(^|[\s(])\*(\S(?:[^*\n]*\S)?)\*(?=[\s.,;:!?)]|$)/g, '$1<b>*$2*</b>')
-      .replace(/(^|[\s(])_(\S(?:[^_\n]*\S)?)_(?=[\s.,;:!?)]|$)/g, '$1<i>_$2_</i>')
-      .replace(/(^|[\s(])~(\S(?:[^~\n]*\S)?)~(?=[\s.,;:!?)]|$)/g, '$1<s>~$2~</s>');
+      .replace(/```([\s\S]+?)```/g, function (_, t) {
+        return '<code class="ib-mono">' + mk('```') + t + mk('```') + '</code>';
+      })
+      .replace(/(^|[\s(])\*(\S(?:[^*\n]*\S)?)\*(?=[\s.,;:!?)]|$)/g, function (_, p, t) {
+        return p + '<b>' + mk('*') + t + mk('*') + '</b>';
+      })
+      .replace(/(^|[\s(])_(\S(?:[^_\n]*\S)?)_(?=[\s.,;:!?)]|$)/g, function (_, p, t) {
+        return p + '<i>' + mk('_') + t + mk('_') + '</i>';
+      })
+      .replace(/(^|[\s(])~(\S(?:[^~\n]*\S)?)~(?=[\s.,;:!?)]|$)/g, function (_, p, t) {
+        return p + '<s>' + mk('~') + t + mk('~') + '</s>';
+      });
   }
 
   /** Posición del cursor medida en caracteres del texto plano. */
@@ -819,10 +834,16 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
   /** Repinta el campo con formato y devuelve el cursor a su sitio. */
   function repintar(el, pos) {
-    var plano = el.innerText.replace(/\n$/, '');
-    if (pos === undefined) pos = _offsets(el).b;
-    el.innerHTML = formatoVivo(plano);
-    _setCursor(el, Math.min(pos, plano.length));
+    // Si algo fallara acá, el formato dejaría de aplicarse sin ningún aviso:
+    // el texto se sigue escribiendo, así que el fallo pasa desapercibido.
+    try {
+      var plano = el.innerText.replace(/\n$/, '');
+      if (pos === undefined) pos = _offsets(el).b;
+      el.innerHTML = formatoVivo(plano);
+      _setCursor(el, Math.min(pos, plano.length));
+    } catch (err) {
+      if (window.console) console.error('[inbox] repintar:', err);
+    }
   }
 
   function textoActual() {
