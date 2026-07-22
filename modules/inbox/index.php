@@ -229,6 +229,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   /* Volver a la lista: solo en móvil, donde la lista queda oculta */
   .ib-volver { display: none; }
 
+  /* Rescate: solo con la lista oculta Y sin hilo abierto */
+  .ib-rescate { display: none; position: absolute; top: 10px; left: 10px; z-index: 3;
+                border: 1px solid var(--brd); border-radius: 8px; background: var(--bg-surface); }
+  .ib.sin-lista:not(.abierto) .ib-rescate { display: inline-flex; }
+  .ib-chat-col { position: relative; }
+
   /* Barra de formato y emojis */
   .ib-barra { display: flex; align-items: center; gap: 2px; margin-bottom: 8px; flex-wrap: wrap; }
   .ib-fmt {
@@ -253,12 +259,16 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-ctx-a { width: 100%; border: none; background: transparent; cursor: pointer;
               font: inherit; align-items: center; }
 
-  /* Paneles colapsables */
-  .ib.sin-lista { grid-template-columns: 0 minmax(0, 1fr) 296px; }
+  /* Paneles colapsables.
+     OJO: un hijo con display:none sale del flujo del grid y los siguientes se
+     corren a las columnas anteriores. Por eso al ocultar un panel hay que
+     redefinir las columnas SOLO para los que quedan; si no, el hilo hereda
+     el ancho del panel oculto y el layout se rompe. */
+  .ib.sin-lista { grid-template-columns: minmax(0, 1fr) 296px; }
   .ib.sin-lista .ib-lista-col { display: none; }
-  .ib.sin-ctx   { grid-template-columns: 340px minmax(0, 1fr) 0; }
+  .ib.sin-ctx   { grid-template-columns: 340px minmax(0, 1fr); }
   .ib.sin-ctx .ib-ctx { display: none; }
-  .ib.sin-lista.sin-ctx { grid-template-columns: 0 minmax(0, 1fr) 0; }
+  .ib.sin-lista.sin-ctx { grid-template-columns: minmax(0, 1fr); }
 
   @media (max-width: 1180px) {
     .ib, .ib.sin-lista, .ib.sin-ctx { grid-template-columns: 300px minmax(0,1fr); }
@@ -325,6 +335,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
   <!-- ══ Hilo ══ -->
   <div class="ib-col ib-chat-col">
+    <!-- Rescate: visible solo si la lista está oculta y no hay hilo abierto,
+         donde no existe ningún otro control para traerla de vuelta. -->
+    <button type="button" class="ib-icon ib-rescate" data-panel="lista"
+            title="Mostrar la lista de conversaciones" aria-label="Mostrar la lista de conversaciones">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+    </button>
     <div class="ib-chat" id="ib-chat">
       <div class="ib-empty">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -506,6 +522,13 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       +   '<button type="button" class="ib-icon ib-volver" id="ib-volver" title="Volver a la lista" aria-label="Volver a la lista">'
       +     '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
       +     '<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>'
+      +   '</button>'
+      // El botón de ocultar la lista vive DENTRO de la lista: sin este de acá
+      // no habría forma de recuperarla una vez oculta.
+      +   '<button type="button" class="ib-icon ib-solo-desk" data-panel="lista" '
+      +     'title="Mostrar u ocultar la lista de conversaciones" aria-label="Mostrar u ocultar la lista de conversaciones">'
+      +     '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+      +     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>'
       +   '</button>'
       +   '<span class="ib-av ' + colorDe(c.telefono) + (c.ventana_abierta ? ' viva' : '') + '">'
       +     esc(ini(c.titulo)) + '</span>'
