@@ -829,7 +829,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         '<div class="ib-prev">' + vista + '</div>'
       + '<div class="ib-prev-meta">' + esc(archivo.name) + ' · ' + peso
       + (esSticker ? ' · se enviará como <b>sticker</b>' : '')
-      + (esGif ? ' · <b>GIF</b>: WhatsApp no lo anima, se enviará como archivo' : '')
+      + (esGif ? ' · <b>GIF</b>: se convertirá a sticker animado para que se reproduzca' : '')
       + '</div>'
       + (esSticker
           ? '<p class="ib-prev-nota">Los stickers no admiten texto acompañante.</p>'

@@ -287,6 +287,7 @@ if ($accion === 'adjuntar') {
     $mime   = mime_content_type($tmp) ?: 'application/octet-stream';
     $peso   = filesize($tmp);
     $aviso  = null;
+    $tempConvertido = null;   // temporal a limpiar si hubo conversión
 
     // Cada formato va por un tipo distinto de la API, no todos son "imagen":
     //  - webp  → sticker (WhatsApp solo anima stickers en ese formato)
@@ -296,8 +297,22 @@ if ($accion === 'adjuntar') {
     if ($mime === 'image/webp') {
         $tipo = 'sticker';
     } elseif ($mime === 'image/gif') {
-        $tipo  = 'document';
-        $aviso = 'WhatsApp no admite GIF animado: se envió como archivo. Para que se vea animado, adjunta un MP4.';
+        // Meta no admite image/gif y no hay ffmpeg para pasarlo a MP4. Pero
+        // WhatsApp sí anima los stickers en WebP animado, y eso Imagick lo
+        // puede generar: es la única vía para que el GIF se mueva.
+        $webp = WhatsAppService::gifAStickerWebp($tmp);
+        if ($webp) {
+            $tmp   = $webp;
+            $mime  = 'image/webp';
+            $tipo  = 'sticker';
+            $peso  = filesize($tmp);
+            $aviso = 'El GIF se envió como sticker animado (es la forma en que WhatsApp lo reproduce).';
+            $tempConvertido = $webp;
+        } else {
+            $tipo  = 'document';
+            $aviso = 'El GIF era demasiado pesado para convertirlo a sticker animado, '
+                   . 'así que se envió como archivo.';
+        }
     } elseif (str_starts_with($mime, 'image/')) {
         $tipo = 'image';
     } elseif (str_starts_with($mime, 'video/')) {
@@ -342,6 +357,8 @@ if ($accion === 'adjuntar') {
         $pdo->prepare("UPDATE wa_mensajes SET media_id = ?, media_mime = ?, media_nombre = ?
                         WHERE wa_message_id = ?")->execute([$mediaId, $mime, $nombre, $waId]);
     }
+
+    if ($tempConvertido) @unlink($tempConvertido);
 
     echo $waId
         ? json_encode(['ok' => true, 'aviso' => $aviso])

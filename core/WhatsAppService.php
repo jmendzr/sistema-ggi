@@ -271,6 +271,61 @@ class WhatsAppService
     }
 
     /**
+     * Convierte un GIF animado a WebP animado para poder enviarlo como sticker.
+     *
+     * Meta no admite image/gif, y sin ffmpeg no se puede pasar a MP4. Pero
+     * WhatsApp SÍ anima los stickers en WebP animado, y de eso sí es capaz
+     * Imagick. Es la única vía para que un GIF se mueva en el chat.
+     *
+     * Límite del sticker animado: 500 KB. Si no entra ni bajando calidad,
+     * devuelve null y quien llama debe caer al envío como documento.
+     *
+     * @return string|null  Ruta temporal del .webp, o null si no fue posible.
+     */
+    public static function gifAStickerWebp(string $rutaGif): ?string
+    {
+        if (!class_exists('Imagick')) return null;
+
+        try {
+            $im = new \Imagick($rutaGif);
+            if ($im->getNumberImages() < 1) { $im->clear(); return null; }
+
+            $im = $im->coalesceImages();
+            foreach ($im as $frame) {
+                // Los stickers son cuadrados de 512 px; bestfit conserva proporción
+                $frame->resizeImage(512, 512, \Imagick::FILTER_LANCZOS, 1, true);
+                $frame->setImageBackgroundColor(new \ImagickPixel('transparent'));
+            }
+            $im = $im->deconstructImages();
+            $im->setImageFormat('webp');
+            // setImageIterations, no setImageLoopCount: esa no existe en la
+            // versión de Imagick del servidor (6.9.13) y lanza excepción.
+            $im->setImageIterations(0);   // animación infinita
+
+            $salida = tempnam(sys_get_temp_dir(), 'ggisticker') . '.webp';
+
+            // Bajar calidad progresivamente hasta entrar en los 500 KB
+            foreach ([80, 60, 45, 30] as $calidad) {
+                $im->setOption('webp:method', '6');
+                $im->setImageCompressionQuality($calidad);
+                $im->writeImages($salida, true);   // true = un solo archivo animado
+
+                if (is_file($salida) && filesize($salida) <= 500 * 1024) {
+                    $im->clear();
+                    return $salida;
+                }
+            }
+
+            $im->clear();
+            @unlink($salida);
+            return null;   // no entra en el límite ni al mínimo de calidad
+        } catch (\Throwable $e) {
+            error_log('[WhatsAppService] gifAStickerWebp: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Sube un archivo a Meta y devuelve su media_id, necesario para enviarlo.
      */
     public static function uploadMedia(string $rutaLocal, string $mime): ?string
