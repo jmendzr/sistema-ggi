@@ -252,6 +252,69 @@ if ($accion === 'enviar_plantilla') {
     exit;
 }
 
+// ══ Stickers ya usados (no hay catálogo que ofrecer, pero sí historial) ══════
+if ($accion === 'stickers') {
+    $st = $pdo->query(
+        "SELECT MIN(id) id, media_id
+           FROM wa_mensajes
+          WHERE tipo = 'sticker' AND media_id IS NOT NULL
+          GROUP BY media_id
+          ORDER BY id DESC
+          LIMIT 40"
+    );
+    echo json_encode(['ok' => true, 'items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+    exit;
+}
+
+// ══ Reenviar un sticker ya conocido (por su media_id) ════════════════════════
+if ($accion === 'enviar_sticker') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;
+    }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $id  = (int) ($_POST['id'] ?? 0);
+    $msg = (int) ($_POST['mensaje_id'] ?? 0);
+    if (!$id || !$msg) { echo json_encode(['ok' => false, 'msg' => 'Datos incompletos']); exit; }
+
+    $q = $pdo->prepare("SELECT telefono, asignado_a, ventana_expira_at, phone_number_id
+                          FROM wa_conversaciones WHERE id = ?");
+    $q->execute([$id]);
+    $conv = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+
+    if ((int) $conv['asignado_a'] !== $yo) {
+        echo json_encode(['ok' => false, 'msg' => 'Toma la conversación para poder responder']); exit;
+    }
+    if (!WaInbox::ventanaAbierta($conv['ventana_expira_at'])) {
+        echo json_encode(['ok' => false, 'msg' => 'La ventana de 24 h venció: solo se pueden enviar plantillas']); exit;
+    }
+
+    $s = $pdo->prepare("SELECT media_id FROM wa_mensajes WHERE id = ? AND tipo = 'sticker'");
+    $s->execute([$msg]);
+    $mediaId = $s->fetchColumn();
+    if (!$mediaId) { echo json_encode(['ok' => false, 'msg' => 'Sticker no disponible']); exit; }
+
+    $waId = WhatsAppService::sendMedia($conv['telefono'], 'sticker', (string) $mediaId);
+
+    WaInbox::registrarSaliente(
+        $pdo, $conv['telefono'], $waId, 'sticker', null,
+        null, $yo, $waId ? 'sent' : 'failed',
+        $waId ? null : WhatsAppService::lastError(), $conv['phone_number_id']
+    );
+
+    if ($waId) {
+        $pdo->prepare("UPDATE wa_mensajes SET media_id = ?, media_mime = 'image/webp' WHERE wa_message_id = ?")
+            ->execute([$mediaId, $waId]);
+    }
+
+    echo $waId
+        ? json_encode(['ok' => true])
+        : json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar']);
+    exit;
+}
+
 // ══ Adjuntar y enviar archivo ════════════════════════════════════════════════
 if ($accion === 'adjuntar') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
