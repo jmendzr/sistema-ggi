@@ -156,6 +156,42 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-prev-meta { font-size: .74rem; color: var(--tx2); margin-bottom: 12px; word-break: break-word; }
   .ib-prev-nota { font-size: .78rem; color: var(--tx2); margin-bottom: 8px; }
 
+  /* ── Selector de plantillas ── */
+  .ib-plt-busca { margin-bottom: 12px; }
+  .ib-plt-busca input { width: 100%; padding: 10px 13px; font: inherit; font-size: .85rem;
+                        border: 1px solid var(--brd); border-radius: 10px;
+                        background: var(--bg-input); color: var(--tx); }
+  .ib-plt-busca input:focus { outline: none; border-color: var(--ac); box-shadow: 0 0 0 3px var(--ac-soft); }
+
+  .ib-plt-lista { max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .ib-plt-card { display: block; width: 100%; text-align: left; padding: 12px 14px; cursor: pointer;
+                 background: var(--bg-surface); border: 1px solid var(--brd); border-radius: 12px;
+                 font: inherit; transition: border-color .13s, box-shadow .13s; }
+  .ib-plt-card:hover { border-color: var(--ac); box-shadow: 0 2px 10px rgba(29,78,216,.10); }
+  .ib-plt-card-h { display: flex; align-items: center; justify-content: space-between;
+                   gap: 10px; margin-bottom: 8px; }
+  .ib-plt-card-h b { font-size: .85rem; color: var(--tx); text-transform: capitalize; }
+  .ib-plt-n { font-size: .66rem; font-weight: 700; color: var(--tx3);
+              background: var(--bg-surface2); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+
+  /* Burbuja: se lee como lo verá el cliente, no como una ficha técnica */
+  .ib-plt-burbuja { background: var(--ac); color: #fff; border-radius: 12px; border-bottom-right-radius: 4px;
+                    padding: 9px 12px; font-size: .82rem; line-height: 1.5; white-space: normal; }
+  .ib-plt-burbuja.grande { font-size: .85rem; padding: 12px 14px; }
+  .ib-plt-burbuja b { font-weight: 700; }
+  .ib-plt-burbuja i { font-style: italic; }
+  .ib-plt-burbuja s { text-decoration: line-through; }
+  .ib-var { background: rgba(255,255,255,.26); border-radius: 5px; padding: 0 5px;
+            font-weight: 600; font-style: italic; }
+
+  .ib-plt-volver { background: none; border: none; padding: 0 0 12px; cursor: pointer;
+                   font: inherit; font-size: .8rem; font-weight: 600; color: var(--ac); }
+  .ib-plt-volver:hover { text-decoration: underline; }
+  .ib-plt-prevlbl { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+                    color: var(--tx3); margin-bottom: 6px; }
+  .ib-plt-prevbox { margin-bottom: 16px; }
+  .ib-vacio-p { padding: 22px 16px; text-align: center; color: var(--tx2); font-size: .84rem; line-height: 1.6; }
+
   /* Formulario de plantilla */
   .ib-plt-prev { background: var(--bg-surface2); border: 1px solid var(--brd); border-radius: 10px;
                  padding: 12px 14px; font-size: .84rem; line-height: 1.5; color: var(--tx);
@@ -497,8 +533,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
   // Formato de WhatsApp → HTML. Se aplica SOBRE texto ya escapado, así que
   // no puede inyectar marcado: los < > del usuario ya son entidades.
-  function formato(txt) {
-    return esc(txt)
+  function formato(txt) { return _fmtHtml(esc(txt)); }
+
+  /** Aplica el formato de WhatsApp sobre texto YA escapado. */
+  function _fmtHtml(h) {
+    return h
       .replace(/```([\s\S]+?)```/g, '<code class="ib-mono">$1</code>')
       .replace(/(^|[\s(])\*(\S(?:[^*\n]*\S)?)\*(?=[\s.,;:!?)]|$)/g, '$1<b>$2</b>')
       .replace(/(^|[\s(])_(\S(?:[^_\n]*\S)?)_(?=[\s.,;:!?)]|$)/g, '$1<i>$2</i>')
@@ -1143,25 +1182,72 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   // ── Plantillas (única vía fuera de la ventana de 24 h) ─────────────────────
   var _plt = null;   // plantilla elegida
 
-  function popPlantillas(ancla) {
+  // Selector en modal, no en un desplegable estrecho: elegir un mensaje que va
+  // a salir a un cliente requiere leerlo entero, no un fragmento cortado.
+  function popPlantillas() {
     if (!st.sel) return;
+
     fetch('ajax.php?accion=plantillas', { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.ok) return;
-        if (!j.items.length) {
-          abrirPop(ancla, '<div class="ib-pop-item" style="color:var(--tx3)">No hay plantillas aprobadas</div>');
+        _plt = j.items || [];
+
+        if (!_plt.length) {
+          mantOpen('Enviar plantilla',
+            '<div class="ib-vacio-p">No hay plantillas aprobadas todavía.<br>'
+            + 'Se gestionan en <b>Plantillas WA</b>.</div>');
           return;
         }
-        abrirPop(ancla, '<div class="ib-pop-t">Elige una plantilla</div>'
-          + j.items.map(function (p, i) {
-              return '<button type="button" class="ib-pop-item ib-plt" data-plt="' + i + '">'
-                   + '<span><b>' + esc(p.nombre) + '</b>'
-                   + '<small>' + esc(p.cuerpo.slice(0, 90)) + (p.cuerpo.length > 90 ? '…' : '') + '</small></span>'
-                   + '</button>';
-            }).join(''));
-        _plt = j.items;
+
+        mantOpen('Elegir plantilla',
+            '<div class="ib-plt-busca">'
+          +   '<input type="search" id="plt-q" placeholder="Buscar plantilla…" aria-label="Buscar plantilla">'
+          + '</div>'
+          + '<div class="ib-plt-lista" id="plt-lista"></div>');
+
+        pintarLista('');
+        var q = document.getElementById('plt-q');
+        if (q) { q.focus(); q.addEventListener('input', function () { pintarLista(q.value); }); }
       });
+  }
+
+  function pintarLista(filtro) {
+    var cont = document.getElementById('plt-lista');
+    if (!cont) return;
+
+    filtro = (filtro || '').toLowerCase();
+    var vis = _plt.filter(function (p) {
+      return p.nombre.toLowerCase().indexOf(filtro) !== -1
+          || (p.cuerpo || '').toLowerCase().indexOf(filtro) !== -1;
+    });
+
+    if (!vis.length) {
+      cont.innerHTML = '<div class="ib-vacio-p">Ninguna plantilla coincide.</div>';
+      return;
+    }
+
+    cont.innerHTML = vis.map(function (p) {
+      var i = _plt.indexOf(p);
+      // Vista previa con las variables resaltadas: se entiende de un vistazo
+      // qué datos hay que completar antes de enviar.
+      // Se escapa PRIMERO, luego se aplican formato y variables sobre el HTML
+      // ya seguro: al revés, volvería a escapar las etiquetas insertadas.
+      var prev = _fmtHtml(esc(p.cuerpo || ''))
+        .replace(/\n/g, '<br>')
+        .replace(/\{\{(\d+)\}\}/g, function (_, n) {
+          var k = (p.claves && p.claves[parseInt(n, 10) - 1]) || ('dato ' + n);
+          return '<span class="ib-var">' + esc(k.replace(/_/g, ' ')) + '</span>';
+        });
+
+      return '<button type="button" class="ib-plt-card ib-plt" data-plt="' + i + '">'
+        + '<div class="ib-plt-card-h">'
+        +   '<b>' + esc(p.nombre.replace(/^ggi_/, '').replace(/_/g, ' ')) + '</b>'
+        +   '<span class="ib-plt-n">' + p.claves.length + ' dato' + (p.claves.length === 1 ? '' : 's') + '</span>'
+        + '</div>'
+        + '<div class="ib-plt-burbuja">' + prev + '</div>'
+        + '</button>';
+    }).join('');
   }
 
   // Formulario para rellenar {{1}}, {{2}}… antes de enviar
@@ -1169,25 +1255,45 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     cerrarPop();
     var campos = p.claves.map(function (k, i) {
       return '<label class="ib-plt-f"><span>' + esc(k.replace(/_/g, ' ')) + '</span>'
-           + '<input type="text" data-pi="' + i + '" placeholder="{{' + (i + 1) + '}}"></label>';
+           + '<input type="text" data-pi="' + i + '" autocomplete="off" '
+           + 'placeholder="' + esc(k.replace(/_/g, ' ')) + '"></label>';
     }).join('');
 
-    mantOpen('Enviar plantilla · ' + p.nombre,
-        '<div class="ib-plt-prev" id="ib-plt-prev">' + esc(p.cuerpo) + '</div>'
-      + (campos || '<p style="font-size:.82rem;color:var(--tx2)">Esta plantilla no lleva variables.</p>')
+    mantOpen('Completar y enviar',
+        '<button type="button" class="ib-plt-volver" id="plt-volver">‹ Elegir otra plantilla</button>'
+      + '<div class="ib-plt-prevbox">'
+      +   '<div class="ib-plt-prevlbl">Así lo recibirá el cliente</div>'
+      +   '<div class="ib-plt-burbuja grande" id="ib-plt-prev"></div>'
+      + '</div>'
+      + (campos || '<p class="ib-vacio-p">Esta plantilla no lleva datos variables.</p>')
       + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">'
       + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
-      + '<button type="button" class="ggi-btn-confirm-action" id="ib-plt-enviar">Enviar</button>'
+      + '<button type="button" class="ggi-btn-confirm-action" id="ib-plt-enviar">Enviar mensaje</button>'
       + '</div>');
+
+    var volver = document.getElementById('plt-volver');
+    if (volver) volver.addEventListener('click', function () { popPlantillas(); });
 
     // Vista previa en vivo: se ve el mensaje real antes de mandarlo
     function preview() {
-      var txt = p.cuerpo;
+      var valores = {};
       document.querySelectorAll('[data-pi]').forEach(function (inp) {
-        txt = txt.replace('{{' + (parseInt(inp.dataset.pi, 10) + 1) + '}}', inp.value || ('{{' + (parseInt(inp.dataset.pi, 10) + 1) + '}}'));
+        valores[parseInt(inp.dataset.pi, 10) + 1] = inp.value.trim();
       });
+
+      // Lo ya completado se ve como texto normal; lo que falta queda resaltado,
+      // así se distingue de un vistazo qué queda pendiente.
+      var html = _fmtHtml(esc(p.cuerpo || ''))
+        .replace(/\n/g, '<br>')
+        .replace(/\{\{(\d+)\}\}/g, function (_, n) {
+          var v = valores[parseInt(n, 10)];
+          if (v) return esc(v);
+          var k = (p.claves && p.claves[parseInt(n, 10) - 1]) || ('dato ' + n);
+          return '<span class="ib-var">' + esc(k.replace(/_/g, ' ')) + '</span>';
+        });
+
       var box = document.getElementById('ib-plt-prev');
-      if (box) box.innerHTML = formato(txt);
+      if (box) box.innerHTML = html;
     }
     document.querySelectorAll('[data-pi]').forEach(function (inp) {
       inp.addEventListener('input', preview);
@@ -1629,7 +1735,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     if (e.target.closest('#ib-adj-quitar')) { quitarAdjunto(); return; }
 
-    if (e.target.closest('#ib-plantilla')) { popPlantillas(e.target.closest('#ib-plantilla')); return; }
+    if (e.target.closest('#ib-plantilla')) { popPlantillas(); return; }
 
     var elegida = e.target.closest('.ib-plt');
     if (elegida && _plt) { formPlantilla(_plt[parseInt(elegida.dataset.plt, 10)]); return; }
