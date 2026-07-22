@@ -163,21 +163,24 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
                         background: var(--bg-input); color: var(--tx); }
   .ib-plt-busca input:focus { outline: none; border-color: var(--ac); box-shadow: 0 0 0 3px var(--ac-soft); }
 
-  .ib-plt-lista { max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  /* display:block y márgenes explícitos, no flex: así el apilado no depende
+     del contenedor donde se monte el listado. */
+  .ib-plt-lista { max-height: 420px; overflow-y: auto; display: block; }
 
   /* Encabezado de categoría: separa Utilidad de Marketing y explica por qué
      importa la diferencia, en vez de solo etiquetar. */
-  .ib-plt-grupo { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
-                  padding: 12px 2px 2px; }
+  .ib-plt-grupo { display: block; padding: 14px 2px 6px; }
+  .ib-plt-grupo b, .ib-plt-grupo span { display: inline; }
   .ib-plt-grupo:first-child { padding-top: 2px; }
   .ib-plt-grupo b { font-size: .72rem; font-weight: 700; text-transform: uppercase;
-                    letter-spacing: .07em; color: var(--tx2); }
+                    letter-spacing: .07em; color: var(--tx2); margin-right: 8px; }
   .ib-plt-grupo span { font-size: .72rem; color: var(--tx3); }
   .ib-plt-grupo.mk b { color: var(--s-warn-tx); }
   .ib-plt-grupo.mk span { color: var(--s-warn-tx); opacity: .85; }
   .ib-plt-card { display: block; width: 100%; text-align: left; padding: 12px 14px; cursor: pointer;
                  background: var(--bg-surface); border: 1px solid var(--brd); border-radius: 12px;
-                 font: inherit; transition: border-color .13s, box-shadow .13s; }
+                 font: inherit; margin: 0 0 8px; float: none; vertical-align: top;
+                 transition: border-color .13s, box-shadow .13s; }
   .ib-plt-card:hover { border-color: var(--ac); box-shadow: 0 2px 10px rgba(29,78,216,.10); }
   .ib-plt-card-h { display: flex; align-items: center; justify-content: space-between;
                    gap: 10px; margin-bottom: 8px; }
