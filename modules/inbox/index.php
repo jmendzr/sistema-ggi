@@ -714,8 +714,29 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       + '<div class="ib-foot">' + pie + '</div>';
 
     var m = $('#ib-msgs');
-    // Si venía leyendo mensajes viejos, no lo arrastres al final
-    if (m) m.scrollTop = (previo && !previo.abajo) ? previo.scroll : m.scrollHeight;
+    if (m) {
+      // Si venía leyendo mensajes viejos, no lo arrastres al final
+      var irAlFinal = !(previo && !previo.abajo);
+
+      if (!irAlFinal) {
+        m.scrollTop = previo.scroll;
+      } else {
+        var bajar = function () { m.scrollTop = m.scrollHeight; };
+        bajar();
+
+        // Imágenes y videos cargan DESPUÉS de pintar el HTML: al crecer el
+        // contenido, el scroll queda un mensaje más arriba. Se vuelve a bajar
+        // cuando cada uno termina de cargar.
+        m.querySelectorAll('img, video').forEach(function (el) {
+          ['load', 'loadedmetadata', 'error'].forEach(function (ev) {
+            el.addEventListener(ev, bajar, { once: true });
+          });
+        });
+
+        requestAnimationFrame(bajar);
+        setTimeout(bajar, 300);
+      }
+    }
 
     var t = $('#ib-texto');
     if (t) {
