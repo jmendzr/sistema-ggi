@@ -857,8 +857,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   function envolver(marca) {
     var el = $('#ib-texto');
     if (!el) return;
-    el.focus();
+    // Leer la selección ANTES de tocar el foco: enfocar puede colapsarla
     var o = _offsets(el), v = el.innerText.replace(/\n$/, '');
+    el.focus();
     var sel = v.slice(o.a, o.b) || 'texto';
     repintar_con(el, v.slice(0, o.a) + marca + sel + marca + v.slice(o.b),
                  o.a + marca.length + sel.length + marca.length);
@@ -867,8 +868,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   function insertar(txt) {
     var el = $('#ib-texto');
     if (!el) return;
-    el.focus();
     var o = _offsets(el), v = el.innerText.replace(/\n$/, '');
+    el.focus();
     repintar_con(el, v.slice(0, o.a) + txt + v.slice(o.b), o.a + txt.length);
   }
 
@@ -1371,6 +1372,16 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       abrir(id);
     });
   }
+
+  // Al pulsar un botón de la barra, el navegador mueve el foco y DESCARTA la
+  // selección del campo editable: envolver() encontraba el cursor en 0 y no
+  // aplicaba el formato al texto marcado. Cancelar el mousedown conserva la
+  // selección; el click sigue funcionando igual.
+  document.addEventListener('mousedown', function (e) {
+    if (e.target.closest('.ib-fmt[data-fmt]') || e.target.closest('[data-emoji]')) {
+      e.preventDefault();
+    }
+  });
 
   document.addEventListener('click', function (e) {
     // Empresa / propuesta / envío en modal: salir del inbox perdería el hilo
