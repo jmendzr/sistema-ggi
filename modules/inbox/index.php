@@ -137,6 +137,21 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
                  cursor: pointer; font: inherit; font-size: .78rem; color: var(--tx); }
   .ib-pop-item:hover { background: var(--bg-hover); }
   .ib-pop-item small { display: block; color: var(--tx3); font-size: .7rem; }
+  .ib-pop-t { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+              color: var(--tx3); padding: 6px 9px 4px; }
+  .ib-pop-item small { white-space: normal; line-height: 1.35; }
+
+  /* Formulario de plantilla */
+  .ib-plt-prev { background: var(--bg-surface2); border: 1px solid var(--brd); border-radius: 10px;
+                 padding: 12px 14px; font-size: .84rem; line-height: 1.5; color: var(--tx);
+                 margin-bottom: 14px; white-space: pre-wrap; }
+  .ib-plt-f { display: block; margin-bottom: 10px; }
+  .ib-plt-f span { display: block; font-size: .74rem; font-weight: 600; color: var(--tx2);
+                   margin-bottom: 4px; text-transform: capitalize; }
+  .ib-plt-f input { width: 100%; padding: 9px 12px; font: inherit; font-size: .85rem;
+                    border: 1px solid var(--brd); border-radius: 9px;
+                    background: var(--bg-input); color: var(--tx); }
+
   .ib-pop input { width: 100%; padding: 7px 10px; font: inherit; font-size: .8rem; margin-bottom: 4px;
                   border: 1px solid var(--brd); border-radius: 8px; background: var(--bg-input); color: var(--tx); }
 
@@ -562,7 +577,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>'
           + '<span class="ib-warn-b"><strong>Ventana de 24 h vencida</strong>'
           + 'Solo se pueden enviar plantillas aprobadas hasta que el contacto responda.</span>'
-          + '<button type="button" class="btn btn-primary ib-btn-sm" disabled title="Envío de plantillas: próxima entrega">Enviar plantilla</button>'
+          + (c.es_mia
+              ? '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-plantilla">Enviar plantilla</button>'
+              : '<button type="button" class="btn btn-primary ib-btn-sm" disabled '
+                + 'title="Toma la conversación para poder responder">Enviar plantilla</button>')
           + '</div>';
     } else if (!c.es_mia) {
       pie = '<div class="ib-box">'
@@ -740,6 +758,85 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     abrirPop(ancla, '<div class="ib-emojis">' + EMOJIS.map(function (x) {
       return '<button type="button" data-emoji="' + x + '" aria-label="' + x + '">' + x + '</button>';
     }).join('') + '</div>');
+  }
+
+  // ── Plantillas (única vía fuera de la ventana de 24 h) ─────────────────────
+  var _plt = null;   // plantilla elegida
+
+  function popPlantillas(ancla) {
+    if (!st.sel) return;
+    fetch('ajax.php?accion=plantillas', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) return;
+        if (!j.items.length) {
+          abrirPop(ancla, '<div class="ib-pop-item" style="color:var(--tx3)">No hay plantillas aprobadas</div>');
+          return;
+        }
+        abrirPop(ancla, '<div class="ib-pop-t">Elige una plantilla</div>'
+          + j.items.map(function (p, i) {
+              return '<button type="button" class="ib-pop-item ib-plt" data-plt="' + i + '">'
+                   + '<span><b>' + esc(p.nombre) + '</b>'
+                   + '<small>' + esc(p.cuerpo.slice(0, 90)) + (p.cuerpo.length > 90 ? '…' : '') + '</small></span>'
+                   + '</button>';
+            }).join(''));
+        _plt = j.items;
+      });
+  }
+
+  // Formulario para rellenar {{1}}, {{2}}… antes de enviar
+  function formPlantilla(p) {
+    cerrarPop();
+    var campos = p.claves.map(function (k, i) {
+      return '<label class="ib-plt-f"><span>' + esc(k.replace(/_/g, ' ')) + '</span>'
+           + '<input type="text" data-pi="' + i + '" placeholder="{{' + (i + 1) + '}}"></label>';
+    }).join('');
+
+    mantOpen('Enviar plantilla · ' + p.nombre,
+        '<div class="ib-plt-prev" id="ib-plt-prev">' + esc(p.cuerpo) + '</div>'
+      + (campos || '<p style="font-size:.82rem;color:var(--tx2)">Esta plantilla no lleva variables.</p>')
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">'
+      + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
+      + '<button type="button" class="ggi-btn-confirm-action" id="ib-plt-enviar">Enviar</button>'
+      + '</div>');
+
+    // Vista previa en vivo: se ve el mensaje real antes de mandarlo
+    function preview() {
+      var txt = p.cuerpo;
+      document.querySelectorAll('[data-pi]').forEach(function (inp) {
+        txt = txt.replace('{{' + (parseInt(inp.dataset.pi, 10) + 1) + '}}', inp.value || ('{{' + (parseInt(inp.dataset.pi, 10) + 1) + '}}'));
+      });
+      var box = document.getElementById('ib-plt-prev');
+      if (box) box.innerHTML = formato(txt);
+    }
+    document.querySelectorAll('[data-pi]').forEach(function (inp) {
+      inp.addEventListener('input', preview);
+    });
+    preview();
+
+    var btn = document.getElementById('ib-plt-enviar');
+    if (btn) btn.addEventListener('click', function () {
+      var vals = [];
+      var falta = false;
+      document.querySelectorAll('[data-pi]').forEach(function (inp) {
+        if (!inp.value.trim()) { falta = true; inp.style.borderColor = 'var(--s-err)'; }
+        vals[parseInt(inp.dataset.pi, 10)] = inp.value.trim();
+      });
+      if (falta) {
+        if (typeof showToast === 'function') showToast('Completa todos los campos', 'error');
+        return;
+      }
+      btn.disabled = true; btn.textContent = 'Enviando…';
+      var datos = { accion: 'enviar_plantilla', id: st.sel, plantilla: p.nombre };
+      vals.forEach(function (v, i) { datos['params[' + i + ']'] = v; });
+      ggiPost('ajax.php', datos).then(function (j) {
+        btn.disabled = false; btn.textContent = 'Enviar';
+        if (!j.ok) return;
+        if (typeof ggiModalClose === 'function') ggiModalClose();
+        if (typeof showToast === 'function') showToast('Plantilla enviada', 'ok');
+        abrir(st.sel);
+      });
+    });
   }
 
   // ── Envío ──
@@ -1068,6 +1165,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     if (fmt) { envolver(fmt.dataset.fmt); return; }
 
     if (e.target.closest('#ib-emoji')) { popEmojis(e.target.closest('#ib-emoji')); return; }
+
+    if (e.target.closest('#ib-plantilla')) { popPlantillas(e.target.closest('#ib-plantilla')); return; }
+
+    var elegida = e.target.closest('.ib-plt');
+    if (elegida && _plt) { formPlantilla(_plt[parseInt(elegida.dataset.plt, 10)]); return; }
 
     var emo = e.target.closest('[data-emoji]');
     if (emo) { insertar(emo.dataset.emoji); return; }

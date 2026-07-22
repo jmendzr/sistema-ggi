@@ -159,6 +159,99 @@ if ($accion === 'abrir_contacto') {
     exit;
 }
 
+// ══ Plantillas disponibles para enviar ═══════════════════════════════════════
+if ($accion === 'plantillas') {
+    // Solo las APROBADAS en Meta. Ofrecer una rechazada (o inexistente) sería
+    // enviar al ejecutivo a un fallo garantizado.
+    $st = $pdo->query(
+        "SELECT event_code, template_name, language_code, param_keys, body_text
+           FROM whatsapp_templates
+          WHERE activo = 1 AND estado_meta = 'APPROVED'
+            AND body_text IS NOT NULL AND body_text <> ''
+          ORDER BY template_name"
+    );
+
+    $out = [];
+    foreach ($st as $r) {
+        $claves = json_decode($r['param_keys'] ?? '[]', true) ?: [];
+        $out[] = [
+            'nombre'   => $r['template_name'],
+            'idioma'   => $r['language_code'],
+            'cuerpo'   => $r['body_text'],
+            'claves'   => $claves,          // nombres legibles de {{1}}, {{2}}…
+            'n_params' => count($claves),
+        ];
+    }
+
+    echo json_encode(['ok' => true, 'items' => $out]);
+    exit;
+}
+
+// ══ Enviar plantilla (única vía fuera de la ventana de 24 h) ═════════════════
+if ($accion === 'enviar_plantilla') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;
+    }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $id     = (int) ($_POST['id'] ?? 0);
+    $nombre = trim($_POST['plantilla'] ?? '');
+    $params = $_POST['params'] ?? [];
+    if (!is_array($params)) $params = [];
+
+    if (!$id || $nombre === '') {
+        echo json_encode(['ok' => false, 'msg' => 'Datos incompletos']); exit;
+    }
+
+    $q = $pdo->prepare("SELECT telefono, asignado_a, phone_number_id FROM wa_conversaciones WHERE id = ?");
+    $q->execute([$id]);
+    $conv = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+
+    // Mismo candado que el texto libre
+    if ((int) $conv['asignado_a'] !== $yo) {
+        echo json_encode(['ok' => false, 'msg' => $conv['asignado_a']
+            ? 'La conversación está asignada a otro ejecutivo'
+            : 'Asígnate la conversación para responder']);
+        exit;
+    }
+
+    $t = $pdo->prepare("SELECT template_name, language_code, param_keys, body_text
+                          FROM whatsapp_templates WHERE template_name = ? AND activo = 1");
+    $t->execute([$nombre]);
+    $tpl = $t->fetch(PDO::FETCH_ASSOC);
+    if (!$tpl) { echo json_encode(['ok' => false, 'msg' => 'Plantilla no disponible']); exit; }
+
+    // Se exigen todos los parámetros: Meta rechaza la plantilla si falta alguno
+    $claves = json_decode($tpl['param_keys'] ?? '[]', true) ?: [];
+    $vals   = [];
+    foreach ($claves as $i => $_clave) {
+        $v = trim((string) ($params[$i] ?? ''));
+        if ($v === '') {
+            echo json_encode(['ok' => false, 'msg' => 'Faltan datos de la plantilla']); exit;
+        }
+        $vals[] = $v;
+    }
+
+    $waId = WhatsAppService::sendTemplate($conv['telefono'], $tpl['template_name'], $vals, $tpl['language_code']);
+
+    // Texto tal como lo verá el cliente, para que quede legible en el hilo
+    $texto = $tpl['body_text'];
+    foreach ($vals as $i => $v) $texto = str_replace('{{' . ($i + 1) . '}}', $v, $texto);
+
+    WaInbox::registrarSaliente(
+        $pdo, $conv['telefono'], $waId, 'template', $texto,
+        $tpl['template_name'], $yo, $waId ? 'sent' : 'failed',
+        $waId ? null : WhatsAppService::lastError(), $conv['phone_number_id']
+    );
+
+    echo $waId
+        ? json_encode(['ok' => true])
+        : json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar']);
+    exit;
+}
+
 // ══ Enviar mensaje ═══════════════════════════════════════════════════════════
 if ($accion === 'enviar') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

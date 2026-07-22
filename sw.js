@@ -11,7 +11,7 @@
  * el SW antiguo elimina automáticamente los cachés obsoletos en 'activate'.
  */
 
-const CACHE_VERSION  = 'ggi-v30';
+const CACHE_VERSION  = 'ggi-v31';
 const CACHE_STATIC   = CACHE_VERSION + '-static';
 const CACHE_PAGES    = CACHE_VERSION + '-pages';
 
