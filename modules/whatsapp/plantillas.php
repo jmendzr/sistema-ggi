@@ -53,6 +53,19 @@ $diag = WaPlantillas::diagnostico($pdo, null);   // sin llamar a Meta al cargar
   .pl-inact { font-size: .63rem; font-weight: 600; padding: 2px 8px; border-radius: 999px;
               background: var(--bg-hover); color: var(--tx3); }
 
+  /* Interruptor: apaga la notificación en el sistema sin tocar Meta */
+  .pl-sw { display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+           margin-left: auto; user-select: none; }
+  .pl-sw input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .pl-sw-t { width: 34px; height: 19px; border-radius: 999px; background: var(--tx3);
+             position: relative; transition: background .16s; flex-shrink: 0; }
+  .pl-sw-t::after { content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px;
+                    border-radius: 50%; background: #fff; transition: transform .16s; }
+  .pl-sw input:checked + .pl-sw-t { background: var(--gr, #2DB140); }
+  .pl-sw input:checked + .pl-sw-t::after { transform: translateX(15px); }
+  .pl-sw input:focus-visible + .pl-sw-t { outline: 2px solid var(--ac); outline-offset: 2px; }
+  .pl-sw-l { font-size: .7rem; font-weight: 600; color: var(--tx2); min-width: 48px; }
+
   .pl-sec-t { font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
               color: var(--tx3); margin: 22px 0 10px; }
   .pl-f { display: block; margin-bottom: 12px; }
@@ -111,7 +124,11 @@ $diag = WaPlantillas::diagnostico($pdo, null);   // sin llamar a Meta al cargar
         +   '<span class="pl-ev">' + esc(f.event_code.replace(/_/g, ' ')) + '</span>'
         +   '<span class="chip-est est-' + esc(est) + '">' + esc(f.estado || 'sin sincronizar') + '</span>'
         +   (f.categoria ? '<span class="chip-cat">' + esc(f.categoria) + '</span>' : '')
-        +   (f.activo ? '' : '<span class="pl-inact">inactiva</span>')
+        +   '<label class="pl-sw" title="' + (f.activo ? 'Se está usando' : 'No se usa') + '">'
+        +     '<input type="checkbox" data-sw="' + esc(f.event_code) + '"' + (f.activo ? ' checked' : '') + '>'
+        +     '<span class="pl-sw-t"></span>'
+        +     '<span class="pl-sw-l">' + (f.activo ? 'En uso' : 'Apagada') + '</span>'
+        +   '</label>'
         + '</div>'
         + '<div class="pl-tn">' + esc(f.template_name) + ' · ' + esc(f.idioma)
         +   ' · ' + f.claves.length + ' variable' + (f.claves.length === 1 ? '' : 's')
@@ -284,6 +301,31 @@ $diag = WaPlantillas::diagnostico($pdo, null);   // sin llamar a Meta al cargar
   var ultimo = null;
   var _pintar = pintar;
   pintar = function (d) { ultimo = d; _pintar(d); };
+
+  // Interruptor de uso interno
+  document.addEventListener('change', function (e) {
+    var sw = e.target.closest('[data-sw]');
+    if (!sw) return;
+
+    var ev = sw.dataset.sw, quiere = sw.checked;
+    var datos = { accion: 'toggle', event_code: ev, activo: quiere ? '1' : '' };
+
+    ggiPost('ajax_plantillas.php', datos).then(function (j) {
+      if (j.confirmar) {
+        sw.checked = !quiere;   // revertir hasta que confirme
+        ggiConfirm('Encender de todos modos', j.msg, { type: 'warning', confirmText: 'Encender' })
+          .then(function (si) {
+            if (!si) return;
+            datos.forzar = '1';
+            ggiPost('ajax_plantillas.php', datos).then(function (r) { if (r.ok) sincronizar(); });
+          });
+        return;
+      }
+      if (!j.ok) { sw.checked = !quiere; return; }
+      if (window.showToast) showToast(quiere ? 'Notificación encendida' : 'Notificación apagada', 'ok');
+      sincronizar();
+    });
+  });
 
   document.addEventListener('click', function (e) {
     if (e.target.closest('#pl-sync'))  { sincronizar(); return; }

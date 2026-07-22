@@ -136,6 +136,34 @@ if ($accion === 'eliminar') {
     salir(['ok' => true]);
 }
 
+// ══ Encender / apagar una notificación ═══════════════════════════════════════
+// Apagar NO toca Meta: solo deja de usarse desde el sistema. Es la salida
+// limpia para una plantilla rota o que todavía no se quiere usar, en vez de
+// dejarla activa fallando en cada intento.
+if ($accion === 'toggle') {
+    $evento = trim($_POST['event_code'] ?? '');
+    $activo = !empty($_POST['activo']) ? 1 : 0;
+    if ($evento === '') salir(['ok' => false, 'msg' => 'Falta el evento']);
+
+    if ($activo) {
+        $q = $pdo->prepare("SELECT estado_meta FROM whatsapp_templates WHERE event_code = ?");
+        $q->execute([$evento]);
+        $est = $q->fetchColumn();
+
+        // Encender una plantilla no aprobada garantiza que cada envío falle
+        if ($est !== 'APPROVED' && empty($_POST['forzar'])) {
+            salir(['ok' => false, 'confirmar' => true,
+                   'msg' => 'La plantilla está en estado ' . ($est ?: 'sin sincronizar')
+                          . '. Si la enciendes, cada envío va a fallar.']);
+        }
+    }
+
+    $pdo->prepare("UPDATE whatsapp_templates SET activo = ? WHERE event_code = ?")
+        ->execute([$activo, $evento]);
+
+    salir(['ok' => true, 'activo' => $activo]);
+}
+
 // ══ Vincular / editar el mapeo evento ↔ plantilla ════════════════════════════
 if ($accion === 'vincular') {
     $evento = trim($_POST['event_code'] ?? '');
