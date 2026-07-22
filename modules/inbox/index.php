@@ -722,6 +722,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<span class="ib-barra-sep"></span>'
           + '<button type="button" class="ib-fmt" id="ib-emoji" title="Emojis" aria-label="Insertar emoji">☺</button>'
           + '<button type="button" class="ib-fmt" id="ib-adjunto" title="Adjuntar archivo" aria-label="Adjuntar archivo">📎</button>'
+          // También dentro de la ventana: hay plantillas útiles en una
+          // conversación viva (factura, documentos completos) y no tiene
+          // sentido obligar a reescribirlas a mano.
+          + '<button type="button" class="ib-fmt" id="ib-plantilla" title="Enviar una plantilla" aria-label="Enviar una plantilla">'
+          + '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+          + '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h8"/></svg></button>'
           + '<input type="file" id="ib-file" hidden '
           + 'accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,audio/*,'
           + '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">'

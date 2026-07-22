@@ -320,6 +320,44 @@ class WhatsAppService
         return [$code, $d];
     }
 
+    /**
+     * Números conectados a la WABA, con su estado y calidad.
+     *
+     * Es la vista que reemplaza al panel de Kapso: qué números hay, cuál está
+     * conectado y cómo está su reputación ante Meta.
+     */
+    public static function listarNumeros(): ?array
+    {
+        self::$lastError = null;
+        if (!self::wabaId()) { self::$lastError = 'Falta META_WA_WABA_ID'; return null; }
+
+        [$c, $d] = self::graph(self::wabaId() . '/phone_numbers', 'GET', [
+            'limit'  => 50,
+            'fields' => 'id,display_phone_number,verified_name,quality_rating,'
+                      . 'code_verification_status,platform_type,throughput,status,name_status',
+        ]);
+
+        return ($c === 200) ? ($d['data'] ?? []) : null;
+    }
+
+    /**
+     * Registra un número en Cloud API. Sin esto el número aparece en la cuenta
+     * pero no puede enviar ni recibir: es el paso que la gente olvida.
+     *
+     * @param string $pin PIN de verificación en dos pasos (6 dígitos).
+     */
+    public static function registrarNumero(string $phoneNumberId, string $pin): bool
+    {
+        self::$lastError = null;
+
+        [$c, $d] = self::graph($phoneNumberId . '/register', 'POST', [
+            'messaging_product' => 'whatsapp',
+            'pin'               => $pin,
+        ]);
+
+        return ($c >= 200 && $c < 300) && !empty($d['success']);
+    }
+
     /** Lista TODAS las plantillas de la WABA, con su estado y componentes. */
     public static function listarPlantillas(): ?array
     {
