@@ -113,6 +113,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ib-item-p  { display: block; font-size: .76rem; color: var(--tx2); margin-top: 3px;
                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* El formato se ve en la vista previa, pero sin gritar: es una linea de
+     resumen, no el mensaje. */
+  .ib-item-p b { font-weight: 600; color: var(--tx); }
+  .ib-item-p i { font-style: italic; }
+  .ib-item-p s { text-decoration: line-through; }
+  .ib-item-p code { font-family: inherit; }
   .ib-item-m  { display: flex; gap: 5px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
 
   /* ── Etiquetas ── */
@@ -535,7 +541,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
             +   '<span class="ib-item-r1"><span class="ib-item-n">' + esc(it.titulo) + '</span>'
             +   '<span class="ib-item-t">' + relativo(it.cuando) + '</span></span>'
             +   '<span class="ib-item-ph">+' + esc(it.telefono) + '</span>'
-            +   '<span class="ib-item-p">' + esc(it.preview) + '</span>'
+            // formato(), no esc(): en la lista se guardaba el texto crudo y se
+            // veían los marcadores (*hola*) en vez del texto en negrita.
+            +   '<span class="ib-item-p">' + formato(it.preview) + '</span>'
             +   '<span class="ib-item-m">' + tag + viejo + etqs
             +     (it.no_leidos ? '<span class="ib-unread">' + it.no_leidos + '</span>' : '')
             +   '</span>'
