@@ -166,13 +166,26 @@ try {
             if ($headerMedia) continue;
 
             preg_match_all('/\{\{(\d+)\}\}/', $body, $m);
+            $nums = array_values(array_unique($m[1]));
+            sort($nums, SORT_NUMERIC);
+
+            // Nombres legibles de cada variable: si la plantilla ya está
+            // mapeada a un evento, se usan sus param_keys; si no, el número.
+            $claves = [];
+            $mp = $pdo->prepare("SELECT param_keys FROM whatsapp_templates
+                                  WHERE template_name = ? LIMIT 1");
+            $mp->execute([$t['name']]);
+            $pk = json_decode($mp->fetchColumn() ?: '[]', true) ?: [];
+
+            foreach ($nums as $i => $n) $claves[] = $pk[$i] ?? $n;
+
             $tpls[] = [
                 'id'        => $t['name'],          // el nombre ES el identificador en Meta
                 'name'      => $t['name'],
                 'language'  => $t['language'],
                 'category'  => $t['category'] ?? '',
-                'body'      => $body,
-                'params'    => count(array_unique($m[1])),
+                'body_text' => $body,               // la interfaz lo espera con este nombre
+                'params'    => $claves,             // arreglo de nombres, no un contador
             ];
         }
 

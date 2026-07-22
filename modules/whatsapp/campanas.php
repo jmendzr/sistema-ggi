@@ -334,6 +334,7 @@ function ncEnviar() {
           dias: document.getElementById('nc-dias').value,
           template_id: t.id,
           template_name: t.name,
+          template_lang: t.language,   // es / es_PE: sin esto Meta no encuentra la plantilla
           param_names: JSON.stringify(t.params || []),
           params_map: JSON.stringify(map),
           nombre: document.getElementById('nc-nombre').value.trim()
