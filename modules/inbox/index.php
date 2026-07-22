@@ -208,6 +208,21 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
   .ib-box input:disabled { opacity: .55; cursor: not-allowed; }
 
+  /* Campo editable: muestra el formato mientras se escribe */
+  .ib-editable {
+    flex: 1; min-width: 0; padding: 10px 13px; font: inherit; font-size: .85rem;
+    line-height: 1.45; border: 1px solid var(--brd); border-radius: 10px;
+    background: var(--bg-input); color: var(--tx);
+    max-height: 132px; overflow-y: auto; outline: none;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .ib-editable:focus { border-color: var(--ac); box-shadow: 0 0 0 3px var(--ac-soft); }
+  .ib-editable:empty::before { content: attr(data-ph); color: var(--tx3); pointer-events: none; }
+  .ib-editable[contenteditable="false"] { opacity: .55; cursor: not-allowed; }
+  .ib-editable b { font-weight: 700; }
+  .ib-editable i { font-style: italic; }
+  .ib-editable s { text-decoration: line-through; }
+
   /* ── Columna 3: contexto ── */
   .ib-ctx-head { padding: 13px 17px; border-bottom: 1px solid var(--brd);
                  font-size: .88rem; font-weight: 700; color: var(--tx); }
@@ -298,7 +313,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     .ib.sin-lista .ib-lista-col { display: flex; }
     .ib-b { max-width: 88%; }
     /* 16px evita el zoom automático de iOS al enfocar el campo */
-    .ib-box input, .ib-search input { font-size: 16px; }
+    .ib-box input, .ib-search input, .ib-editable { font-size: 16px; }
     .ib-fmt { min-width: 38px; height: 38px; }
     .ib-emojis { grid-template-columns: repeat(7, 1fr); }
     .ib-emojis button { min-height: 40px; font-size: 1.3rem; }
@@ -480,9 +495,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     if (silencioso) {
       var inp = $('#ib-texto'), cont = $('#ib-msgs');
       previo = {
-        texto: inp ? inp.value : null,
+        texto: inp ? textoActual() : null,
         foco:  inp ? (document.activeElement === inp) : false,
-        pos:   inp ? inp.selectionStart : 0,
+        pos:   inp ? _offsets(inp).b : 0,
         abajo: cont ? (cont.scrollHeight - cont.scrollTop - cont.clientHeight < 60) : true,
         scroll: cont ? cont.scrollTop : 0
       };
@@ -565,7 +580,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<button type="button" class="ib-fmt" id="ib-adjunto" title="Adjuntar archivo (próxima entrega)" aria-label="Adjuntar archivo" disabled>📎</button>'
           + '</div>'
           + '<div class="ib-box">'
-          + '<input type="text" id="ib-texto" placeholder="Escribe un mensaje…" aria-label="Mensaje" maxlength="4096" autocomplete="off">'
+          // contenteditable, no <input>: un input no puede mostrar el texto
+          // con formato mientras se escribe.
+          + '<div id="ib-texto" class="ib-editable" contenteditable="true" role="textbox"'
+          + ' aria-multiline="true" aria-label="Mensaje" data-ph="Escribe un mensaje…"></div>'
           + '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-enviar">Enviar</button>'
           + '</div>';
     }
@@ -610,37 +628,108 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     var t = $('#ib-texto');
     if (t) {
       if (previo && previo.texto) {
-        t.value = previo.texto;
-        if (previo.foco) { t.focus(); t.setSelectionRange(previo.pos, previo.pos); }
+        t.innerHTML = formatoVivo(previo.texto);
+        if (previo.foco) { t.focus(); _setCursor(t, previo.pos); }
       } else if (!previo) {
         t.focus();
       }
+
       t.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
       });
+
+      // Repintar con formato en cada cambio
+      t.addEventListener('input', function () { repintar(t); });
+
+      // Pegar SIEMPRE como texto plano: si no, entra HTML del portapapeles
+      t.addEventListener('paste', function (e) {
+        e.preventDefault();
+        var txt = (e.clipboardData || window.clipboardData).getData('text/plain') || '';
+        var o = _offsets(t), v = t.innerText.replace(/\n$/, '');
+        repintar_con(t, v.slice(0, o.a) + txt + v.slice(o.b), o.a + txt.length);
+      });
     }
+  }
+
+  // ── Campo editable con formato en vivo ─────────────────────────────────────
+  // formatoVivo CONSERVA los marcadores (*, _, ~): así el texto plano del
+  // campo no cambia de longitud al aplicar estilos, y las posiciones del
+  // cursor siguen siendo válidas. Si se ocultaran, el cursor saltaría.
+  function formatoVivo(txt) {
+    return esc(txt)
+      .replace(/```([\s\S]+?)```/g, '<code class="ib-mono">```$1```</code>')
+      .replace(/(^|[\s(])\*(\S(?:[^*\n]*\S)?)\*(?=[\s.,;:!?)]|$)/g, '$1<b>*$2*</b>')
+      .replace(/(^|[\s(])_(\S(?:[^_\n]*\S)?)_(?=[\s.,;:!?)]|$)/g, '$1<i>_$2_</i>')
+      .replace(/(^|[\s(])~(\S(?:[^~\n]*\S)?)~(?=[\s.,;:!?)]|$)/g, '$1<s>~$2~</s>');
+  }
+
+  /** Posición del cursor medida en caracteres del texto plano. */
+  function _offsets(el) {
+    var s = window.getSelection();
+    if (!s || !s.rangeCount || !el.contains(s.anchorNode)) return { a: 0, b: 0 };
+    var r = s.getRangeAt(0);
+    function medir(nodo, off) {
+      var x = document.createRange();
+      x.selectNodeContents(el);
+      x.setEnd(nodo, off);
+      return x.toString().length;
+    }
+    var a = medir(r.startContainer, r.startOffset);
+    var b = medir(r.endContainer, r.endOffset);
+    return { a: Math.min(a, b), b: Math.max(a, b) };
+  }
+
+  function _setCursor(el, pos) {
+    var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), n, acc = 0, r = document.createRange();
+    while ((n = w.nextNode())) {
+      if (acc + n.length >= pos) {
+        r.setStart(n, pos - acc); r.collapse(true);
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        return;
+      }
+      acc += n.length;
+    }
+    r.selectNodeContents(el); r.collapse(false);
+    var s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(r);
+  }
+
+  /** Repinta el campo con formato y devuelve el cursor a su sitio. */
+  function repintar(el, pos) {
+    var plano = el.innerText.replace(/\n$/, '');
+    if (pos === undefined) pos = _offsets(el).b;
+    el.innerHTML = formatoVivo(plano);
+    _setCursor(el, Math.min(pos, plano.length));
+  }
+
+  function textoActual() {
+    var el = $('#ib-texto');
+    return el ? el.innerText.replace(/\n$/, '') : '';
   }
 
   // ── Formato y emojis ───────────────────────────────────────────────────────
   // WhatsApp interpreta *negrita*, _cursiva_, ~tachado~ y ```mono``` como
   // texto plano: no hace falta nada del lado de la API, solo insertar marcas.
   function envolver(marca) {
-    var i = $('#ib-texto');
-    if (!i) return;
-    var a = i.selectionStart, b = i.selectionEnd, v = i.value;
-    var sel = v.slice(a, b) || 'texto';
-    i.value = v.slice(0, a) + marca + sel + marca + v.slice(b);
-    i.focus();
-    i.setSelectionRange(a + marca.length, a + marca.length + sel.length);
+    var el = $('#ib-texto');
+    if (!el) return;
+    el.focus();
+    var o = _offsets(el), v = el.innerText.replace(/\n$/, '');
+    var sel = v.slice(o.a, o.b) || 'texto';
+    repintar_con(el, v.slice(0, o.a) + marca + sel + marca + v.slice(o.b),
+                 o.a + marca.length + sel.length + marca.length);
   }
 
   function insertar(txt) {
-    var i = $('#ib-texto');
-    if (!i) return;
-    var a = i.selectionStart, b = i.selectionEnd;
-    i.value = i.value.slice(0, a) + txt + i.value.slice(b);
-    i.focus();
-    i.setSelectionRange(a + txt.length, a + txt.length);
+    var el = $('#ib-texto');
+    if (!el) return;
+    el.focus();
+    var o = _offsets(el), v = el.innerText.replace(/\n$/, '');
+    repintar_con(el, v.slice(0, o.a) + txt + v.slice(o.b), o.a + txt.length);
+  }
+
+  function repintar_con(el, plano, pos) {
+    el.innerHTML = formatoVivo(plano);
+    _setCursor(el, Math.min(pos, plano.length));
   }
 
   var EMOJIS = ('😀 😃 😄 😁 😅 😂 🙂 😉 😊 😍 😘 🤗 🤔 😐 😴 😎 🥳 😢 😭 😡 '
@@ -658,23 +747,23 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     var inp = $('#ib-texto'), btn = $('#ib-enviar');
     if (!inp || !st.sel) return;
 
-    var texto = inp.value.trim();
+    var texto = textoActual().trim();
     if (!texto) return;
 
-    inp.disabled = true;
+    inp.setAttribute('contenteditable', 'false');
     if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
 
     // Restaura la caja pase lo que pase, para que nunca quede en "Enviando…"
     function restaurar() {
       if (!document.body.contains(inp)) return;   // el hilo ya se re-renderizó
-      inp.disabled = false;
+      inp.setAttribute('contenteditable', 'true');
       if (btn) { btn.disabled = false; btn.textContent = 'Enviar'; }
       inp.focus();
     }
 
     ggiPost('ajax.php', { accion: 'enviar', id: st.sel, texto: texto })
       .then(function (j) {
-        if (j.ok) inp.value = '';
+        if (j.ok) inp.innerHTML = '';
         // Se recarga el hilo en ambos casos: si falló, el mensaje queda
         // registrado como fallido con el motivo real de Meta a la vista.
         abrir(st.sel);
