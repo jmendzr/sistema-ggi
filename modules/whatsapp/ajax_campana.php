@@ -1,16 +1,17 @@
 <?php
 /**
- * modules/whatsapp/ajax_campana.php — Backend de campañas masivas WhatsApp (Kapso Broadcasts).
+ * modules/whatsapp/ajax_campana.php — Backend de campañas masivas WhatsApp (Meta nativo).
  *
  * Acciones (POST, solo gerencia):
  *   segmento  → preview de destinatarios del segmento elegido
- *   templates → plantillas APROBADAS en Meta (vía Kapso)
- *   enviar    → crea el broadcast en Kapso, agrega destinatarios y dispara el envío
- *   sync      → refresca métricas de una campaña desde Kapso
+ *   templates → plantillas APROBADAS, leídas directo de la WABA
+ *   enviar    → ENCOLA la campaña; el cron cron/wa_campanas.php la despacha por lotes
+ *   sync      → métricas calculadas de nuestra propia cola (sin llamadas externas)
  */
 require_once __DIR__ . '/../../core/helpers.php';
 require_once __DIR__ . '/../../core/Database.php';
-require_once __DIR__ . '/../../core/KapsoBroadcastService.php';
+require_once __DIR__ . '/../../core/WhatsAppService.php';
+require_once __DIR__ . '/../../core/WaCampanas.php';
 require_once __DIR__ . '/../../core/WhatsAppService.php';
 session_init();
 require_login();
@@ -143,26 +144,53 @@ try {
         exit;
     }
 
-    // ── Plantillas aprobadas ───────────────────────────────────────────────────
+    // ── Plantillas aprobadas (nativo, desde Meta) ─────────────────────────────
     if ($accion === 'templates') {
-        $tpls = KapsoBroadcastService::listTemplates();
-        // Las plantillas con header multimedia requieren un archivo por destinatario → fuera de campañas
-        $tpls = array_values(array_filter($tpls, fn($t) => empty($t['header_media'])));
+        $meta = WhatsAppService::listarPlantillas();
+        if ($meta === null) {
+            echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo consultar Meta']);
+            exit;
+        }
+
+        $tpls = [];
+        foreach ($meta as $t) {
+            if (($t['status'] ?? '') !== 'APPROVED') continue;
+
+            $body = ''; $headerMedia = false;
+            foreach ($t['components'] ?? [] as $c) {
+                if (($c['type'] ?? '') === 'BODY')   $body = $c['text'] ?? '';
+                // Un header de imagen o documento exige un archivo por destinatario:
+                // no tiene sentido en un envío masivo.
+                if (($c['type'] ?? '') === 'HEADER' && ($c['format'] ?? 'TEXT') !== 'TEXT') $headerMedia = true;
+            }
+            if ($headerMedia) continue;
+
+            preg_match_all('/\{\{(\d+)\}\}/', $body, $m);
+            $tpls[] = [
+                'id'        => $t['name'],          // el nombre ES el identificador en Meta
+                'name'      => $t['name'],
+                'language'  => $t['language'],
+                'category'  => $t['category'] ?? '',
+                'body'      => $body,
+                'params'    => count(array_unique($m[1])),
+            ];
+        }
+
         echo json_encode(['ok' => true, 'templates' => $tpls]);
         exit;
     }
 
-    // ── Crear + enviar campaña ─────────────────────────────────────────────────
+    // ── Crear campaña: se ENCOLA, la despacha el cron ─────────────────────────
     if ($accion === 'enviar') {
         $segmento      = $_POST['segmento'] ?? '';
         $dias          = max(0, (int)($_POST['dias'] ?? 7));
-        $template_id   = trim($_POST['template_id'] ?? '');
-        $template_name = trim($_POST['template_name'] ?? '');
+        $template_name = trim($_POST['template_name'] ?? '') ?: trim($_POST['template_id'] ?? '');
+        $template_lang = trim($_POST['template_lang'] ?? 'es');
         $param_names   = json_decode($_POST['param_names'] ?? '[]', true) ?: [];
         $params_map    = json_decode($_POST['params_map'] ?? '[]', true) ?: [];
         $nombre        = trim($_POST['nombre'] ?? '');
 
-        if (!in_array($segmento, ['enviadas_sin_respuesta', 'desistidas', 'sin_respuesta_wa'], true) || !$template_id) {
+        if (!in_array($segmento, ['enviadas_sin_respuesta', 'desistidas', 'sin_respuesta_wa'], true) || $template_name === '') {
             echo json_encode(['ok' => false, 'msg' => 'Datos incompletos.']); exit;
         }
         if ($nombre === '') $nombre = $template_name . '_' . date('Ymd_Hi');
@@ -171,78 +199,61 @@ try {
         }
 
         // El segmento se recalcula en servidor: no se confía en la lista del cliente
-        $rows       = gg_campana_segmento($pdo, $segmento, $dias);
-        $validos    = array_values(array_filter($rows, fn($r) => $r['telefono'] !== ''));
-        $excluidos  = count($rows) - count($validos);
+        $rows    = gg_campana_segmento($pdo, $segmento, $dias);
+        $validos = array_values(array_filter($rows, fn($r) => $r['telefono'] !== ''));
         if (!$validos) { echo json_encode(['ok' => false, 'msg' => 'El segmento no tiene destinatarios con teléfono válido.']); exit; }
 
-        $recipients = array_map(fn($r) => [
-            'phone_number' => '+' . $r['telefono'],
-            'params'       => array_map(fn($m) => gg_campana_param($r, $m), $params_map),
+        $dest = array_map(fn($r) => [
+            'telefono'   => $r['telefono'],
+            'cliente_id' => $r['cliente_id'] ?? null,
+            'empresa'    => $r['empresa'] ?? null,
+            'params'     => array_map(fn($m) => gg_campana_param($r, $m), $params_map),
         ], $validos);
 
-        $broadcastId = KapsoBroadcastService::createBroadcast($nombre, $template_id);
-        if (!$broadcastId) { echo json_encode(['ok' => false, 'msg' => 'Kapso no aceptó la creación del broadcast (revisa el log del servidor).']); exit; }
+        $res = WaCampanas::encolar($pdo, $nombre, $template_name, $template_lang,
+                                   $param_names, $segmento, $dest, (int) $user['id']);
 
-        $res = KapsoBroadcastService::addRecipients($broadcastId, $recipients, $param_names);
-        if (($res['added'] ?? 0) === 0) {
-            echo json_encode(['ok' => false, 'msg' => 'Kapso no aceptó los destinatarios: ' . implode(' | ', array_slice($res['errors'], 0, 3))]); exit;
-        }
-
-        $enviado = KapsoBroadcastService::sendBroadcast($broadcastId);
-
-        $pdo->prepare("
-            INSERT INTO whatsapp_campanas
-              (kapso_broadcast_id, nombre, template_id, template_name, segmento, segmento_json,
-               total_destinatarios, excluidos, estado, creado_por)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
-        ")->execute([
-            $broadcastId, $nombre, $template_id, $template_name, $segmento,
-            json_encode(['dias' => $dias, 'params_map' => $params_map], JSON_UNESCAPED_UNICODE),
-            $res['added'], $excluidos + (int)$res['duplicates'],
-            $enviado ? 'sending' : 'draft',
-            $user['id'],
-        ]);
+        $pdo->prepare("UPDATE whatsapp_campanas SET segmento_json = ? WHERE id = ?")
+            ->execute([json_encode(['dias' => $dias, 'params_map' => $params_map], JSON_UNESCAPED_UNICODE),
+                       $res['campana_id']]);
 
         log_actividad('whatsapp', 'campana',
-            "Campaña '$nombre' ({$template_name}) → {$res['added']} destinatarios (segmento: $segmento" . ($dias ? ", {$dias}d" : '') . ")");
+            "Campaña '$nombre' ({$template_name}) encolada → {$res['encolados']} destinatarios (segmento: $segmento" . ($dias ? ", {$dias}d" : '') . ")");
 
         echo json_encode([
             'ok'        => true,
-            'enviado'   => $enviado,
-            'agregados' => $res['added'],
-            'excluidos' => $excluidos,
-            'msg'       => $enviado
-                ? "Campaña enviada a {$res['added']} destinatario(s)." . ($excluidos ? " $excluidos excluido(s) por teléfono inválido." : '')
-                : 'Broadcast creado pero el envío falló; reintenta con Sincronizar.',
+            'campana_id'=> $res['campana_id'],
+            'agregados' => $res['encolados'],
+            'excluidos' => $res['omitidos'],
+            'msg'       => "Campaña encolada: {$res['encolados']} destinatario(s). "
+                         . "El envío se despacha por lotes en los próximos minutos."
+                         . ($res['omitidos'] ? " {$res['omitidos']} excluido(s) por teléfono inválido." : ''),
         ]);
         exit;
     }
 
-    // ── Sincronizar métricas ───────────────────────────────────────────────────
+    // ── Métricas: se calculan de nuestra cola, sin llamar a nadie ─────────────
     if ($accion === 'sync') {
         $campana_id = (int)($_POST['campana_id'] ?? 0);
-        $st = $pdo->prepare("SELECT kapso_broadcast_id FROM whatsapp_campanas WHERE id = ?");
+        $st = $pdo->prepare("SELECT estado FROM whatsapp_campanas WHERE id = ?");
         $st->execute([$campana_id]);
-        $bid = $st->fetchColumn();
-        if (!$bid) { echo json_encode(['ok' => false, 'msg' => 'Campaña no encontrada.']); exit; }
+        $estado = $st->fetchColumn();
+        if ($estado === false) { echo json_encode(['ok' => false, 'msg' => 'Campaña no encontrada.']); exit; }
 
-        $b = KapsoBroadcastService::getBroadcast($bid);
-        if (!$b) { echo json_encode(['ok' => false, 'msg' => 'Kapso no devolvió datos.']); exit; }
-
+        $m = WaCampanas::metricas($pdo, $campana_id);
         $stats = [
-            'sent'      => (int)($b['sent_count']      ?? 0),
-            'delivered' => (int)($b['delivered_count'] ?? 0),
-            'read'      => (int)($b['read_count']      ?? 0),
-            'responded' => (int)($b['responded_count'] ?? 0),
-            'failed'    => (int)($b['failed_count']    ?? 0),
-            'pending'   => (int)($b['pending_count']   ?? 0),
-            'rate'      => (float)($b['response_rate'] ?? 0),
+            'sent'      => $m['enviado'] + $m['entregado'] + $m['leido'],
+            'delivered' => $m['entregado'] + $m['leido'],
+            'read'      => $m['leido'],
+            'failed'    => $m['fallido'],
+            'pending'   => $m['pendiente'],
+            'responded' => 0,
+            'rate'      => 0,
         ];
-        $pdo->prepare("UPDATE whatsapp_campanas SET estado = ?, stats_json = ? WHERE id = ?")
-            ->execute([(string)($b['status'] ?? 'sending'), json_encode($stats), $campana_id]);
+        $pdo->prepare("UPDATE whatsapp_campanas SET stats_json = ? WHERE id = ?")
+            ->execute([json_encode($stats), $campana_id]);
 
-        echo json_encode(['ok' => true, 'estado' => $b['status'] ?? 'sending', 'stats' => $stats]);
+        echo json_encode(['ok' => true, 'estado' => $estado, 'stats' => $stats]);
         exit;
     }
 

@@ -1,6 +1,6 @@
 <?php
 /**
- * modules/whatsapp/campanas.php — Campañas masivas de WhatsApp (Kapso Broadcasts).
+ * modules/whatsapp/campanas.php — Campañas masivas de WhatsApp (Meta nativo).
  * Segmenta clientes (propuestas enviadas sin respuesta, desistidas, sin respuesta WA),
  * envía plantillas aprobadas por Meta en lote y muestra métricas por campaña.
  * Solo gerencia.
@@ -61,7 +61,7 @@ require_once __DIR__ . '/../../templates/layout.php';
 
 <div class="camp-toolbar">
   <div style="font-size:13px;color:var(--gris-texto);">
-    Envíos masivos con plantillas aprobadas por Meta, vía Kapso Broadcasts.
+    Envíos masivos con plantillas aprobadas por Meta. Se despachan por lotes.
   </div>
   <button type="button" class="btn btn-primary btn-sm" onclick="ncAbrir()">
     <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

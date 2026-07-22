@@ -2,9 +2,9 @@
 /**
  * modules/whatsapp/webhook_meta.php
  *
- * Receptor de webhooks de Meta WhatsApp Cloud API (vía Kapso proxy).
+ * Receptor de webhooks de Meta WhatsApp Cloud API (nativo).
  *
- * Registrar en Meta Business Manager (o en Kapso) apuntando a:
+ * Registrado en la app de Meta (Webhooks) apuntando a:
  *   https://sistema.groupglobaliso.com/modules/whatsapp/webhook_meta.php
  *
  * Eventos que procesa:
@@ -19,6 +19,7 @@
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../core/Database.php';
 require_once __DIR__ . '/../../core/WaInbox.php';
+require_once __DIR__ . '/../../core/WaCampanas.php';
 
 $verify_token = defined('WA_WEBHOOK_VERIFY_TOKEN') ? WA_WEBHOOK_VERIFY_TOKEN : env('WA_WEBHOOK_VERIFY_TOKEN', '');
 
@@ -115,6 +116,10 @@ try {
                 // Los mensajes escritos por un ejecutivo no existen en whatsapp_log
                 // (esa tabla es solo de notificaciones automáticas).
                 WaInbox::actualizarEstado($pdo, $wa_id, $estado_interno, $error_msg);
+
+                // Métricas de campañas: sin esto, una campaña quedaría siempre
+                // en "enviado" sin saber cuántos llegaron o se leyeron.
+                WaCampanas::actualizarEstado($pdo, $wa_id, $estado_interno);
 
                 // Actualizar solo si el nuevo estado es "más avanzado" que el actual
                 $order = ['queued' => 0, 'sent' => 1, 'delivered' => 2, 'read' => 3, 'failed' => 4];
