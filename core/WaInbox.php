@@ -172,6 +172,76 @@ class WaInbox
         return $st->rowCount() > 0;
     }
 
+    /**
+     * Reasigna una conversación a otro usuario. Solo gerencia.
+     *
+     * Se pisa la asignación actual a propósito: es la salida cuando alguien
+     * queda con conversaciones tomadas y no está disponible. Queda registrado
+     * quién lo hizo y a quién, porque quitarle el trabajo a un ejecutivo sin
+     * dejar rastro genera discusiones que nadie puede resolver después.
+     *
+     * @param int|null $aUsuario  null = dejarla libre.
+     */
+    public static function reasignar(
+        \PDO $pdo, int $convId, ?int $aUsuario, int $hechoPor, ?string $motivo = null
+    ): bool {
+        $q = $pdo->prepare("SELECT asignado_a FROM wa_conversaciones WHERE id = ?");
+        $q->execute([$convId]);
+        $actual = $q->fetchColumn();
+        if ($actual === false) return false;
+
+        $de = $actual !== null ? (int) $actual : null;
+        if ($de === $aUsuario) return true;   // nada que cambiar
+
+        $pdo->prepare(
+            "UPDATE wa_conversaciones
+                SET asignado_a = ?, asignado_at = " . ($aUsuario ? 'NOW()' : 'NULL') . "
+              WHERE id = ?"
+        )->execute([$aUsuario, $convId]);
+
+        self::registrarAsignacion(
+            $pdo, $convId, $aUsuario ? 'reasignar' : 'quitar', $de, $aUsuario, $hechoPor, $motivo
+        );
+
+        return true;
+    }
+
+    /** Deja constancia de cada cambio de asignación. */
+    public static function registrarAsignacion(
+        \PDO $pdo, int $convId, string $accion,
+        ?int $de, ?int $a, int $hechoPor, ?string $motivo = null
+    ): void {
+        try {
+            $pdo->prepare(
+                "INSERT INTO wa_asignaciones_log
+                    (conversacion_id, accion, de_usuario, a_usuario, hecho_por, motivo)
+                 VALUES (?, ?, ?, ?, ?, ?)"
+            )->execute([$convId, $accion, $de, $a, $hechoPor, $motivo ? mb_substr($motivo, 0, 200) : null]);
+        } catch (\Throwable $e) {
+            error_log('[WaInbox] log asignación: ' . $e->getMessage());
+        }
+    }
+
+    /** Historial de asignaciones de una conversación. */
+    public static function historialAsignaciones(\PDO $pdo, int $convId, int $limite = 10): array
+    {
+        $q = $pdo->prepare(
+            "SELECT l.accion, l.motivo, l.created_at,
+                    TRIM(CONCAT(COALESCE(ud.nombre,''),' ',COALESCE(ud.apellido,''))) AS de_nombre,
+                    TRIM(CONCAT(COALESCE(ua.nombre,''),' ',COALESCE(ua.apellido,''))) AS a_nombre,
+                    TRIM(CONCAT(COALESCE(uh.nombre,''),' ',COALESCE(uh.apellido,''))) AS por_nombre
+               FROM wa_asignaciones_log l
+               LEFT JOIN usuarios ud ON ud.id = l.de_usuario
+               LEFT JOIN usuarios ua ON ua.id = l.a_usuario
+               LEFT JOIN usuarios uh ON uh.id = l.hecho_por
+              WHERE l.conversacion_id = ?
+              ORDER BY l.id DESC LIMIT " . (int) $limite
+        );
+        $q->execute([$convId]);
+
+        return $q->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+    }
+
     /** Libera la conversación. $forzar lo usa gerencia para reasignar. */
     public static function liberar(\PDO $pdo, int $convId, int $usuarioId, bool $forzar = false): bool
     {

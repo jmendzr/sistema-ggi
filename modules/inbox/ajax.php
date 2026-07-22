@@ -43,6 +43,7 @@ if ($accion === 'asignar' || $accion === 'liberar') {
     if ($accion === 'asignar') {
         // Atómico: si dos ejecutivos hacen clic a la vez, solo uno gana.
         if (WaInbox::asignar($pdo, $id, $yo)) {
+            WaInbox::registrarAsignacion($pdo, $id, 'tomar', null, $yo, $yo);
             echo json_encode(['ok' => true]);
         } else {
             $q = $pdo->prepare(
@@ -58,11 +59,73 @@ if ($accion === 'asignar' || $accion === 'liberar') {
     }
 
     // Liberar: propia siempre; ajena solo gerencia
+    $q = $pdo->prepare("SELECT asignado_a FROM wa_conversaciones WHERE id = ?");
+    $q->execute([$id]);
+    $antes = $q->fetchColumn();
+
     if (WaInbox::liberar($pdo, $id, $yo, $esJefe)) {
+        WaInbox::registrarAsignacion(
+            $pdo, $id, ((int) $antes === $yo) ? 'soltar' : 'quitar',
+            $antes ? (int) $antes : null, null, $yo
+        );
         echo json_encode(['ok' => true]);
     } else {
         echo json_encode(['ok' => false, 'msg' => 'No puedes liberar una conversación de otro ejecutivo']);
     }
+    exit;
+}
+
+// ══ Reasignar a otro ejecutivo (solo gerencia) ═══════════════════════════════
+if ($accion === 'reasignar') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;
+    }
+    csrf_verify();
+
+    if (!$esJefe) {
+        echo json_encode(['ok' => false, 'msg' => 'Solo gerencia puede reasignar conversaciones']); exit;
+    }
+
+    $id  = (int) ($_POST['id'] ?? 0);
+    $a   = ($_POST['a_usuario'] ?? '') !== '' ? (int) $_POST['a_usuario'] : null;
+    $mot = trim($_POST['motivo'] ?? '');
+    if (!$id) { echo json_encode(['ok' => false, 'msg' => 'ID inválido']); exit; }
+
+    // Solo a alguien que pueda atender de verdad
+    if ($a !== null) {
+        $q = $pdo->prepare("SELECT COUNT(*) FROM usuarios
+                             WHERE id = ? AND activo = 1
+                               AND rol IN ('ejecutivo_ventas','gerente_operaciones','gerente_general')");
+        $q->execute([$a]);
+        if (!$q->fetchColumn()) {
+            echo json_encode(['ok' => false, 'msg' => 'Ese usuario no puede atender conversaciones']); exit;
+        }
+    }
+
+    echo WaInbox::reasignar($pdo, $id, $a, $yo, $mot ?: null)
+        ? json_encode(['ok' => true])
+        : json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']);
+    exit;
+}
+
+// ══ Ejecutivos disponibles + historial de asignaciones ═══════════════════════
+if ($accion === 'equipo') {
+    if (!$esJefe) { echo json_encode(['ok' => false, 'msg' => 'Sin permiso']); exit; }
+
+    $u = $pdo->query(
+        "SELECT id, TRIM(CONCAT(nombre,' ',apellido)) nombre, rol
+           FROM usuarios
+          WHERE activo = 1 AND rol IN ('ejecutivo_ventas','gerente_operaciones','gerente_general')
+          ORDER BY rol = 'ejecutivo_ventas' DESC, nombre"
+    )->fetchAll(PDO::FETCH_ASSOC);
+
+    $id = (int) ($_GET['id'] ?? 0);
+
+    echo json_encode([
+        'ok'        => true,
+        'usuarios'  => $u,
+        'historial' => $id ? WaInbox::historialAsignaciones($pdo, $id) : [],
+    ]);
     exit;
 }
 

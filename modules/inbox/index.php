@@ -247,6 +247,23 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
   .ib-box input:disabled { opacity: .55; cursor: not-allowed; }
 
+  .ib-hist-t { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+              color: var(--tx3); margin: 16px 0 8px; }
+  .ib-hist-i { font-size: .78rem; color: var(--tx2); padding: 6px 0; border-bottom: 1px solid var(--brd2); }
+  .ib-hist-i b { color: var(--tx); }
+  .ib-hist-i small { display: block; font-size: .68rem; color: var(--tx3); margin-top: 2px; }
+  .ib-hist-nota { font-size: .76rem; color: var(--tx2); background: var(--s-warn-bg);
+                  color: var(--s-warn-tx); padding: 9px 11px; border-radius: 8px; line-height: 1.45; }
+
+  /* Aviso de "tomá la conversación": reemplaza a la caja deshabilitada, que
+     no explicaba por qué no se podía escribir. */
+  .ib-tomar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+              padding: 11px 14px; border-radius: 10px;
+              background: var(--bg-surface2); border: 1px dashed var(--brd);
+              font-size: .82rem; color: var(--tx2); }
+  .ib-tomar b { color: var(--tx); }
+  .ib-tomar button { margin-left: auto; }
+
   /* Campo editable: muestra el formato mientras se escribe */
   .ib-editable {
     flex: 1; min-width: 0; padding: 10px 13px; font: inherit; font-size: .85rem;
@@ -461,6 +478,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 <script>
 (function () {
   var st = { f: 'todas', q: '', sel: null, etq: 0, etqActuales: [], firma: null, adjunto: null };
+  var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)) ?>;
   var $ = function (s) { return document.querySelector(s); };
 
   function esc(s) {
@@ -654,9 +672,19 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     // Acción de asignación: el candado que pediste
     var accion = c.asignado_a
       ? (c.puede_liberar
-          ? '<button type="button" class="btn btn-ghost ib-btn-sm" id="ib-liberar">Soltar</button>'
+          ? '<button type="button" class="btn btn-ghost ib-btn-sm" id="ib-liberar">'
+            + (c.es_mia ? 'Soltar' : 'Quitar asignación') + '</button>'
           : '<span class="ib-tag otro">Atiende ' + esc(c.asignado_nombre) + '</span>')
       : '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-asignar">Tomar conversación</button>';
+
+    // Gerencia puede pasarla a otro ejecutivo sin tener que tomarla primero
+    if (ES_JEFE) {
+      accion += '<button type="button" class="ib-icon" id="ib-reasignar" '
+              + 'title="Reasignar a otro ejecutivo" aria-label="Reasignar a otro ejecutivo">'
+              + '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+              + '<path stroke-linecap="round" stroke-linejoin="round" '
+              + 'd="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7"/></svg></button>';
+    }
 
     // Meta solo admite texto libre dentro de las 24h desde el último entrante
     var pie;
@@ -666,15 +694,21 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>'
           + '<span class="ib-warn-b"><strong>Ventana de 24 h vencida</strong>'
           + 'Solo se pueden enviar plantillas aprobadas hasta que el contacto responda.</span>'
+          // Sin la conversación a cargo, ofrecer tomarla es más útil que un
+          // botón muerto: el bloqueo real es la asignación, no la plantilla.
           + (c.es_mia
               ? '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-plantilla">Enviar plantilla</button>'
-              : '<button type="button" class="btn btn-primary ib-btn-sm" disabled '
-                + 'title="Toma la conversación para poder responder">Enviar plantilla</button>')
+              : (c.asignado_a
+                  ? '<span class="ib-tag otro">Atiende ' + esc(c.asignado_nombre) + '</span>'
+                  : '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-asignar">Tomar para responder</button>'))
           + '</div>';
     } else if (!c.es_mia) {
-      pie = '<div class="ib-box">'
-          + '<input type="text" placeholder="' + (c.asignado_a ? 'La atiende ' + esc(c.asignado_nombre) : 'Asígnate la conversación para responder') + '" disabled aria-label="Mensaje">'
-          + '<button type="button" class="btn btn-primary ib-btn-sm" disabled>Enviar</button>'
+      pie = '<div class="ib-tomar">'
+          + '<span>' + (c.asignado_a
+              ? 'Esta conversación la atiende <b>' + esc(c.asignado_nombre) + '</b>.'
+              : 'Nadie la está atendiendo. Tómala para poder responder.') + '</span>'
+          + (c.asignado_a
+              ? '' : '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-asignar">Tomar conversación</button>')
           + '</div>';
     } else {
       // Franja del adjunto: vive DENTRO del compositor, no en una ventana
@@ -1387,6 +1421,58 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     });
   }
 
+  // ── Reasignación (solo gerencia) ───────────────────────────────────────────
+  function formReasignar() {
+    if (!st.sel) return;
+
+    fetch('ajax.php?accion=equipo&id=' + st.sel, { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) return;
+
+        var opts = '<option value="">— Dejarla libre —</option>'
+          + j.usuarios.map(function (u) {
+              return '<option value="' + u.id + '">' + esc(u.nombre)
+                   + (u.rol !== 'ejecutivo_ventas' ? ' (gerencia)' : '') + '</option>';
+            }).join('');
+
+        var hist = j.historial.length
+          ? '<div class="ib-hist-t">Historial</div>' + j.historial.map(function (h) {
+              var q = { tomar: 'tomó', soltar: 'soltó', reasignar: 'reasignó', quitar: 'quitó la asignación' }[h.accion] || h.accion;
+              return '<div class="ib-hist-i"><b>' + esc(h.por_nombre || '—') + '</b> ' + q
+                   + (h.a_nombre ? ' → <b>' + esc(h.a_nombre) + '</b>' : '')
+                   + (h.motivo ? ' · ' + esc(h.motivo) : '')
+                   + '<small>' + esc(h.created_at) + '</small></div>';
+            }).join('')
+          : '';
+
+        mantOpen('Reasignar conversación',
+            '<label class="ib-plt-f"><span>Pasar a</span><select id="ra-u">' + opts + '</select></label>'
+          + '<label class="ib-plt-f"><span>Motivo (opcional)</span>'
+          + '<input type="text" id="ra-m" maxlength="200" placeholder="Ej.: de vacaciones, carga de trabajo"></label>'
+          + '<p class="ib-hist-nota">Queda registrado quién hizo el cambio. Si el ejecutivo estaba '
+          + 'atendiendo, pierde el acceso a escribir de inmediato.</p>'
+          + hist
+          + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
+          + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
+          + '<button type="button" class="ggi-btn-confirm-action" id="ra-ok">Reasignar</button></div>');
+
+        document.getElementById('ra-ok').addEventListener('click', function () {
+          ggiPost('ajax.php', {
+            accion: 'reasignar', id: st.sel,
+            a_usuario: document.getElementById('ra-u').value,
+            motivo: document.getElementById('ra-m').value.trim()
+          }).then(function (r) {
+            if (!r.ok) return;
+            ggiModalClose();
+            if (typeof showToast === 'function') showToast('Conversación reasignada', 'ok');
+            st.firma = null;
+            abrir(st.sel); lista();
+          });
+        });
+      });
+  }
+
   // ── Acciones ──
   // Usa el helper global ggiPost: adjunta el _csrf correcto y muestra el error
   // si lo hay, en vez de fallar en silencio.
@@ -1520,6 +1606,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     }
     if (e.target.closest('#ib-asignar')) { accionar('asignar', st.sel); return; }
     if (e.target.closest('#ib-liberar')) { accionar('liberar', st.sel); return; }
+    if (e.target.closest('#ib-reasignar')) { formReasignar(); return; }
     if (e.target.closest('#ib-enviar'))  { enviar(); return; }
 
     // Formato de WhatsApp: envuelve la selección con los marcadores

@@ -56,3 +56,19 @@ INSERT INTO rol_permisos (rol, modulo, activo) VALUES
 -- demanda y se cachea en storage/wa_media (fuera de git).
 ALTER TABLE wa_mensajes ADD COLUMN media_id     VARCHAR(120) NULL AFTER tipo;
 ALTER TABLE wa_mensajes ADD COLUMN media_nombre VARCHAR(180) NULL AFTER media_mime;
+
+-- Trazabilidad de asignaciones: quitarle una conversacion a un ejecutivo sin
+-- dejar rastro genera discusiones que despues nadie puede resolver.
+CREATE TABLE IF NOT EXISTS wa_asignaciones_log (
+  id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  conversacion_id INT UNSIGNED NOT NULL,
+  accion          ENUM('tomar','soltar','reasignar','quitar') NOT NULL,
+  de_usuario      INT UNSIGNED NULL,
+  a_usuario       INT UNSIGNED NULL,
+  hecho_por       INT UNSIGNED NOT NULL,
+  motivo          VARCHAR(200) NULL,
+  created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_conv (conversacion_id, id),
+  KEY idx_quien (hecho_por)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
