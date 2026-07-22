@@ -205,9 +205,16 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em;
              background: rgba(127,127,127,.16); padding: 1px 5px; border-radius: 5px; }
 
-  /* Adjunto todavía no descargable */
+  /* Adjuntos en el hilo */
   .ib-adj { display: inline-flex; flex-direction: column; gap: 2px; font-weight: 600; }
   .ib-adj small { font-weight: 400; opacity: .75; font-size: .7rem; }
+  .ib-img { display: block; max-width: 100%; max-height: 300px; border-radius: 9px;
+            cursor: pointer; background: rgba(127,127,127,.12); }
+  .ib-doc { display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px;
+            border-radius: 9px; background: rgba(127,127,127,.14);
+            color: inherit; text-decoration: none; font-weight: 600; font-size: .8rem; }
+  .ib-doc:hover { text-decoration: underline; }
+  .ib-pie-foto { margin-top: 6px; }
 
   /* Barra inferior: refleja la ventana de 24h de Meta */
   .ib-foot { border-top: 1px solid var(--brd); padding: 12px 18px; background: var(--bg-surface); flex-shrink: 0; }
@@ -545,17 +552,31 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       // Adjuntos entrantes (imagen, sticker, gif, audio, documento): todavía
       // no se descarga el archivo, así que se indica el tipo en vez de dejar
       // la burbuja vacía y que parezca un mensaje perdido.
-      var cuerpoMsg;
-      if (m.texto) {
-        cuerpoMsg = formato(m.texto);
-      } else if (m.tipo && m.tipo !== 'text') {
-        var etq = { image: '📷 Imagen', sticker: '🩹 Sticker', video: '🎬 Video',
+      var cuerpoMsg = '';
+
+      // Adjuntos: el archivo se descarga de Meta la primera vez que se abre
+      if (m.media) {
+        var src = 'media.php?id=' + m.media;
+        if (m.tipo === 'image' || m.tipo === 'sticker') {
+          cuerpoMsg += '<img class="ib-img" src="' + src + '" loading="lazy" '
+                     + 'alt="' + esc(m.tipo === 'sticker' ? 'Sticker' : 'Imagen recibida') + '" '
+                     + 'data-ggi-preview="' + src + '">';
+        } else if (m.tipo === 'video') {
+          cuerpoMsg += '<video class="ib-img" src="' + src + '" controls preload="metadata"></video>';
+        } else if (m.tipo === 'audio') {
+          cuerpoMsg += '<audio src="' + src + '" controls preload="none" style="max-width:100%"></audio>';
+        } else {
+          cuerpoMsg += '<a class="ib-doc" href="' + src + '" target="_blank" rel="noopener">'
+                     + '📄 ' + esc(m.media_nombre || 'Documento') + '</a>';
+        }
+      } else if (m.tipo && m.tipo !== 'text' && !m.texto) {
+        var etq = { image: '📷 Imagen', sticker: 'Sticker', video: '🎬 Video',
                     audio: '🎤 Audio', document: '📄 Documento', location: '📍 Ubicación' };
-        cuerpoMsg = '<span class="ib-adj">' + (etq[m.tipo] || m.tipo)
-                  + '<small>Aún no se puede ver aquí</small></span>';
-      } else {
-        cuerpoMsg = '';
+        cuerpoMsg += '<span class="ib-adj">' + (etq[m.tipo] || m.tipo) + '</span>';
       }
+
+      if (m.texto) cuerpoMsg += (cuerpoMsg ? '<div class="ib-pie-foto">' : '')
+                              + formato(m.texto) + (cuerpoMsg ? '</div>' : '');
 
       cuerpo += '<div class="ib-b ' + cls + '">' + who + cuerpoMsg + err
              +  '<div class="ib-b-foot">' + hhmm(m.cuando)
@@ -595,7 +616,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<button type="button" class="ib-fmt" data-fmt="```" title="Monoespaciado" aria-label="Monoespaciado">&lt;/&gt;</button>'
           + '<span class="ib-barra-sep"></span>'
           + '<button type="button" class="ib-fmt" id="ib-emoji" title="Emojis" aria-label="Insertar emoji">☺</button>'
-          + '<button type="button" class="ib-fmt" id="ib-adjunto" title="Adjuntar archivo (próxima entrega)" aria-label="Adjuntar archivo" disabled>📎</button>'
+          + '<button type="button" class="ib-fmt" id="ib-adjunto" title="Adjuntar archivo" aria-label="Adjuntar archivo">📎</button>'
+          + '<input type="file" id="ib-file" hidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx">'
           + '</div>'
           + '<div class="ib-box">'
           // contenteditable, no <input>: un input no puede mostrar el texto
@@ -658,6 +680,27 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
       // Repintar con formato en cada cambio
       t.addEventListener('input', function () { repintar(t); });
+
+      // Adjuntar: el pie de foto es lo que haya escrito en la caja
+      var file = $('#ib-file');
+      if (file) file.addEventListener('change', function () {
+        if (!file.files || !file.files[0] || !st.sel) return;
+        var fd = new FormData();
+        fd.append('accion', 'adjuntar');
+        fd.append('id', st.sel);
+        fd.append('archivo', file.files[0]);
+        fd.append('texto', textoActual().trim());
+
+        if (typeof showToast === 'function') showToast('Enviando archivo…', 'ok');
+        ggiPost('ajax.php', fd).then(function (j) {
+          file.value = '';
+          if (j.ok) {
+            var box = $('#ib-texto');
+            if (box) box.innerHTML = '';
+          }
+          abrir(st.sel);
+        });
+      });
 
       // Pegar SIEMPRE como texto plano: si no, entra HTML del portapapeles
       t.addEventListener('paste', function (e) {
@@ -1165,6 +1208,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     if (fmt) { envolver(fmt.dataset.fmt); return; }
 
     if (e.target.closest('#ib-emoji')) { popEmojis(e.target.closest('#ib-emoji')); return; }
+
+    if (e.target.closest('#ib-adjunto')) {
+      var f = $('#ib-file');
+      if (f) f.click();
+      return;
+    }
 
     if (e.target.closest('#ib-plantilla')) { popPlantillas(e.target.closest('#ib-plantilla')); return; }
 

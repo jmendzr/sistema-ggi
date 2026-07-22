@@ -150,8 +150,25 @@ try {
                     'button'      => $msg['button']['text']          ?? null,
                     'interactive' => $msg['interactive']['button_reply']['title']
                                   ?? $msg['interactive']['list_reply']['title'] ?? null,
-                    default       => null,  // image/document/audio/etc: solo se registra el tipo
+                    // Los adjuntos pueden traer pie de foto
+                    'image', 'video', 'document' => $msg[$tipo]['caption'] ?? null,
+                    default       => null,
                 };
+
+                // Adjuntos: Meta NO envía el archivo, solo un identificador.
+                // Se guarda el id y la descarga se hace luego, bajo demanda:
+                // la URL de descarga caduca en minutos, pero el id sirve ~30 días.
+                $media = null;
+                if (in_array($tipo, ['image', 'sticker', 'video', 'audio', 'document'], true)) {
+                    $m = $msg[$tipo] ?? [];
+                    if (!empty($m['id'])) {
+                        $media = [
+                            'id'     => $m['id'],
+                            'mime'   => $m['mime_type'] ?? null,
+                            'nombre' => $m['filename']  ?? null,
+                        ];
+                    }
+                }
 
                 // Resolver cliente por los últimos 9 dígitos (móvil Perú)
                 $cliente_id = null;
@@ -187,7 +204,7 @@ try {
                 // Hilo del inbox multiagente: crea/actualiza la conversación y
                 // reabre la ventana de 24h de Meta.
                 $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
-                WaInbox::registrarEntrante($pdo, $from, $wa_id, $tipo, $texto, $phoneNumberId);
+                WaInbox::registrarEntrante($pdo, $from, $wa_id, $tipo, $texto, $phoneNumberId, $media);
             }
         }
     }

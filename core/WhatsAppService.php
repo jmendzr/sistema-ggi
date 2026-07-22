@@ -219,6 +219,145 @@ class WhatsAppService
      * @return string|null  WhatsApp message ID devuelto por la API, o null si falló
      */
     /**
+     * Descarga un archivo recibido, a partir del media_id de Meta.
+     *
+     * Son DOS pasos: primero se pide la metadata (que incluye una URL firmada
+     * de vida corta) y después se descarga esa URL con el mismo token. Por eso
+     * no se puede guardar la URL: caduca en minutos. El media_id, en cambio,
+     * sirve unos 30 días, así que la descarga puede hacerse bajo demanda.
+     *
+     * @return array{contenido:string,mime:string}|null
+     */
+    public static function fetchMedia(string $mediaId): ?array
+    {
+        self::$lastError = null;
+
+        $base  = self::apiBase();
+        $token = self::apiKey();
+        if (!$token) { self::$lastError = 'Sin credenciales'; return null; }
+
+        $cab = [self::authHeader()];
+
+        // 1) Metadata (url + mime)
+        $ch = curl_init($base . '/' . rawurlencode($mediaId));
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_HTTPHEADER => $cab,
+        ]);
+        $meta = json_decode((string) curl_exec($ch), true);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($code !== 200 || empty($meta['url'])) {
+            self::$lastError = 'No se pudo resolver el archivo (HTTP ' . $code . ')';
+            return null;
+        }
+
+        // 2) Descarga real. Requiere el token: la URL sola devuelve 401.
+        $ch = curl_init($meta['url']);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30,
+            CURLOPT_HTTPHEADER => $cab, CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $bin  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($code !== 200 || $bin === false || $bin === '') {
+            self::$lastError = 'No se pudo descargar el archivo (HTTP ' . $code . ')';
+            return null;
+        }
+
+        return ['contenido' => $bin, 'mime' => $meta['mime_type'] ?? 'application/octet-stream'];
+    }
+
+    /**
+     * Sube un archivo a Meta y devuelve su media_id, necesario para enviarlo.
+     */
+    public static function uploadMedia(string $rutaLocal, string $mime): ?string
+    {
+        self::$lastError = null;
+
+        $phoneId = self::phoneId();
+        if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return null; }
+        if (!is_readable($rutaLocal))     { self::$lastError = 'Archivo ilegible'; return null; }
+
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/media");
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 60,
+            CURLOPT_HTTPHEADER     => [self::authHeader()],
+            CURLOPT_POSTFIELDS     => [
+                'messaging_product' => 'whatsapp',
+                'type'              => $mime,
+                'file'              => new \CURLFile($rutaLocal, $mime, basename($rutaLocal)),
+            ],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $d = json_decode((string) $res, true);
+        if ($code >= 200 && $code < 300 && !empty($d['id'])) return $d['id'];
+
+        self::$lastError = mb_substr('HTTP ' . $code . ': ' . ($d['error']['message'] ?? (string) $res), 0, 400);
+        error_log('[WhatsAppService] uploadMedia: ' . self::$lastError);
+
+        return null;
+    }
+
+    /**
+     * Envía un archivo ya subido (media_id). Como el texto libre, solo es
+     * válido dentro de la ventana de 24 h.
+     */
+    public static function sendMedia(string $to, string $tipo, string $mediaId,
+                                     ?string $caption = null, ?string $nombre = null): ?string
+    {
+        self::$lastError = null;
+
+        $phoneId = self::phoneId();
+        if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return null; }
+
+        $obj = ['id' => $mediaId];
+        // Solo image, video y document admiten pie de foto
+        if ($caption !== null && $caption !== '' && in_array($tipo, ['image', 'video', 'document'], true)) {
+            $obj['caption'] = $caption;
+        }
+        if ($tipo === 'document' && $nombre) $obj['filename'] = $nombre;
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type'    => 'individual',
+            'to'                => $to,
+            'type'              => $tipo,
+            $tipo               => $obj,
+        ];
+
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/messages");
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 20,
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json', self::authHeader()],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $d = json_decode((string) $res, true);
+        if ($code >= 200 && $code < 300) return $d['messages'][0]['id'] ?? null;
+
+        $e      = $d['error'] ?? [];
+        $errMsg = $e['message'] ?? (string) $res;
+        if (!empty($e['code'])) $errMsg .= ' [code ' . $e['code'] . ']';
+        self::$lastError = mb_substr('HTTP ' . $code . ': ' . $errMsg, 0, 400);
+        error_log('[WhatsAppService] sendMedia: ' . self::$lastError);
+
+        return null;
+    }
+
+    /**
      * Envía un mensaje de TEXTO LIBRE (no plantilla).
      *
      * Solo es válido dentro de la ventana de servicio de 24 h de Meta, contada

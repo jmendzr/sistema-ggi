@@ -50,3 +50,9 @@ ALTER TABLE whatsapp_templates ADD COLUMN body_text TEXT NULL AFTER param_keys;
 INSERT INTO rol_permisos (rol, modulo, activo) VALUES
   ('gerente_operaciones', 'inbox', 1),
   ('ejecutivo_ventas',    'inbox', 1);
+
+-- Adjuntos: Meta manda un identificador, no el archivo. La URL de descarga
+-- caduca en minutos; el media_id dura ~30 dias, asi que se descarga bajo
+-- demanda y se cachea en storage/wa_media (fuera de git).
+ALTER TABLE wa_mensajes ADD COLUMN media_id     VARCHAR(120) NULL AFTER tipo;
+ALTER TABLE wa_mensajes ADD COLUMN media_nombre VARCHAR(180) NULL AFTER media_mime;

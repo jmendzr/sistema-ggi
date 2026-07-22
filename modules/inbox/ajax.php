@@ -252,6 +252,77 @@ if ($accion === 'enviar_plantilla') {
     exit;
 }
 
+// ══ Adjuntar y enviar archivo ════════════════════════════════════════════════
+if ($accion === 'adjuntar') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;
+    }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $id = (int) ($_POST['id'] ?? 0);
+    if (!$id || empty($_FILES['archivo']['tmp_name'])) {
+        echo json_encode(['ok' => false, 'msg' => 'Falta el archivo']); exit;
+    }
+    if (($_FILES['archivo']['error'] ?? 1) !== UPLOAD_ERR_OK) {
+        echo json_encode(['ok' => false, 'msg' => 'La subida falló (¿archivo muy grande?)']); exit;
+    }
+
+    $q = $pdo->prepare("SELECT telefono, asignado_a, ventana_expira_at, phone_number_id
+                          FROM wa_conversaciones WHERE id = ?");
+    $q->execute([$id]);
+    $conv = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+
+    if ((int) $conv['asignado_a'] !== $yo) {
+        echo json_encode(['ok' => false, 'msg' => 'Toma la conversación para poder responder']); exit;
+    }
+    // Los adjuntos son mensajes libres: fuera de la ventana Meta los rechaza
+    if (!WaInbox::ventanaAbierta($conv['ventana_expira_at'])) {
+        echo json_encode(['ok' => false, 'msg' => 'La ventana de 24 h venció: solo se pueden enviar plantillas']); exit;
+    }
+
+    $tmp    = $_FILES['archivo']['tmp_name'];
+    $nombre = $_FILES['archivo']['name'] ?? 'archivo';
+    $mime   = mime_content_type($tmp) ?: 'application/octet-stream';
+
+    // Límites de Meta: 5 MB imágenes, 16 MB audio/video, 100 MB documentos
+    $max = str_starts_with($mime, 'image/') ? 5 * 1024 * 1024
+         : (preg_match('#^(audio|video)/#', $mime) ? 16 * 1024 * 1024 : 100 * 1024 * 1024);
+    if (filesize($tmp) > $max) {
+        echo json_encode(['ok' => false, 'msg' => 'El archivo supera el límite de WhatsApp para su tipo']); exit;
+    }
+
+    $tipo = str_starts_with($mime, 'image/') ? 'image'
+          : (str_starts_with($mime, 'video/') ? 'video'
+          : (str_starts_with($mime, 'audio/') ? 'audio' : 'document'));
+
+    $mediaId = WhatsAppService::uploadMedia($tmp, $mime);
+    if (!$mediaId) {
+        echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo subir']); exit;
+    }
+
+    $pie  = trim($_POST['texto'] ?? '');
+    $waId = WhatsAppService::sendMedia($conv['telefono'], $tipo, $mediaId, $pie ?: null, $nombre);
+
+    $convId = WaInbox::registrarSaliente(
+        $pdo, $conv['telefono'], $waId, $tipo, $pie ?: null,
+        null, $yo, $waId ? 'sent' : 'failed',
+        $waId ? null : WhatsAppService::lastError(), $conv['phone_number_id']
+    );
+
+    // Guardar el media_id para poder mostrarlo también en nuestro hilo
+    if ($waId) {
+        $pdo->prepare("UPDATE wa_mensajes SET media_id = ?, media_mime = ?, media_nombre = ?
+                        WHERE wa_message_id = ?")->execute([$mediaId, $mime, $nombre, $waId]);
+    }
+
+    echo $waId
+        ? json_encode(['ok' => true])
+        : json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar']);
+    exit;
+}
+
 // ══ Enviar mensaje ═══════════════════════════════════════════════════════════
 if ($accion === 'enviar') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -425,7 +496,7 @@ if ($accion === 'hilo') {
 
     $ms = $pdo->prepare(
         "SELECT m.id, m.direccion, m.tipo, m.texto, m.template_name, m.estado, m.error_msg,
-                m.enviado_por, m.created_at,
+                m.enviado_por, m.created_at, m.media_id, m.media_path, m.media_mime, m.media_nombre,
                 TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS autor
            FROM wa_mensajes m LEFT JOIN usuarios u ON u.id = m.enviado_por
           WHERE m.conversacion_id = ? ORDER BY m.id ASC LIMIT 300"
@@ -435,6 +506,11 @@ if ($accion === 'hilo') {
     $mensajes = [];
     foreach ($ms as $m) {
         $mensajes[] = [
+            'id'         => (int) $m['id'],
+            'tipo'       => $m['tipo'],
+            'media'      => ($m['media_id'] || $m['media_path']) ? (int) $m['id'] : null,
+            'media_mime' => $m['media_mime'],
+            'media_nombre' => $m['media_nombre'],
             'dir'        => $m['direccion'],
             'texto'      => $m['texto'],
             'estado'     => $m['estado'],

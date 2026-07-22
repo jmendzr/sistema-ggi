@@ -63,15 +63,20 @@ class WaInbox
         ?string $waMessageId,
         string $tipo,
         ?string $texto,
-        ?string $phoneNumberId = null
+        ?string $phoneNumberId = null,
+        ?array $media = null
     ): int {
         $convId = self::ensureConversacion($pdo, $telefono, $phoneNumberId);
 
         $ins = $pdo->prepare(
-            "INSERT IGNORE INTO wa_mensajes (conversacion_id, wa_message_id, direccion, tipo, texto)
-             VALUES (?, ?, 'in', ?, ?)"
+            "INSERT IGNORE INTO wa_mensajes
+                (conversacion_id, wa_message_id, direccion, tipo, texto, media_id, media_mime, media_nombre)
+             VALUES (?, ?, 'in', ?, ?, ?, ?, ?)"
         );
-        $ins->execute([$convId, $waMessageId, $tipo, $texto]);
+        $ins->execute([
+            $convId, $waMessageId, $tipo, $texto,
+            $media['id'] ?? null, $media['mime'] ?? null, $media['nombre'] ?? null,
+        ]);
 
         // Solo mover contadores/ventana si el mensaje era nuevo de verdad
         if ($ins->rowCount() > 0) {
