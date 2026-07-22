@@ -1295,6 +1295,15 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
            + 'placeholder="' + esc(k.replace(/_/g, ' ')) + '"></label>';
     }).join('');
 
+    // Botón URL dinámico: Meta lo exige aparte del cuerpo. Sin él, el envío
+    // falla con "Button at index 0 of type Url requires a parameter".
+    if (p.boton) {
+      campos += '<label class="ib-plt-f"><span>' + esc(p.boton.replace(/_/g, ' '))
+              + ' <small>(dato del botón)</small></span>'
+              + '<input type="text" id="plt-boton" autocomplete="off" '
+              + 'placeholder="' + esc(p.boton.replace(/_/g, ' ')) + '"></label>';
+    }
+
     mantOpen('Completar y enviar',
         '<button type="button" class="ib-plt-volver" id="plt-volver">‹ Elegir otra plantilla</button>'
       + '<div class="ib-plt-prevbox">'
@@ -1313,9 +1322,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     // Precargar lo que el sistema ya sabe de esta empresa. El ejecutivo no
     // debería copiar a mano un dato que está en la ficha.
-    if (p.claves.length) {
+    if (p.claves.length || p.boton) {
+      var pedir = p.claves.slice();
+      if (p.boton) pedir.push(p.boton);
       fetch('ajax.php?accion=sugerir_params&id=' + st.sel
-            + '&claves=' + encodeURIComponent(p.claves.join(',')),
+            + '&claves=' + encodeURIComponent(pedir.join(',')),
             { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) { return r.json(); })
         .then(function (j) {
@@ -1330,6 +1341,13 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
               auto++;
             }
           });
+          var bt = document.getElementById('plt-boton');
+          if (bt && p.boton && j.valores[p.boton] && !bt.value) {
+            bt.value = j.valores[p.boton];
+            bt.classList.add('ib-auto');
+            auto++;
+          }
+
           if (auto) {
             var lbl = document.getElementById('plt-auto');
             if (lbl) {
@@ -1384,6 +1402,16 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       btn.disabled = true; btn.textContent = 'Enviando…';
       var datos = { accion: 'enviar_plantilla', id: st.sel, plantilla: p.nombre };
       vals.forEach(function (v, i) { datos['params[' + i + ']'] = v; });
+
+      var btn2 = document.getElementById('plt-boton');
+      if (btn2) {
+        if (!btn2.value.trim()) {
+          btn2.style.borderColor = 'var(--s-err)';
+          if (typeof showToast === 'function') showToast('Falta el dato del botón', 'error');
+          return;
+        }
+        datos.boton = btn2.value.trim();
+      }
       ggiPost('ajax.php', datos).then(function (j) {
         btn.disabled = false; btn.textContent = 'Enviar';
         if (!j.ok) return;

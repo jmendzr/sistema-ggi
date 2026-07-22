@@ -227,7 +227,7 @@ if ($accion === 'plantillas') {
     // Solo las APROBADAS en Meta. Ofrecer una rechazada (o inexistente) sería
     // enviar al ejecutivo a un fallo garantizado.
     $st = $pdo->query(
-        "SELECT event_code, template_name, language_code, param_keys, body_text, categoria
+        "SELECT event_code, template_name, language_code, param_keys, body_text, categoria, url_button_key
            FROM whatsapp_templates
           WHERE activo = 1 AND estado_meta = 'APPROVED'
             AND body_text IS NOT NULL AND body_text <> ''
@@ -246,6 +246,9 @@ if ($accion === 'plantillas') {
             // La categoría no es cosmética: Marketing cuesta más por mensaje y
             // exige consentimiento del cliente.
             'categoria'=> $r['categoria'] ?: 'UTILITY',
+            // Botón URL dinámico: Meta EXIGE su parámetro aparte del cuerpo,
+            // y sin él rechaza el envío con el error 131008.
+            'boton'    => $r['url_button_key'] ?: null,
         ];
     }
 
@@ -279,6 +282,11 @@ function gg_inbox_sugerir(PDO $pdo, ?int $clienteId, array $claves): array
             $q = $pdo->prepare("SELECT numero FROM cotizaciones
                                  WHERE cliente_id = ? AND deleted_at IS NULL AND estado <> 'borrador'
                                  ORDER BY id DESC LIMIT 1");
+            $q->execute([$clienteId]);
+            $out[$k] = (string) ($q->fetchColumn() ?: '');
+
+        } elseif ($k === 'portal_token') {
+            $q = $pdo->prepare("SELECT portal_token FROM clientes WHERE id = ?");
             $q->execute([$clienteId]);
             $out[$k] = (string) ($q->fetchColumn() ?: '');
 
@@ -355,7 +363,7 @@ if ($accion === 'enviar_plantilla') {
         exit;
     }
 
-    $t = $pdo->prepare("SELECT template_name, language_code, param_keys, body_text
+    $t = $pdo->prepare("SELECT template_name, language_code, param_keys, body_text, url_button_key
                           FROM whatsapp_templates WHERE template_name = ? AND activo = 1");
     $t->execute([$nombre]);
     $tpl = $t->fetch(PDO::FETCH_ASSOC);
@@ -372,7 +380,18 @@ if ($accion === 'enviar_plantilla') {
         $vals[] = $v;
     }
 
-    $waId = WhatsAppService::sendTemplate($conv['telefono'], $tpl['template_name'], $vals, $tpl['language_code']);
+    // El parámetro del botón va aparte de los del cuerpo
+    $boton = trim($_POST['boton'] ?? '');
+    if ($tpl['url_button_key'] && $boton === '') {
+        echo json_encode(['ok' => false,
+            'msg' => 'Esta plantilla lleva un botón que necesita un dato adicional.']);
+        exit;
+    }
+
+    $waId = WhatsAppService::sendTemplate(
+        $conv['telefono'], $tpl['template_name'], $vals, $tpl['language_code'],
+        null, null, $boton !== '' ? $boton : null
+    );
 
     // Texto tal como lo verá el cliente, para que quede legible en el hilo
     $texto = $tpl['body_text'];
