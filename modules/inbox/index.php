@@ -521,7 +521,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     fetch('ajax.php?accion=lista&filtro=' + encodeURIComponent(st.f)
           + '&q=' + encodeURIComponent(st.q)
           + '&etiqueta=' + (st.etq || 0),
-          { credentials: 'same-origin' })
+          { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.ok) return;
@@ -582,7 +582,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       };
     }
 
-    fetch('ajax.php?accion=hilo&id=' + id, { credentials: 'same-origin' })
+    fetch('ajax.php?accion=hilo&id=' + id, { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.ok) return;
@@ -930,7 +930,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     var caja = d.querySelector('#ib-stk-lista');
     if (!caja || caja.dataset.listo) return;
 
-    fetch('ajax.php?accion=stickers', { credentials: 'same-origin' })
+    fetch('ajax.php?accion=stickers', { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         caja.dataset.listo = '1';
@@ -1105,7 +1105,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
   function popPlantillas(ancla) {
     if (!st.sel) return;
-    fetch('ajax.php?accion=plantillas', { credentials: 'same-origin' })
+    fetch('ajax.php?accion=plantillas', { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.ok) return;
@@ -1313,7 +1313,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   // Etiquetas de la conversación abierta
   function popEtiquetas(ancla) {
     if (!st.sel) return;
-    fetch('ajax.php?accion=etiquetas', { credentials: 'same-origin' })
+    fetch('ajax.php?accion=etiquetas', { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.ok) return;
@@ -1329,7 +1329,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
   // Filtro por etiqueta
   function popFiltroEtiquetas(ancla) {
-    fetch('ajax.php?accion=etiquetas', { credentials: 'same-origin' })
+    fetch('ajax.php?accion=etiquetas', { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.ok) return;
@@ -1369,7 +1369,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       clearTimeout(t);
       t = setTimeout(function () {
         fetch('ajax.php?accion=buscar_contacto&q=' + encodeURIComponent(inp.value.trim()),
-              { credentials: 'same-origin' })
+              { credentials: 'same-origin', cache: 'no-store' })
           .then(function (r) { return r.json(); })
           .then(function (j) {
             var box = d.querySelector('#ib-nres');

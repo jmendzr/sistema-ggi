@@ -11,7 +11,7 @@
  * el SW antiguo elimina automáticamente los cachés obsoletos en 'activate'.
  */
 
-const CACHE_VERSION  = 'ggi-v41';
+const CACHE_VERSION  = 'ggi-v42';
 const CACHE_STATIC   = CACHE_VERSION + '-static';
 const CACHE_PAGES    = CACHE_VERSION + '-pages';
 
@@ -82,7 +82,10 @@ self.addEventListener('fetch', event => {
   // Nunca cachear: endpoints AJAX, uploads, exports, auth, PDFs
   const skipPatterns = [
     '/ajax_', '/ajax/', 'ajax_',
-    '/modules/ajax', 'subir.php', 'exportar.php', 'pdf.php',
+    // 'ajax.php': endpoints JSON de estado vivo (inbox). Si el SW los cachea,
+    // la interfaz muestra datos viejos —p. ej. una conversación ya soltada
+    // sigue apareciendo tomada— y solo se corrige recargando la página.
+    '/modules/ajax', 'ajax.php', 'subir.php', 'exportar.php', 'pdf.php',
     '/modules/auth/', 'descargar', 'portal_', '/cron/',
     'login.php', 'logout.php',
   ];
