@@ -198,6 +198,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-var { background: rgba(255,255,255,.26); border-radius: 5px; padding: 0 5px;
             font-weight: 600; font-style: italic; }
 
+  /* Campo precargado por el sistema: se distingue de lo escrito a mano */
+  .ib-plt-f input.ib-auto { border-color: var(--s-ok); background: var(--s-ok-bg); }
+  .ib-auto-aviso { font-size: .76rem; color: var(--s-ok-tx); background: var(--s-ok-bg);
+                   padding: 8px 11px; border-radius: 8px; margin-bottom: 12px; line-height: 1.45; }
+
   .ib-plt-volver { background: none; border: none; padding: 0 0 12px; cursor: pointer;
                    font: inherit; font-size: .8rem; font-weight: 600; color: var(--ac); }
   .ib-plt-volver:hover { text-decoration: underline; }
@@ -1296,6 +1301,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       +   '<div class="ib-plt-prevlbl">Así lo recibirá el cliente</div>'
       +   '<div class="ib-plt-burbuja grande" id="ib-plt-prev"></div>'
       + '</div>'
+      + '<div class="ib-auto-aviso" id="plt-auto" style="display:none"></div>'
       + (campos || '<p class="ib-vacio-p">Esta plantilla no lleva datos variables.</p>')
       + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">'
       + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
@@ -1304,6 +1310,38 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     var volver = document.getElementById('plt-volver');
     if (volver) volver.addEventListener('click', function () { popPlantillas(); });
+
+    // Precargar lo que el sistema ya sabe de esta empresa. El ejecutivo no
+    // debería copiar a mano un dato que está en la ficha.
+    if (p.claves.length) {
+      fetch('ajax.php?accion=sugerir_params&id=' + st.sel
+            + '&claves=' + encodeURIComponent(p.claves.join(',')),
+            { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j.ok) return;
+          var auto = 0;
+          document.querySelectorAll('[data-pi]').forEach(function (inp) {
+            var k = p.claves[parseInt(inp.dataset.pi, 10)];
+            var v = j.valores[k];
+            if (v && !inp.value) {
+              inp.value = v;
+              inp.classList.add('ib-auto');
+              auto++;
+            }
+          });
+          if (auto) {
+            var lbl = document.getElementById('plt-auto');
+            if (lbl) {
+              lbl.textContent = auto + (auto === 1 ? ' dato se completó' : ' datos se completaron')
+                              + ' con la información de la empresa. Puedes editarlos.';
+              lbl.style.display = '';
+            }
+          }
+          preview();
+        })
+        .catch(function () {});
+    }
 
     // Vista previa en vivo: se ve el mensaje real antes de mandarlo
     function preview() {

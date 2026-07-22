@@ -253,6 +253,78 @@ if ($accion === 'plantillas') {
     exit;
 }
 
+/**
+ * Resuelve los datos de una plantilla a partir de la empresa de la conversación.
+ *
+ * Son las mismas claves que ya usan las notificaciones automáticas, así que el
+ * ejecutivo no debería tener que copiarlas a mano: el sistema las conoce.
+ * Devuelve solo lo que puede afirmar; lo demás queda vacío para completar.
+ */
+function gg_inbox_sugerir(PDO $pdo, ?int $clienteId, array $claves): array
+{
+    $out = array_fill_keys($claves, '');
+    if (!$clienteId) return $out;
+
+    $c = $pdo->prepare("SELECT razon_social FROM clientes WHERE id = ?");
+    $c->execute([$clienteId]);
+    $cli = $c->fetch(PDO::FETCH_ASSOC);
+    if (!$cli) return $out;
+
+    foreach ($claves as $k) {
+        if ($k === 'razon_social') {
+            $out[$k] = $cli['razon_social'] ?? '';
+
+        } elseif ($k === 'cot_numero') {
+            // La propuesta más reciente que no sea borrador: es de la que se habla
+            $q = $pdo->prepare("SELECT numero FROM cotizaciones
+                                 WHERE cliente_id = ? AND deleted_at IS NULL AND estado <> 'borrador'
+                                 ORDER BY id DESC LIMIT 1");
+            $q->execute([$clienteId]);
+            $out[$k] = (string) ($q->fetchColumn() ?: '');
+
+        } elseif ($k === 'normas') {
+            // Normas de sus propuestas aceptadas, sin repetir
+            // Se quita el año (ISO 9001:2015 → ISO 9001) igual que en los
+            // envíos automáticos: si no, el mismo dato se vería distinto según
+            // lo mandara el sistema o una persona.
+            $q = $pdo->prepare(
+                "SELECT DISTINCT SUBSTRING_INDEX(n.codigo, ':', 1) AS codigo
+                   FROM cotizaciones cot
+                   JOIN cotizacion_normas cn ON cn.cotizacion_id = cot.id
+                   JOIN normas_iso n         ON n.id = cn.norma_iso_id
+                  WHERE cot.cliente_id = ? AND cot.deleted_at IS NULL
+                    AND cot.estado = 'aceptada'
+                  ORDER BY codigo"
+            );
+            $q->execute([$clienteId]);
+            $lista = implode(', ', $q->fetchAll(PDO::FETCH_COLUMN) ?: []);
+
+            // gg_normas_compact deja "ISO 9001, 14001, …" como en los envíos
+            if (function_exists('gg_normas_compact')) $lista = gg_normas_compact($lista);
+            $out[$k] = $lista;
+        }
+    }
+
+    return $out;
+}
+
+// ══ Datos sugeridos para una plantilla ═══════════════════════════════════════
+if ($accion === 'sugerir_params') {
+    $id     = (int) ($_GET['id'] ?? 0);
+    $claves = array_filter(array_map('trim', explode(',', $_GET['claves'] ?? '')));
+    if (!$id || !$claves) { echo json_encode(['ok' => true, 'valores' => []]); exit; }
+
+    $q = $pdo->prepare("SELECT cliente_id FROM wa_conversaciones WHERE id = ?");
+    $q->execute([$id]);
+    $cli = $q->fetchColumn();
+
+    echo json_encode([
+        'ok'      => true,
+        'valores' => gg_inbox_sugerir($pdo, $cli ? (int) $cli : null, $claves),
+    ]);
+    exit;
+}
+
 // ══ Enviar plantilla (única vía fuera de la ventana de 24 h) ═════════════════
 if ($accion === 'enviar_plantilla') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
