@@ -5,6 +5,16 @@ require_once __DIR__ . '/../core/helpers.php';
 session_init();
 require_login();
 $user = auth_user();
+
+// ── Modo embed (iframe dentro de un modal) ────────────────────────────────
+// Se deduce aquí, de forma global, para TODAS las páginas. Antes cada página
+// tenía que declarar $_ggi_embed a mano antes del include; las que se
+// olvidaban (ver.php de empresas, propuestas y envíos) se abrían en el modal
+// con el sistema entero adentro: sidebar, cabecera y todo.
+// Si una página ya lo definió, se respeta.
+if (!isset($_ggi_embed)) {
+    $_ggi_embed = !empty($_GET['embed']) || !empty($_POST['_embed']);
+}
 // Contador de notificaciones no leídas para el header
 $_notif_count = 0;
 try {

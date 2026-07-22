@@ -183,6 +183,17 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-b-err { font-size: .7rem; margin-top: 5px; padding: 5px 8px; border-radius: 7px;
               background: var(--s-err-bg); color: var(--s-err-tx); white-space: normal; }
 
+  /* Formato de WhatsApp renderizado dentro de la burbuja */
+  .ib-b b { font-weight: 700; }
+  .ib-b i { font-style: italic; }
+  .ib-b s { text-decoration: line-through; }
+  .ib-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em;
+             background: rgba(127,127,127,.16); padding: 1px 5px; border-radius: 5px; }
+
+  /* Adjunto todavía no descargable */
+  .ib-adj { display: inline-flex; flex-direction: column; gap: 2px; font-weight: 600; }
+  .ib-adj small { font-weight: 400; opacity: .75; font-size: .7rem; }
+
   /* Barra inferior: refleja la ventana de 24h de Meta */
   .ib-foot { border-top: 1px solid var(--brd); padding: 12px 18px; background: var(--bg-surface); flex-shrink: 0; }
   .ib-warn { display: flex; align-items: center; gap: 11px; padding: 11px 14px; border-radius: 10px;
@@ -374,6 +385,16 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     for (var i = 0; i < x.length; i++) h = (h * 31 + x.charCodeAt(i)) % 8;
     return 'c' + h;
   }
+  // Formato de WhatsApp → HTML. Se aplica SOBRE texto ya escapado, así que
+  // no puede inyectar marcado: los < > del usuario ya son entidades.
+  function formato(txt) {
+    return esc(txt)
+      .replace(/```([\s\S]+?)```/g, '<code class="ib-mono">$1</code>')
+      .replace(/(^|[\s(])\*(\S(?:[^*\n]*\S)?)\*(?=[\s.,;:!?)]|$)/g, '$1<b>$2</b>')
+      .replace(/(^|[\s(])_(\S(?:[^_\n]*\S)?)_(?=[\s.,;:!?)]|$)/g, '$1<i>$2</i>')
+      .replace(/(^|[\s(])~(\S(?:[^~\n]*\S)?)~(?=[\s.,;:!?)]|$)/g, '$1<s>$2</s>');
+  }
+
   function d(ts) { return ts ? new Date(ts.replace(' ', 'T')) : null; }
   function relativo(ts) {
     var f = d(ts); if (!f) return '';
@@ -448,20 +469,37 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
 
   // ── Hilo ──
-  function abrir(id) {
+  // silencioso = refresco automático: no debe pisar lo que el ejecutivo está
+  // escribiendo, ni robarle el foco, ni saltarle el scroll si está leyendo
+  // mensajes anteriores.
+  function abrir(id, silencioso) {
     st.sel = id;
     $('#ib').classList.add('abierto');
+
+    var previo = null;
+    if (silencioso) {
+      var inp = $('#ib-texto'), cont = $('#ib-msgs');
+      previo = {
+        texto: inp ? inp.value : null,
+        foco:  inp ? (document.activeElement === inp) : false,
+        pos:   inp ? inp.selectionStart : 0,
+        abajo: cont ? (cont.scrollHeight - cont.scrollTop - cont.clientHeight < 60) : true,
+        scroll: cont ? cont.scrollTop : 0
+      };
+    }
+
     fetch('ajax.php?accion=hilo&id=' + id, { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.ok) return;
         st.etqActuales = j.etiquetas || [];
-        chat(j); ctx(j); lista(true);
+        chat(j, previo); ctx(j);
+        if (!silencioso) lista(true);
       })
       .catch(function () {});
   }
 
-  function chat(j) {
+  function chat(j, previo) {
     var c = j.conv, ultDia = '', cuerpo = '';
 
     j.mensajes.forEach(function (m) {
@@ -474,7 +512,22 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       var err = (m.estado === 'failed' && m.error)
         ? '<div class="ib-b-err">' + esc(m.error) + '</div>' : '';
 
-      cuerpo += '<div class="ib-b ' + cls + '">' + who + esc(m.texto || '') + err
+      // Adjuntos entrantes (imagen, sticker, gif, audio, documento): todavía
+      // no se descarga el archivo, así que se indica el tipo en vez de dejar
+      // la burbuja vacía y que parezca un mensaje perdido.
+      var cuerpoMsg;
+      if (m.texto) {
+        cuerpoMsg = formato(m.texto);
+      } else if (m.tipo && m.tipo !== 'text') {
+        var etq = { image: '📷 Imagen', sticker: '🩹 Sticker', video: '🎬 Video',
+                    audio: '🎤 Audio', document: '📄 Documento', location: '📍 Ubicación' };
+        cuerpoMsg = '<span class="ib-adj">' + (etq[m.tipo] || m.tipo)
+                  + '<small>Aún no se puede ver aquí</small></span>';
+      } else {
+        cuerpoMsg = '';
+      }
+
+      cuerpo += '<div class="ib-b ' + cls + '">' + who + cuerpoMsg + err
              +  '<div class="ib-b-foot">' + hhmm(m.cuando)
              +  (m.dir === 'out' ? ' <span>' + ticks(m.estado) + '</span>' : '') + '</div></div>';
     });
@@ -550,12 +603,22 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       + '<div class="ib-scroll ib-msgs" id="ib-msgs">' + cuerpo + '</div>'
       + '<div class="ib-foot">' + pie + '</div>';
 
-    var m = $('#ib-msgs'); if (m) m.scrollTop = m.scrollHeight;
+    var m = $('#ib-msgs');
+    // Si venía leyendo mensajes viejos, no lo arrastres al final
+    if (m) m.scrollTop = (previo && !previo.abajo) ? previo.scroll : m.scrollHeight;
 
     var t = $('#ib-texto');
-    if (t) { t.focus(); t.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
-    }); }
+    if (t) {
+      if (previo && previo.texto) {
+        t.value = previo.texto;
+        if (previo.foco) { t.focus(); t.setSelectionRange(previo.pos, previo.pos); }
+      } else if (!previo) {
+        t.focus();
+      }
+      t.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
+      });
+    }
   }
 
   // ── Formato y emojis ───────────────────────────────────────────────────────
@@ -928,8 +991,15 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     clearTimeout(t); t = setTimeout(function () { st.q = q.value.trim(); lista(); }, 300); }); }
 
   // Polling: el monolito no tiene websockets. Pausa con la pestaña oculta.
-  setInterval(function () { if (!document.hidden) lista(true); }, 8000);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) lista(true); });
+  // Refresca TAMBIÉN el hilo abierto: antes había que recargar la página para
+  // ver los mensajes nuevos de la conversación que estabas atendiendo.
+  function refrescar() {
+    if (document.hidden) return;
+    lista(true);
+    if (st.sel) abrir(st.sel, true);
+  }
+  setInterval(refrescar, 8000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) refrescar(); });
 
   // Restaurar paneles colapsados de la sesión anterior
   try {
