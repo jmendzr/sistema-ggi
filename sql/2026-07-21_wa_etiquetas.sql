@@ -49,3 +49,22 @@ ALTER TABLE whatsapp_campanas ADD COLUMN finalizada_at DATETIME    NULL AFTER in
 -- Categoria real de la plantilla en Meta (UTILITY/MARKETING/AUTHENTICATION).
 -- No es cosmetica: Marketing cuesta mas por mensaje y exige consentimiento.
 ALTER TABLE whatsapp_templates ADD COLUMN categoria VARCHAR(20) NULL AFTER estado_meta;
+
+-- Registro propio de numeros: el sistema nacio atado a un solo
+-- META_WA_PHONE_NUMBER_ID del .env, pero la empresa puede tener varios
+-- repartidos en mas de una cuenta de WhatsApp Business.
+CREATE TABLE IF NOT EXISTS wa_numeros (
+  id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  phone_number_id VARCHAR(32)  NOT NULL,
+  waba_id         VARCHAR(32)  NULL,
+  etiqueta        VARCHAR(80)  NULL,
+  telefono        VARCHAR(30)  NULL,
+  verified_name   VARCHAR(120) NULL,
+  calidad         VARCHAR(20)  NULL,
+  estado          VARCHAR(30)  NULL,
+  activo          TINYINT(1)   NOT NULL DEFAULT 1,
+  verificado_at   DATETIME     NULL,
+  created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_wa_num (phone_number_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

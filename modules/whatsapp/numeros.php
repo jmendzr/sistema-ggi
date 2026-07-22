@@ -60,74 +60,137 @@ $calidad = [
   .nm-pasos { counter-reset: p; margin: 10px 0 0; padding: 0; list-style: none; }
   .nm-pasos li { counter-increment: p; position: relative; padding: 7px 0 7px 30px; font-size: .83rem;
                  color: var(--tx2); line-height: 1.5; }
+  .pl-f { display: block; margin-bottom: 12px; }
+  .pl-f span { display: block; font-size: .74rem; font-weight: 600; color: var(--tx2); margin-bottom: 4px; }
+  .pl-f input { width: 100%; padding: 9px 12px; font: inherit; font-size: .85rem;
+                border: 1px solid var(--brd); border-radius: 9px;
+                background: var(--bg-input); color: var(--tx); }
+  .pl-hint { font-size: .72rem; color: var(--tx3); margin-top: 4px; }
   .nm-pasos li::before { content: counter(p); position: absolute; left: 0; top: 7px;
                          width: 20px; height: 20px; border-radius: 50%; background: var(--ac-soft);
                          color: var(--ac); font-size: .68rem; font-weight: 700;
                          display: flex; align-items: center; justify-content: center; }
 </style>
 
-<div class="page-header" style="margin-bottom:16px">
-  <h1>Números de WhatsApp</h1>
-  <p>Números conectados a tu cuenta de Meta y su estado real</p>
+<div class="page-header pl-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+  <div>
+    <h1>Números de WhatsApp</h1>
+    <p>Números que el sistema puede usar, con su estado real en Meta</p>
+  </div>
+  <button type="button" class="btn btn-primary" id="nm-add">Agregar número</button>
 </div>
 
-<?php if ($error): ?>
-  <div class="nm-aviso mal"><?= sanitize($error) ?></div>
-<?php else: ?>
+<div id="nm-lista"><div class="nm-aviso info">Consultando Meta…</div></div>
 
-  <?php foreach ($numeros as $n):
-    $q  = $calidad[$n['quality_rating'] ?? 'UNKNOWN'] ?? $calidad['UNKNOWN'];
-    $es = ($n['id'] ?? '') === $activo;
-    $conectado = ($n['status'] ?? '') === 'CONNECTED';
-  ?>
-    <div class="nm-card <?= $es ? 'activo' : '' ?>">
-      <div class="nm-r1">
-        <span class="nm-tel"><?= sanitize($n['display_phone_number'] ?? '—') ?></span>
-        <?php if ($es): ?>
-          <span class="nm-chip" style="background:var(--ac-soft);color:var(--ac)">En uso por el sistema</span>
-        <?php endif; ?>
-        <span class="nm-chip" style="background:var(--<?= $conectado ? 's-ok' : 's-err' ?>-bg);
-              color:var(--<?= $conectado ? 's-ok' : 's-err' ?>-tx)">
-          <?= $conectado ? 'Conectado' : sanitize($n['status'] ?? 'Sin registrar') ?>
-        </span>
-      </div>
-      <div class="nm-nom"><?= sanitize($n['verified_name'] ?? '') ?></div>
+<div class="nm-aviso info" style="margin-top:16px">
+  <strong>¿Dónde encuentro el identificador?</strong>
+  <p style="margin:6px 0 0">
+    En <strong>Meta → WhatsApp → Configuración de la API</strong>, en el desplegable de números:
+    cada uno muestra su <em>Identificador del número de teléfono</em>. Es un número largo,
+    no el teléfono.
+  </p>
+  <p style="margin:6px 0 0">
+    Si un número pertenece a otra cuenta de WhatsApp Business, además hay que asignar esa
+    cuenta al usuario del sistema en <strong>Configuración del negocio → Usuarios del sistema →
+    sistemaggi-api → Agregar activos</strong>. Sin eso el token no puede leerlo.
+  </p>
+</div>
 
-      <div class="nm-datos">
-        <div class="nm-d"><b>Calidad</b>
-          <span class="nm-chip" style="background:var(--<?= $q[1] ?>-bg);color:var(--<?= $q[1] ?>-tx)"><?= $q[0] ?></span>
-        </div>
-        <div class="nm-d"><b>Identificador</b><?= sanitize($n['id'] ?? '') ?></div>
-        <div class="nm-d"><b>Conversaciones</b><?= (int) ($uso[$n['id'] ?? ''] ?? 0) ?></div>
-        <div class="nm-d"><b>Nombre</b><?= sanitize($n['name_status'] ?? '—') ?></div>
-        <div class="nm-d"><b>Capacidad</b><?= sanitize($n['throughput']['level'] ?? '—') ?></div>
-      </div>
+<script>
+(function () {
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
 
-      <?php if (!$conectado): ?>
-        <div class="nm-aviso mal" style="margin:12px 0 0">
-          Este número está en la cuenta pero <strong>no registrado en Cloud API</strong>:
-          no puede enviar ni recibir. Es el paso que se suele olvidar.
-        </div>
-      <?php endif; ?>
-    </div>
-  <?php endforeach; ?>
+  var CAL = { GREEN: ['Buena','s-ok'], YELLOW: ['Media','s-warn'],
+              RED: ['Baja','s-err'], UNKNOWN: ['Sin datos','s-neutral'] };
 
-  <div class="nm-aviso info">
-    <strong>Agregar otro número</strong>
-    <p style="margin:6px 0 0">
-      La API oficial de Meta <strong>no permite conectar por código QR</strong>: eso pertenece a
-      WhatsApp Web y a herramientas no oficiales. Un número solo puede estar en una cuenta a la vez,
-      así que si hoy está en otra plataforma primero hay que liberarlo ahí.
-    </p>
-    <ol class="nm-pasos">
-      <li>En <strong>Meta → WhatsApp → Configuración de la API</strong>, elegir <em>Agregar número de teléfono</em>.</li>
-      <li>Verificarlo por SMS o llamada.</li>
-      <li><strong>Registrarlo en Cloud API</strong> con un PIN de 6 dígitos. Sin este paso el número
-          aparece en la lista pero no envía nada.</li>
-      <li>Volver acá y recargar: el número aparecerá como <em>Conectado</em>.</li>
-    </ol>
-  </div>
+  function cargar() {
+    fetch('ajax_numeros.php?accion=lista', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) return;
+        document.getElementById('nm-lista').innerHTML = j.items.map(function (n) {
+          var q  = CAL[n.calidad || 'UNKNOWN'] || CAL.UNKNOWN;
+          var ok = n.estado === 'CONNECTED';
+          var sinAcceso = n.estado === 'SIN_ACCESO';
+          var esPrincipal = n.phone_number_id === j.principal;
 
-<?php endif; ?>
+          return '<div class="nm-card ' + (esPrincipal ? 'activo' : '') + '">'
+            + '<div class="nm-r1">'
+            +   '<span class="nm-tel">' + esc(n.telefono || n.etiqueta || n.phone_number_id) + '</span>'
+            +   (esPrincipal ? '<span class="nm-chip" style="background:var(--ac-soft);color:var(--ac)">Principal</span>' : '')
+            +   '<span class="nm-chip" style="background:var(--' + (sinAcceso ? 's-warn' : (ok ? 's-ok' : 's-err')) + '-bg);'
+            +     'color:var(--' + (sinAcceso ? 's-warn' : (ok ? 's-ok' : 's-err')) + '-tx)">'
+            +     (sinAcceso ? 'Sin acceso' : (ok ? 'Conectado' : esc(n.estado || 'Sin registrar'))) + '</span>'
+            + '</div>'
+            + '<div class="nm-nom">' + esc(n.verified_name || n.etiqueta || '') + '</div>'
+            + '<div class="nm-datos">'
+            +   '<div class="nm-d"><b>Calidad</b><span class="nm-chip" style="background:var(--' + q[1] + '-bg);color:var(--' + q[1] + '-tx)">' + q[0] + '</span></div>'
+            +   '<div class="nm-d"><b>Identificador</b>' + esc(n.phone_number_id) + '</div>'
+            +   (n.waba_id ? '<div class="nm-d"><b>Cuenta (WABA)</b>' + esc(n.waba_id) + '</div>' : '')
+            +   '<div class="nm-d"><b>Conversaciones</b>' + n.conversaciones + '</div>'
+            + '</div>'
+            + (sinAcceso
+                ? '<div class="nm-aviso mal" style="margin:12px 0 0">El token del sistema no puede leer este número. '
+                  + 'Asigna su cuenta de WhatsApp al usuario <b>sistemaggi-api</b> en Configuración del negocio.</div>'
+                : (ok ? '' : '<div class="nm-aviso mal" style="margin:12px 0 0">Está en la cuenta pero '
+                  + '<b>no registrado en Cloud API</b>: no puede enviar ni recibir.</div>'))
+            + (esPrincipal ? '' : '<div style="margin-top:10px"><button type="button" class="btn btn-ghost btn-sm" '
+                + 'data-del="' + n.id + '">Quitar del registro</button></div>')
+            + '</div>';
+        }).join('') || '<div class="nm-aviso info">Sin números registrados.</div>';
+      });
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('#nm-add')) {
+      mantOpen('Agregar número',
+          '<label class="pl-f"><span>Identificador del número de teléfono</span>'
+        + '<input type="text" id="nm-pid" inputmode="numeric" placeholder="Ej.: 1185249991340361">'
+        + '<div class="pl-hint">Lo da Meta en Configuración de la API. No es el teléfono.</div></label>'
+        + '<label class="pl-f"><span>Identificador de la cuenta (WABA) — opcional</span>'
+        + '<input type="text" id="nm-waba" inputmode="numeric" placeholder="Ej.: 856664760391069"></label>'
+        + '<label class="pl-f"><span>Etiqueta interna — opcional</span>'
+        + '<input type="text" id="nm-lbl" placeholder="Ej.: Ventas Michael"></label>'
+        + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
+        + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
+        + '<button type="button" class="ggi-btn-confirm-action" id="nm-ok">Verificar y agregar</button></div>');
+
+      document.getElementById('nm-ok').addEventListener('click', function () {
+        var b = this; b.disabled = true; b.textContent = 'Verificando…';
+        ggiPost('ajax_numeros.php', {
+          accion: 'agregar',
+          phone_number_id: document.getElementById('nm-pid').value.trim(),
+          waba_id: document.getElementById('nm-waba').value.trim(),
+          etiqueta: document.getElementById('nm-lbl').value.trim()
+        }).then(function (j) {
+          b.disabled = false; b.textContent = 'Verificar y agregar';
+          if (!j.ok) return;
+          ggiModalClose();
+          if (window.showToast) showToast('Número ' + j.numero + ' agregado (' + j.estado + ')', 'ok');
+          cargar();
+        });
+      });
+      return;
+    }
+
+    var d = e.target.closest('[data-del]');
+    if (d) {
+      ggiConfirm('Quitar del registro', 'El número dejará de estar disponible en el sistema. '
+        + 'No se elimina de Meta ni se borran las conversaciones.', { type: 'warning', confirmText: 'Quitar' })
+        .then(function (si) {
+          if (!si) return;
+          ggiPost('ajax_numeros.php', { accion: 'eliminar', id: d.dataset.del })
+            .then(function (j) { if (j.ok) cargar(); });
+        });
+    }
+  });
+
+  cargar();
+})();
+</script>
 
 <?php require_once __DIR__ . '/../../templates/layout_end.php'; ?>
