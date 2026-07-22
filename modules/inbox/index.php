@@ -284,9 +284,22 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-ctx-t svg { width: 13px; height: 13px; }
   .ib-ctx-v { font-size: .85rem; font-weight: 600; color: var(--tx); }
   .ib-ctx-s2 { font-size: .74rem; color: var(--tx3); margin-top: 2px; }
-  .ib-ctx-a { font-size: .8rem; color: var(--ac); text-decoration: none;
-              display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; }
-  .ib-ctx-a:hover { text-decoration: underline; }
+  /* Filas del panel: se comportan como elementos de lista, no como enlaces
+     sueltos en azul. El azul se reserva para el hover, que es cuando importa. */
+  .ib-ctx-a {
+    display: flex; align-items: center; gap: 7px; width: calc(100% + 16px);
+    margin: 0 -8px; padding: 7px 8px; border-radius: 8px;
+    font-size: .81rem; color: var(--tx); text-align: left;
+    background: transparent; border: none; cursor: pointer; font-family: inherit;
+    transition: background .13s, color .13s;
+  }
+  .ib-ctx-a:hover { background: var(--bg-hover); color: var(--ac); }
+  .ib-ctx-a + .ib-ctx-a { margin-top: 1px; }
+  .ib-ctx-nom { flex: 1; min-width: 0; font-weight: 600;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ib-ctx-est { font-size: .68rem; color: var(--tx3); text-transform: capitalize; flex-shrink: 0; }
+  .ib-ctx-ico { width: 12px; height: 12px; flex-shrink: 0; color: var(--tx3); opacity: 0; transition: opacity .13s; }
+  .ib-ctx-a:hover .ib-ctx-ico { opacity: 1; color: var(--ac); }
 
   .ib-empty { padding: 56px 28px; text-align: center; color: var(--tx2); font-size: .85rem; }
   .ib-empty svg { width: 40px; height: 40px; color: var(--tx3); margin: 0 auto 12px; display: block; }
@@ -348,9 +361,6 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
   .ib-linkico { border: none; background: transparent; padding: 0; cursor: pointer;
                 color: var(--ac); display: inline-flex; align-items: center; }
-  /* .ib-ctx-a pasó de <a> a <button>: hay que reponer lo que el botón no hereda */
-  .ib-ctx-a { width: 100%; border: none; background: transparent; cursor: pointer;
-              font: inherit; align-items: center; }
 
   /* Paneles colapsables.
      OJO: un hijo con display:none sale del flujo del grid y los siguientes se
@@ -1220,24 +1230,32 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     // Todo se abre en modal (ggiOpenForm): salir del inbox perdería el hilo
     // que el ejecutivo está atendiendo.
+    // Ícono de "abrir" pegado al texto, no empujado al borde: con
+    // space-between quedaba una flecha suelta al final de la fila.
+    var iAbrir = '<svg class="ib-ctx-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+               + '<path stroke-linecap="round" stroke-linejoin="round" '
+               + 'd="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>';
+
     h += sec('Empresa', iEmp, c.cliente_id
       ? '<button type="button" class="ib-ctx-a" data-ver="../clientes/ver.php?id=' + c.cliente_id + '" '
-        + 'data-titulo="' + esc(c.titulo) + '"><span>' + esc(c.titulo) + '</span><span>↗</span></button>'
+        + 'data-titulo="' + esc(c.titulo) + '">'
+        + '<span class="ib-ctx-nom">' + esc(c.titulo) + '</span>' + iAbrir + '</button>'
         + (c.ruc ? '<div class="ib-ctx-s2">RUC ' + esc(c.ruc) + '</div>' : '')
       : '<div class="ib-ctx-s2">Número no vinculado a ninguna empresa</div>');
 
     if (x.propuestas.length) {
       h += sec('Propuestas', '', x.propuestas.map(function (p) {
         return '<button type="button" class="ib-ctx-a" data-ver="../cotizaciones/ver.php?id=' + p.id + '" '
-             + 'data-titulo="Propuesta ' + esc(p.numero) + '"><span>' + esc(p.numero) + '</span>'
-             + '<span style="color:var(--tx3)">' + esc(p.estado) + '</span></button>';
+             + 'data-titulo="Propuesta ' + esc(p.numero) + '">'
+             + '<span class="ib-ctx-nom">' + esc(p.numero) + '</span>'
+             + '<span class="ib-ctx-est">' + esc(p.estado) + '</span>' + iAbrir + '</button>';
       }).join(''));
     }
     if (x.envios.length) {
       h += sec('Envíos', '', x.envios.map(function (e) {
         return '<button type="button" class="ib-ctx-a" data-ver="../envios/ver.php?id=' + e.id + '" '
-             + 'data-titulo="Envío ' + esc(e.codigo_envio || '') + '"><span>' + esc(e.codigo_envio || '—') + '</span>'
-             + '<span>↗</span></button>';
+             + 'data-titulo="Envío ' + esc(e.codigo_envio || '') + '">'
+             + '<span class="ib-ctx-nom">' + esc(e.codigo_envio || '—') + '</span>' + iAbrir + '</button>';
       }).join(''));
     }
 
