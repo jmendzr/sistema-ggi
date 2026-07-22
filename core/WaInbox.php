@@ -173,6 +173,42 @@ class WaInbox
     }
 
     /**
+     * Números que un usuario puede ver en el inbox.
+     *
+     * Regla: un número SIN lista de acceso lo ve todo el mundo — así el
+     * comportamiento no cambia hasta que alguien decida restringir. Con lista,
+     * solo quienes estén en ella. Gerencia ve todo.
+     *
+     * @return array|null  phone_number_id permitidos, o null = sin restricción.
+     */
+    public static function numerosVisibles(\PDO $pdo, int $usuarioId, bool $esJefe): ?array
+    {
+        if ($esJefe) return null;
+
+        try {
+            $q = $pdo->prepare(
+                "SELECT n.phone_number_id
+                   FROM wa_numeros n
+                   LEFT JOIN wa_numero_usuarios nu ON nu.numero_id = n.id
+                  WHERE n.activo = 1
+                  GROUP BY n.id, n.phone_number_id
+                 HAVING COUNT(nu.usuario_id) = 0
+                     OR SUM(nu.usuario_id = ?) > 0"
+            );
+            $q->execute([$usuarioId]);
+            $ids = $q->fetchAll(\PDO::FETCH_COLUMN) ?: [];
+        } catch (\Throwable $e) {
+            return null;   // ante un fallo, no ocultar nada por accidente
+        }
+
+        // Sin ningún número registrado todavía: no restringir
+        $total = (int) $pdo->query("SELECT COUNT(*) FROM wa_numeros WHERE activo = 1")->fetchColumn();
+        if ($total === 0) return null;
+
+        return $ids;
+    }
+
+    /**
      * Reasigna una conversación a otro usuario. Solo gerencia.
      *
      * Se pisa la asignación actual a propósito: es la salida cuando alguien

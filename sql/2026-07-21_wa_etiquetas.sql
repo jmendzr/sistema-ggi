@@ -68,3 +68,13 @@ CREATE TABLE IF NOT EXISTS wa_numeros (
   PRIMARY KEY (id),
   UNIQUE KEY uq_wa_num (phone_number_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Quien ve cada bandeja. Sin filas para un numero, lo ven TODOS: asi el
+-- comportamiento no cambia hasta que alguien decida restringir.
+CREATE TABLE IF NOT EXISTS wa_numero_usuarios (
+  numero_id  INT UNSIGNED NOT NULL,
+  usuario_id INT UNSIGNED NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (numero_id, usuario_id),
+  KEY idx_usr (usuario_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

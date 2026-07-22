@@ -138,8 +138,13 @@ $calidad = [
                   + 'Asigna su cuenta de WhatsApp al usuario <b>sistemaggi-api</b> en Configuración del negocio.</div>'
                 : (ok ? '' : '<div class="nm-aviso mal" style="margin:12px 0 0">Está en la cuenta pero '
                   + '<b>no registrado en Cloud API</b>: no puede enviar ni recibir.</div>'))
-            + (esPrincipal ? '' : '<div style="margin-top:10px"><button type="button" class="btn btn-ghost btn-sm" '
-                + 'data-del="' + n.id + '">Quitar del registro</button></div>')
+            + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+            +   '<button type="button" class="btn btn-ghost btn-sm" data-acc="' + n.id + '">'
+            +     'Quién la ve: ' + (n.con_acceso ? n.con_acceso + ' ejecutivo' + (n.con_acceso === 1 ? '' : 's') : 'todos')
+            +   '</button>'
+            +   (esPrincipal ? '' : '<button type="button" class="btn btn-ghost btn-sm" '
+                + 'data-del="' + n.id + '">Quitar del registro</button>')
+            + '</div>'
             + '</div>';
         }).join('') || '<div class="nm-aviso info">Sin números registrados.</div>';
       });
@@ -174,6 +179,45 @@ $calidad = [
           cargar();
         });
       });
+      return;
+    }
+
+    var ac = e.target.closest('[data-acc]');
+    if (ac) {
+      var nid = ac.dataset.acc;
+      fetch('ajax_numeros.php?accion=accesos&id=' + nid, { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j.ok) return;
+          mantOpen('Quién ve esta bandeja',
+              '<p class="pl-hint" style="margin-bottom:12px">Sin nadie marcado, la bandeja la ven '
+            + '<b>todos</b> los ejecutivos. Al marcar a alguien, solo esas personas la verán. '
+            + 'Gerencia siempre ve todo.</p>'
+            + j.usuarios.map(function (u) {
+                var on = j.con_acceso.indexOf(parseInt(u.id, 10)) !== -1;
+                return '<label style="display:flex;gap:9px;align-items:center;padding:7px 0;font-size:.85rem">'
+                     + '<input type="checkbox" data-u="' + u.id + '"' + (on ? ' checked' : '') + '> '
+                     + esc(u.nombre) + (u.rol !== 'ejecutivo_ventas' ? ' <span style="color:var(--tx3)">(gerencia)</span>' : '')
+                     + '</label>';
+              }).join('')
+            + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
+            + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
+            + '<button type="button" class="ggi-btn-confirm-action" id="acc-ok">Guardar</button></div>');
+
+          document.getElementById('acc-ok').addEventListener('click', function () {
+            var datos = { accion: 'guardar_accesos', id: nid };
+            var i = 0;
+            document.querySelectorAll('[data-u]').forEach(function (c) {
+              if (c.checked) datos['usuarios[' + (i++) + ']'] = c.dataset.u;
+            });
+            ggiPost('ajax_numeros.php', datos).then(function (r) {
+              if (!r.ok) return;
+              ggiModalClose();
+              if (window.showToast) showToast(r.restringido ? 'Acceso restringido' : 'La bandeja la ven todos', 'ok');
+              cargar();
+            });
+          });
+        });
       return;
     }
 

@@ -69,7 +69,14 @@ if ($accion === 'lista') {
     foreach ($pdo->query("SELECT phone_number_id, COUNT(*) n FROM wa_conversaciones GROUP BY phone_number_id") as $r) {
         $uso[$r['phone_number_id']] = (int) $r['n'];
     }
-    foreach ($filas as &$f) $f['conversaciones'] = $uso[$f['phone_number_id']] ?? 0;
+    $acc = [];
+    foreach ($pdo->query("SELECT numero_id, COUNT(*) n FROM wa_numero_usuarios GROUP BY numero_id") as $r) {
+        $acc[(int) $r['numero_id']] = (int) $r['n'];
+    }
+    foreach ($filas as &$f) {
+        $f['conversaciones'] = $uso[$f['phone_number_id']] ?? 0;
+        $f['con_acceso']     = $acc[(int) $f['id']] ?? 0;   // 0 = la ven todos
+    }
     unset($f);
 
     salir(['ok' => true, 'items' => $filas, 'principal' => META_WA_PHONE_NUMBER_ID]);
@@ -112,6 +119,42 @@ if ($accion === 'agregar') {
 
     salir(['ok' => true, 'numero' => $m['display_phone_number'] ?? $phoneId,
            'estado' => $m['status'] ?? '']);
+}
+
+// ══ Quién ve cada bandeja ════════════════════════════════════════════════════
+if ($accion === 'accesos') {
+    $id = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);
+    if (!$id) salir(['ok' => false, 'msg' => 'ID inválido']);
+
+    $u = $pdo->query(
+        "SELECT id, TRIM(CONCAT(nombre,' ',apellido)) nombre, rol
+           FROM usuarios
+          WHERE activo = 1 AND rol IN ('ejecutivo_ventas','gerente_operaciones','gerente_general')
+          ORDER BY rol = 'ejecutivo_ventas' DESC, nombre"
+    )->fetchAll(PDO::FETCH_ASSOC);
+
+    $q = $pdo->prepare("SELECT usuario_id FROM wa_numero_usuarios WHERE numero_id = ?");
+    $q->execute([$id]);
+
+    salir(['ok' => true, 'usuarios' => $u,
+           'con_acceso' => array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN) ?: [])]);
+}
+
+if ($accion === 'guardar_accesos') {
+    $id   = (int) ($_POST['id'] ?? 0);
+    $ids  = array_map('intval', (array) ($_POST['usuarios'] ?? []));
+    if (!$id) salir(['ok' => false, 'msg' => 'ID inválido']);
+
+    // Lista vacía = la bandeja la ve todo el mundo. Es lo que había antes de
+    // existir los permisos, así que no restringe por accidente.
+    $pdo->prepare("DELETE FROM wa_numero_usuarios WHERE numero_id = ?")->execute([$id]);
+
+    if ($ids) {
+        $ins = $pdo->prepare("INSERT IGNORE INTO wa_numero_usuarios (numero_id, usuario_id) VALUES (?, ?)");
+        foreach ($ids as $u) if ($u > 0) $ins->execute([$id, $u]);
+    }
+
+    salir(['ok' => true, 'restringido' => (bool) $ids]);
 }
 
 // ══ Activar / desactivar ═════════════════════════════════════════════════════

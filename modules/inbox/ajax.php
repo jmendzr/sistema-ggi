@@ -657,6 +657,14 @@ if ($accion === 'lista') {
     $where = ["c.estado <> 'resuelta'"];
     $args  = [];
 
+    // Visibilidad por número: un ejecutivo solo ve las bandejas habilitadas
+    $vis = WaInbox::numerosVisibles($pdo, $yo, $esJefe);
+    if ($vis !== null) {
+        if (!$vis) { echo json_encode(['ok' => true, 'items' => [], 'conteos' => []]); exit; }
+        $where[] = 'c.phone_number_id IN (' . implode(',', array_fill(0, count($vis), '?')) . ')';
+        $args    = array_merge($args, $vis);
+    }
+
     if ($filtro === 'mias')            { $where[] = 'c.asignado_a = ?'; $args[] = $yo; }
     elseif ($filtro === 'sin_asignar') { $where[] = 'c.asignado_a IS NULL'; }
     // "Sin persona": el número no está vinculado a ninguna empresa del sistema
@@ -723,12 +731,18 @@ if ($accion === 'lista') {
         ];
     }
 
+    $wCont = "estado <> 'resuelta'";
+    $aCont = [$yo];
+    if ($vis !== null) {
+        $wCont .= ' AND phone_number_id IN (' . implode(',', array_fill(0, count($vis), '?')) . ')';
+        $aCont  = array_merge($aCont, $vis);
+    }
     $c = $pdo->prepare(
         "SELECT COUNT(*) todas, SUM(asignado_a = ?) mias,
                 SUM(asignado_a IS NULL) sin_asignar, SUM(cliente_id IS NULL) sin_persona
-           FROM wa_conversaciones WHERE estado <> 'resuelta'"
+           FROM wa_conversaciones WHERE $wCont"
     );
-    $c->execute([$yo]);
+    $c->execute($aCont);
     $cn = $c->fetch(PDO::FETCH_ASSOC) ?: [];
 
     echo json_encode(['ok' => true, 'items' => $items, 'conteos' => [
@@ -756,6 +770,13 @@ if ($accion === 'hilo') {
     $st->execute([$id]);
     $conv = $st->fetch(PDO::FETCH_ASSOC);
     if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'No encontrada']); exit; }
+
+    // El filtro también acá: ocultar en la lista pero permitir abrir por id
+    // dejaría la restricción como algo meramente visual.
+    $vis = WaInbox::numerosVisibles($pdo, $yo, $esJefe);
+    if ($vis !== null && !in_array($conv['phone_number_id'], $vis, true)) {
+        echo json_encode(['ok' => false, 'msg' => 'No tienes acceso a esa bandeja']); exit;
+    }
 
     $ms = $pdo->prepare(
         "SELECT m.id, m.direccion, m.tipo, m.texto, m.template_name, m.estado, m.error_msg,
