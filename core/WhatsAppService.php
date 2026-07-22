@@ -270,6 +270,105 @@ class WhatsAppService
         return ['contenido' => $bin, 'mime' => $meta['mime_type'] ?? 'application/octet-stream'];
     }
 
+    // ══ Gestión de plantillas en Meta ═════════════════════════════════════════
+
+    /** WABA sobre la que se administran las plantillas. */
+    private static function wabaId(): string
+    {
+        return defined('META_WA_WABA_ID') ? META_WA_WABA_ID : '';
+    }
+
+    /**
+     * Llamada genérica a Graph para la gestión de plantillas.
+     * Devuelve [httpCode, arrayDecodificado].
+     */
+    private static function graph(string $path, string $metodo = 'GET', array $datos = []): array
+    {
+        $url = self::apiBase() . '/' . ltrim($path, '/');
+        $ch  = curl_init();
+
+        $opts = [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 25,
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json', self::authHeader()],
+            CURLOPT_CUSTOMREQUEST  => $metodo,
+        ];
+        if ($datos && $metodo !== 'GET') {
+            $opts[CURLOPT_POSTFIELDS] = json_encode($datos, JSON_UNESCAPED_UNICODE);
+        }
+        if ($datos && $metodo === 'GET') {
+            $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($datos);
+        }
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt_array($ch, $opts);
+
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err  = curl_error($ch);
+        curl_close($ch);
+
+        if ($err) { self::$lastError = 'Error de red: ' . $err; return [0, []]; }
+
+        $d = json_decode((string) $res, true) ?? [];
+        if ($code < 200 || $code >= 300) {
+            $e = $d['error'] ?? [];
+            self::$lastError = mb_substr(
+                'HTTP ' . $code . ': ' . ($e['error_user_msg'] ?? $e['message'] ?? (string) $res), 0, 400
+            );
+        }
+
+        return [$code, $d];
+    }
+
+    /** Lista TODAS las plantillas de la WABA, con su estado y componentes. */
+    public static function listarPlantillas(): ?array
+    {
+        self::$lastError = null;
+        if (!self::wabaId()) { self::$lastError = 'Falta META_WA_WABA_ID'; return null; }
+
+        [$c, $d] = self::graph(self::wabaId() . '/message_templates', 'GET', [
+            'limit'  => 200,
+            'fields' => 'name,language,status,category,components,rejected_reason,quality_score',
+        ]);
+
+        return ($c === 200) ? ($d['data'] ?? []) : null;
+    }
+
+    /**
+     * Crea una plantilla en Meta y la deja EN REVISIÓN.
+     *
+     * Meta exige ejemplos para cada variable: sin ellos rechaza la creación.
+     * La categoría es lo que más rechazos provoca — un texto promocional
+     * enviado como UTILITY se rechaza con INCORRECT_CATEGORY.
+     *
+     * @param array $comp Componentes ya armados (BODY obligatorio).
+     */
+    public static function crearPlantilla(string $nombre, string $categoria, string $idioma, array $comp): ?array
+    {
+        self::$lastError = null;
+        if (!self::wabaId()) { self::$lastError = 'Falta META_WA_WABA_ID'; return null; }
+
+        [$c, $d] = self::graph(self::wabaId() . '/message_templates', 'POST', [
+            'name'       => $nombre,
+            'category'   => $categoria,
+            'language'   => $idioma,
+            'components' => $comp,
+        ]);
+
+        return ($c >= 200 && $c < 300) ? $d : null;
+    }
+
+    /** Elimina una plantilla de Meta por nombre (borra todos sus idiomas). */
+    public static function eliminarPlantilla(string $nombre): bool
+    {
+        self::$lastError = null;
+        if (!self::wabaId()) { self::$lastError = 'Falta META_WA_WABA_ID'; return false; }
+
+        [$c, $d] = self::graph(self::wabaId() . '/message_templates', 'DELETE', ['name' => $nombre]);
+
+        return ($c >= 200 && $c < 300) && !empty($d['success']);
+    }
+
     /**
      * Convierte un GIF animado a WebP animado para poder enviarlo como sticker.
      *
