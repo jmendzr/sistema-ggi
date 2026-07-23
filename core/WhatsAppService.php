@@ -639,7 +639,7 @@ class WhatsAppService
      * @return string|null  message_id de WhatsApp, o null si falló
      *                      (el motivo queda en self::lastError()).
      */
-    public static function sendText(string $to, string $texto): ?string
+    public static function sendText(string $to, string $texto, ?string $responderA = null): ?string
     {
         self::$lastError = null;
 
@@ -667,6 +667,9 @@ class WhatsAppService
             // que descuadran el hilo del inbox.
             'text'              => ['preview_url' => false, 'body' => $texto],
         ];
+
+        // Responder citando un mensaje anterior (el cliente ve la cita)
+        if ($responderA) $payload['context'] = ['message_id' => $responderA];
 
         $ch = curl_init(self::apiBase() . "/{$phoneId}/messages");
         curl_setopt_array($ch, [

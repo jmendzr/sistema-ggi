@@ -786,13 +786,28 @@ if ($accion === 'enviar') {
         exit;
     }
 
-    $waId = WhatsAppService::sendText($conv['telefono'], $texto);
+    // Responder citando otro mensaje: se valida que sea de esta conversación
+    $respWaId = null;
+    $respMsg  = (int) ($_POST['responder_a'] ?? 0);
+    if ($respMsg) {
+        $rq = $pdo->prepare("SELECT wa_message_id FROM wa_mensajes WHERE id = ? AND conversacion_id = ?");
+        $rq->execute([$respMsg, $id]);
+        $respWaId = $rq->fetchColumn() ?: null;
+    }
 
-    WaInbox::registrarSaliente(
+    $waId = WhatsAppService::sendText($conv['telefono'], $texto, $respWaId);
+
+    $nuevoId = WaInbox::registrarSaliente(
         $pdo, $conv['telefono'], $waId, 'text', $texto,
         null, $yo, $waId ? 'sent' : 'failed',
         $waId ? null : WhatsAppService::lastError(), $conv['phone_number_id']
     );
+
+    // Guardar a qué mensaje respondió, para dibujar la cita en el hilo
+    if ($waId && $respWaId) {
+        $pdo->prepare("UPDATE wa_mensajes SET responde_a = ? WHERE wa_message_id = ?")
+            ->execute([$respWaId, $waId]);
+    }
 
     if (!$waId) {
         echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar']);
@@ -962,7 +977,9 @@ if ($accion === 'hilo') {
     }
 
     $ms = $pdo->prepare(
-        "SELECT m.id, m.wa_message_id, m.direccion, m.tipo, m.reenviado, m.reaccion, m.texto,
+        "SELECT m.id, m.wa_message_id, m.direccion, m.tipo, m.reenviado, m.reaccion, m.responde_a, m.texto,
+                (SELECT LEFT(r.texto, 90) FROM wa_mensajes r WHERE r.wa_message_id = m.responde_a LIMIT 1) AS cita_texto,
+                (SELECT r.direccion FROM wa_mensajes r WHERE r.wa_message_id = m.responde_a LIMIT 1) AS cita_dir,
                 m.template_name, m.estado, m.error_msg,
                 m.enviado_por, m.created_at, m.media_id, m.media_path, m.media_mime, m.media_nombre,
                 TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS autor
@@ -979,6 +996,10 @@ if ($accion === 'hilo') {
             'tipo'       => $m['tipo'],
             'reenviado'  => (bool) $m['reenviado'],
             'reaccion'   => $m['reaccion'],
+            'cita'       => $m['responde_a'] ? [
+                'texto' => $m['cita_texto'] ?: '(mensaje)',
+                'dir'   => $m['cita_dir'] ?: 'in',
+            ] : null,
             'media'      => ($m['media_id'] || $m['media_path']) ? (int) $m['id'] : null,
             'media_mime' => $m['media_mime'],
             'media_nombre' => $m['media_nombre'],

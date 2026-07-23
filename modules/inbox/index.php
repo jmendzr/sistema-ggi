@@ -281,6 +281,37 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-fwd { font-size: .68rem; font-style: italic; color: inherit; opacity: .7; margin-bottom: 3px;
             display: flex; align-items: center; gap: 3px; }
 
+  /* Cita: mensaje al que se responde, dentro de la burbuja */
+  .ib-cita { font-size: .74rem; line-height: 1.35; padding: 5px 9px; margin-bottom: 5px;
+             border-left: 3px solid currentColor; border-radius: 5px;
+             background: rgba(127,127,127,.14); opacity: .85;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Acciones al pasar sobre un mensaje: responder / reaccionar */
+  .ib-msg-acts { display: flex; gap: 3px; opacity: 0; transition: opacity .12s; flex-shrink: 0; }
+  .ib-b-wrap:hover .ib-msg-acts { opacity: 1; }
+  .ib-msg-act { border: 1px solid var(--brd); background: var(--bg-surface); color: var(--tx2);
+                width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: .92rem;
+                display: inline-flex; align-items: center; justify-content: center; }
+  .ib-msg-act:hover { background: var(--bg-hover); color: var(--ac); }
+
+  /* Barra "Respondiendo a…" sobre el compositor */
+  .ib-resp { display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin-bottom: 8px;
+             background: var(--bg-surface2); border-left: 3px solid var(--ac); border-radius: 8px; }
+  .ib-resp-txt { flex: 1; min-width: 0; font-size: .78rem; color: var(--tx2);
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ib-resp-txt b { display: block; font-size: .7rem; color: var(--ac); }
+  .ib-resp-x { border: none; background: transparent; color: var(--tx2); font-size: 1rem;
+               cursor: pointer; padding: 0 4px; }
+  .ib-resp-x:hover { color: var(--s-err); }
+
+  /* Micrófono en el compositor */
+  .ib-mic { flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
+            border: 1px solid var(--brd); background: var(--bg-surface);
+            color: var(--tx2); cursor: pointer; display: inline-flex;
+            align-items: center; justify-content: center; }
+  .ib-mic:hover { background: var(--bg-hover); color: var(--ac); border-color: var(--ac); }
+
   /* Barra de grabación de voz */
   .ib-voz-barra { display: flex; align-items: center; gap: 11px; padding: 8px 12px;
                   background: var(--bg-surface2); border: 1px solid var(--brd); border-radius: 12px; }
@@ -332,12 +363,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
            border-radius: 999px; padding: 0 3px; line-height: 1.5; }
   .ib-b-wrap.in .ib-rx { right: auto; left: 8px; }
 
-  /* Botón de reaccionar: aparece al pasar el cursor sobre el mensaje */
-  .ib-rx-btn { border: none; background: var(--bg-surface); border: 1px solid var(--brd);
-               width: 26px; height: 26px; border-radius: 50%; cursor: pointer; flex-shrink: 0;
-               color: var(--tx2); font-size: .9rem; opacity: 0; transition: opacity .12s; }
-  .ib-b-wrap:hover .ib-rx-btn { opacity: 1; }
-  .ib-rx-btn:hover { background: var(--bg-hover); color: var(--tx); }
+  /* Mini selector de emoji para reaccionar */
   .ib-rx-pick { display: flex; gap: 2px; }
   .ib-rx-pick button { border: none; background: transparent; font-size: 1.25rem; cursor: pointer;
                        padding: 5px 6px; border-radius: 8px; line-height: 1; }
@@ -535,12 +561,22 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
 
   @media (max-width: 768px) {
-    /* Ocupa toda la pantalla: sin el borde ni el radio que dejan un marco raro */
-    .ib, .ib.sin-lista, .ib.sin-ctx { grid-template-columns: 1fr; }
-    .ib { height: calc(100dvh - 50px - 24px); border-radius: 12px; overflow: hidden; }
-    .ib-chat-col { display: none; }
+    /* En móvil NO se usa grid: cada panel se posiciona absoluto y ocupa toda
+       la pantalla. El grid con filas implícitas dejaba el chat a media altura
+       y mostraba la lista debajo ("pantalla dividida"). Con absolute solo hay
+       un panel visible por vez, siempre a pantalla completa. */
+    .ib, .ib.sin-lista, .ib.sin-ctx {
+      display: block; position: relative;
+      height: calc(100dvh - 50px - 24px); border-radius: 12px; overflow: hidden;
+    }
+    .ib-lista-col, .ib-chat-col {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      border-right: none; display: flex;
+    }
+    .ib-chat-col { display: none; }              /* oculto hasta abrir un hilo */
     .ib.abierto .ib-lista-col { display: none; }
     .ib.abierto .ib-chat-col  { display: flex; }
+    .ib-ctx { display: none; }                    /* el contexto no va en móvil */
     .ib-volver { display: inline-flex; }
     .ib.sin-lista .ib-lista-col { display: flex; }
 
@@ -577,7 +613,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     .ib-item { padding: 12px 14px; }
     .ib-item-menu { opacity: 1; }   /* sin hover en táctil: siempre visible */
-    .ib-rx-btn { opacity: 1; }      /* el botón de reaccionar, idem */
+    .ib-msg-acts { opacity: 1; }    /* responder/reaccionar, idem */
 
     .ib-foot { padding: 10px 12px calc(10px + var(--safe-bottom, 0px)); }
 
@@ -658,7 +694,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 <script src="<?= APP_URL ?>/assets/js/webm-opus-to-ogg.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/webm-opus-to-ogg.js') ?>"></script>
 <script>
 (function () {
-  var st = { f: 'todas', q: '', sel: null, etq: 0, etqActuales: [], firma: null, adjunto: null, bandeja: '' };
+  var st = { f: 'todas', q: '', sel: null, etq: 0, etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null };
   var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)) ?>;
   var $ = function (s) { return document.querySelector(s); };
 
@@ -911,20 +947,33 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       var fwd = m.reenviado
         ? '<div class="ib-fwd">↪ Reenviado</div>' : '';
 
+      // Cita: si este mensaje responde a otro, se muestra arriba el fragmento
+      var cita = m.cita
+        ? '<div class="ib-cita ' + (m.cita.dir === 'in' ? 'de-cliente' : 'de-nosotros') + '">'
+          + esc(m.cita.texto) + '</div>' : '';
+
       // Reacción del cliente sobre este mensaje (emoji flotante)
       var rx = m.reaccion
         ? '<span class="ib-rx">' + esc(m.reaccion) + '</span>' : '';
 
-      // Botón de reaccionar: solo sobre mensajes ENTRANTES y si la conversación es mía
-      var actrx = (m.dir === 'in' && puedeEscribir)
-        ? '<button type="button" class="ib-rx-btn" data-rx="' + m.id + '" title="Reaccionar" aria-label="Reaccionar">☺</button>'
-        : '';
+      // Acciones al pasar sobre el mensaje: responder siempre; reaccionar solo
+      // sobre mensajes entrantes. Ambas requieren poder escribir.
+      var acts = '';
+      if (puedeEscribir) {
+        acts += '<button type="button" class="ib-msg-act" data-reply="' + m.id + '" '
+              + 'title="Responder" aria-label="Responder">↩</button>';
+        if (m.dir === 'in') {
+          acts += '<button type="button" class="ib-msg-act" data-rx="' + m.id + '" '
+                + 'title="Reaccionar" aria-label="Reaccionar">☺</button>';
+        }
+      }
 
       cuerpo += '<div class="ib-b-wrap ' + (m.dir === 'in' ? 'in' : 'out') + '">'
-             +  '<div class="ib-b ' + cls + '">' + fwd + who + cuerpoMsg + err
+             +  '<div class="ib-b ' + cls + '">' + fwd + cita + who + cuerpoMsg + err
              +  '<div class="ib-b-foot">' + hhmm(m.cuando)
              +  (m.dir === 'out' ? ' <span>' + ticks(m.estado) + '</span>' : '') + '</div>'
-             +  rx + '</div>' + actrx + '</div>';
+             +  rx + '</div>'
+             +  (acts ? '<span class="ib-msg-acts">' + acts + '</span>' : '') + '</div>';
     });
 
     // Acción de asignación: el candado que pediste
@@ -971,7 +1020,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     } else {
       // Franja del adjunto: vive DENTRO del compositor, no en una ventana
       // aparte, para poder escribir el mensaje junto a la imagen.
-      pie = '<div id="ib-adj-prev"></div>'
+      pie = '<div id="ib-resp-prev"></div>'
+          + '<div id="ib-adj-prev"></div>'
           + '<div class="ib-barra">'
           + '<button type="button" class="ib-fmt" data-fmt="*" title="Negrita (*texto*)" aria-label="Negrita"><b>B</b></button>'
           + '<button type="button" class="ib-fmt" data-fmt="_" title="Cursiva (_texto_)" aria-label="Cursiva"><i>I</i></button>'
@@ -989,9 +1039,6 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<button type="button" class="ib-fmt" id="ib-interactivo" title="Mensaje interactivo (botones o lista)" aria-label="Mensaje interactivo">'
           + '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
           + '<rect x="3" y="5" width="18" height="4" rx="1"/><rect x="3" y="12" width="18" height="4" rx="1"/><path d="M7 19h10"/></svg></button>'
-          + '<button type="button" class="ib-fmt" id="ib-voz" title="Grabar mensaje de voz" aria-label="Grabar mensaje de voz">'
-          + '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
-          + '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 17v4"/></svg></button>'
           + '<input type="file" id="ib-file" hidden '
           + 'accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,audio/*,'
           + '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">'
@@ -1001,6 +1048,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           // con formato mientras se escribe.
           + '<div id="ib-texto" class="ib-editable" contenteditable="true" role="textbox"'
           + ' aria-multiline="true" aria-label="Mensaje" data-ph="Escribe un mensaje…"></div>'
+          // Micrófono a la derecha del compositor, siempre visible (como WA Web),
+          // en vez de perdido al final de la barra de formato.
+          + '<button type="button" class="ib-mic" id="ib-voz" title="Grabar mensaje de voz" aria-label="Grabar mensaje de voz">'
+          + '<svg width="19" height="19" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+          + '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 17v4"/></svg></button>'
           + '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-enviar">Enviar</button>'
           + '</div>';
     }
@@ -1089,6 +1141,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
       // Reponer el adjunto si el hilo se repintó mientras estaba puesto
       if (st.adjunto) pintarAdjunto();
+      if (st.responder) pintarResponder();
 
       // Pegar SIEMPRE como texto plano: si no, entra HTML del portapapeles
       t.addEventListener('paste', function (e) {
@@ -1275,6 +1328,29 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       st.firma = null;          // forzar repintado con el mensaje nuevo
       abrir(st.sel);
     });
+  }
+
+  // ── Responder a un mensaje (cita) ──────────────────────────────────────────
+  function ponerResponder(mid) {
+    // Busca el texto del mensaje citado en el hilo ya pintado
+    var b = document.querySelector('.ib-b-wrap [data-reply="' + mid + '"]');
+    var burbuja = b && b.closest('.ib-b-wrap').querySelector('.ib-b');
+    var txt = burbuja ? (burbuja.innerText || '').trim().slice(0, 90) : '(mensaje)';
+    st.responder = { id: mid, texto: txt };
+    pintarResponder();
+    var caja = $('#ib-texto'); if (caja) caja.focus();
+  }
+
+  function quitarResponder() { st.responder = null; pintarResponder(); }
+
+  function pintarResponder() {
+    var box = $('#ib-resp-prev');
+    if (!box) return;
+    if (!st.responder) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="ib-resp"><div class="ib-resp-txt">'
+      + '<b>Respondiendo</b>' + esc(st.responder.texto) + '</div>'
+      + '<button type="button" class="ib-resp-x" id="ib-resp-quitar" '
+      + 'title="Cancelar" aria-label="Cancelar respuesta">✕</button></div>';
   }
 
   // ── Mensaje de voz ─────────────────────────────────────────────────────────
@@ -1859,9 +1935,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       inp.focus();
     }
 
-    ggiPost('ajax.php', { accion: 'enviar', id: st.sel, texto: texto })
+    var datos = { accion: 'enviar', id: st.sel, texto: texto };
+    if (st.responder) datos.responder_a = st.responder.id;
+
+    ggiPost('ajax.php', datos)
       .then(function (j) {
-        if (j.ok) inp.innerHTML = '';
+        if (j.ok) { inp.innerHTML = ''; quitarResponder(); }
         // Se recarga el hilo en ambos casos: si falló, el mensaje queda
         // registrado como fallido con el motivo real de Meta a la vista.
         abrir(st.sel);
@@ -2245,6 +2324,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     if (e.target.closest('#ib-plantilla')) { popPlantillas(); return; }
     if (e.target.closest('#ib-interactivo')) { formInteractivo(); return; }
     if (e.target.closest('#ib-voz'))        { toggleVoz(); return; }
+
+    var rep = e.target.closest('[data-reply]');
+    if (rep) { ponerResponder(rep.dataset.reply); return; }
+    if (e.target.closest('#ib-resp-quitar')) { quitarResponder(); return; }
     if (e.target.closest('#ib-voz-stop'))   { if (_rec) _rec.stop(); return; }
     if (e.target.closest('#ib-voz-cancel'))  { cancelarVoz(); return; }
 

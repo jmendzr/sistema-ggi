@@ -77,3 +77,6 @@ CREATE TABLE IF NOT EXISTS wa_asignaciones_log (
 ALTER TABLE wa_mensajes ADD COLUMN reenviado TINYINT(1) NOT NULL DEFAULT 0 AFTER tipo;
 ALTER TABLE wa_mensajes ADD COLUMN reaccion VARCHAR(16) NULL AFTER reenviado;
 ALTER TABLE wa_conversaciones ADD COLUMN sin_leer_manual TINYINT(1) NOT NULL DEFAULT 0 AFTER no_leidos;
+
+-- Responder citando un mensaje anterior
+ALTER TABLE wa_mensajes ADD COLUMN responde_a VARCHAR(150) NULL AFTER reaccion;
