@@ -660,9 +660,16 @@ if ($accion === 'lista') {
     // Visibilidad por número: un ejecutivo solo ve las bandejas habilitadas
     $vis = WaInbox::numerosVisibles($pdo, $yo, $esJefe);
     if ($vis !== null) {
-        if (!$vis) { echo json_encode(['ok' => true, 'items' => [], 'conteos' => []]); exit; }
+        if (!$vis) { echo json_encode(['ok' => true, 'items' => [], 'conteos' => [], 'bandejas' => []]); exit; }
         $where[] = 'c.phone_number_id IN (' . implode(',', array_fill(0, count($vis), '?')) . ')';
         $args    = array_merge($args, $vis);
+    }
+
+    // Bandeja elegida: dividir el inbox por número. '' = todas las visibles.
+    $bandeja = trim($_GET['bandeja'] ?? '');
+    if ($bandeja !== '') {
+        $where[] = 'c.phone_number_id = ?';
+        $args[]  = $bandeja;
     }
 
     if ($filtro === 'mias')            { $where[] = 'c.asignado_a = ?'; $args[] = $yo; }
@@ -745,7 +752,28 @@ if ($accion === 'lista') {
     $c->execute($aCont);
     $cn = $c->fetch(PDO::FETCH_ASSOC) ?: [];
 
-    echo json_encode(['ok' => true, 'items' => $items, 'conteos' => [
+    // Bandejas disponibles (números que el usuario puede ver), con su conteo.
+    // Solo se ofrece el selector si hay más de una: con un número no aporta.
+    $bWhere = ["c.estado <> 'resuelta'"];
+    $bArgs  = [];
+    if ($vis !== null) {
+        $bWhere[] = 'c.phone_number_id IN (' . implode(',', array_fill(0, count($vis), '?')) . ')';
+        $bArgs    = array_merge($bArgs, $vis);
+    }
+    $bq = $pdo->prepare(
+        "SELECT c.phone_number_id, COUNT(*) n,
+                COALESCE(NULLIF(n.etiqueta,''), n.telefono, c.phone_number_id) etiqueta,
+                n.telefono
+           FROM wa_conversaciones c
+           LEFT JOIN wa_numeros n ON n.phone_number_id = c.phone_number_id
+          WHERE " . implode(' AND ', $bWhere) . "
+          GROUP BY c.phone_number_id
+          ORDER BY n DESC"
+    );
+    $bq->execute($bArgs);
+    $bandejas = $bq->fetchAll(PDO::FETCH_ASSOC);
+
+    echo json_encode(['ok' => true, 'items' => $items, 'bandejas' => $bandejas, 'conteos' => [
         'todas'       => (int) ($cn['todas'] ?? 0),
         'mias'        => (int) ($cn['mias'] ?? 0),
         'sin_asignar' => (int) ($cn['sin_asignar'] ?? 0),

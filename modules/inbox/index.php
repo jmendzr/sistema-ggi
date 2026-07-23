@@ -68,6 +68,15 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-icon:hover { background: var(--bg-hover); color: var(--tx); }
   .ib-icon svg { width: 17px; height: 17px; }
 
+  /* Selector de bandeja: elegir qué número mirar cuando hay varios */
+  .ib-bandeja { margin-bottom: 8px; }
+  .ib-bandeja select {
+    width: 100%; padding: 7px 10px; font: inherit; font-size: .8rem; font-weight: 600;
+    border: 1px solid var(--brd); border-radius: 9px; background: var(--bg-input); color: var(--tx);
+    cursor: pointer;
+  }
+  .ib-bandeja select:focus { outline: none; border-color: var(--ac); box-shadow: 0 0 0 3px var(--ac-soft); }
+
   .ib-pills { display: flex; gap: 5px; flex-wrap: wrap; }
   .ib-pill {
     font: inherit; font-size: .7rem; font-weight: 600; padding: 3px 9px;
@@ -486,6 +495,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h8M8 14h5M21 12a8 8 0 01-8 8H7l-4 3V12a8 8 0 018-8h2a8 8 0 018 8z"/></svg>
         </button>
       </div>
+      <!-- Selector de bandeja (número): solo aparece si hay más de uno -->
+      <div class="ib-bandeja" id="ib-bandeja" style="display:none">
+        <select id="ib-bandeja-sel" aria-label="Elegir bandeja"></select>
+      </div>
       <div class="ib-pills">
         <button type="button" class="ib-pill on" data-f="todas">Todas<b data-c="todas"></b></button>
         <button type="button" class="ib-pill" data-f="mias">A mi cargo<b data-c="mias"></b></button>
@@ -532,7 +545,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
 <script>
 (function () {
-  var st = { f: 'todas', q: '', sel: null, etq: 0, etqActuales: [], firma: null, adjunto: null };
+  var st = { f: 'todas', q: '', sel: null, etq: 0, etqActuales: [], firma: null, adjunto: null, bandeja: '' };
   var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)) ?>;
   var $ = function (s) { return document.querySelector(s); };
 
@@ -596,7 +609,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   function lista(mantener) {
     fetch('ajax.php?accion=lista&filtro=' + encodeURIComponent(st.f)
           + '&q=' + encodeURIComponent(st.q)
-          + '&etiqueta=' + (st.etq || 0),
+          + '&etiqueta=' + (st.etq || 0)
+          + '&bandeja=' + encodeURIComponent(st.bandeja || ''),
           { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
@@ -605,6 +619,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           var e = document.querySelector('[data-c="' + k + '"]');
           if (e) e.textContent = j.conteos[k] ? ' ' + j.conteos[k] : '';
         });
+
+        pintarBandejas(j.bandejas || []);
 
         var c = $('#ib-lista');
         if (!j.items.length) { c.innerHTML = '<div class="ib-empty">Sin conversaciones</div>'; return; }
@@ -637,6 +653,35 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         }).join('');
       }).catch(function () {});
   }
+
+  // Selector de bandeja: solo tiene sentido con mas de un numero
+  function pintarBandejas(bandejas) {
+    var wrap = $('#ib-bandeja'), sel = $('#ib-bandeja-sel');
+    if (!wrap || !sel) return;
+
+    // Con una sola bandeja no se muestra: no hay nada que elegir
+    if (bandejas.length < 2) { wrap.style.display = 'none'; return; }
+
+    // No repintar si no cambio (perderia la seleccion abierta)
+    var firma = bandejas.map(function (b) { return b.phone_number_id + ':' + b.n; }).join('|');
+    if (sel.dataset.firma === firma) return;
+    sel.dataset.firma = firma;
+
+    var total = bandejas.reduce(function (a, b) { return a + parseInt(b.n, 10); }, 0);
+    sel.innerHTML = '<option value="">Todas las bandejas (' + total + ')</option>'
+      + bandejas.map(function (b) {
+          return '<option value="' + esc(b.phone_number_id) + '"' + (st.bandeja === b.phone_number_id ? ' selected' : '') + '>'
+               + esc(b.etiqueta) + ' (' + b.n + ')</option>';
+        }).join('');
+    wrap.style.display = '';
+  }
+
+  var _selB = document.getElementById('ib-bandeja-sel');
+  if (_selB) _selB.addEventListener('change', function () {
+    st.bandeja = _selB.value;
+    st.firma = null;
+    lista();
+  });
 
   // ── Hilo ──
   // silencioso = refresco automático: no debe pisar lo que el ejecutivo está
