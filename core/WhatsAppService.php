@@ -550,6 +550,42 @@ class WhatsAppService
     }
 
     /**
+     * Reacciona a un mensaje con un emoji. Emoji vacío = quita la reacción.
+     * Solo dentro de la ventana de 24 h.
+     */
+    public static function reaccionar(string $to, string $waMessageId, string $emoji): ?string
+    {
+        self::$lastError = null;
+        $phoneId = self::phoneId();
+        if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return null; }
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type'    => 'individual',
+            'to'                => $to,
+            'type'              => 'reaction',
+            'reaction'          => ['message_id' => $waMessageId, 'emoji' => $emoji],
+        ];
+
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/messages");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', self::authHeader()],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $d = json_decode((string) $res, true);
+        if ($code >= 200 && $code < 300) return $d['messages'][0]['id'] ?? 'ok';
+
+        $e = $d['error'] ?? [];
+        self::$lastError = mb_substr('HTTP ' . $code . ': ' . ($e['message'] ?? (string) $res), 0, 400);
+        return null;
+    }
+
+    /**
      * Envía un mensaje de TEXTO LIBRE (no plantilla).
      *
      * Solo es válido dentro de la ventana de servicio de 24 h de Meta, contada

@@ -586,6 +586,55 @@ if ($accion === 'adjuntar') {
     exit;
 }
 
+// ══ Reaccionar a un mensaje del cliente ══════════════════════════════════════
+if ($accion === 'reaccionar') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $convId = (int) ($_POST['id'] ?? 0);
+    $msgId  = (int) ($_POST['mensaje_id'] ?? 0);
+    $emoji  = trim($_POST['emoji'] ?? '');   // vacío = quitar
+    if (!$convId || !$msgId) { echo json_encode(['ok' => false, 'msg' => 'Datos inválidos']); exit; }
+
+    $c = $pdo->prepare("SELECT telefono, asignado_a, ventana_expira_at FROM wa_conversaciones WHERE id = ?");
+    $c->execute([$convId]);
+    $conv = $c->fetch(PDO::FETCH_ASSOC);
+    if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+    if ((int) $conv['asignado_a'] !== $yo) { echo json_encode(['ok' => false, 'msg' => 'Toma la conversación primero']); exit; }
+    if (!WaInbox::ventanaAbierta($conv['ventana_expira_at'])) {
+        echo json_encode(['ok' => false, 'msg' => 'La ventana de 24 h venció']); exit;
+    }
+
+    // Solo se puede reaccionar a un mensaje ENTRANTE (uno del cliente)
+    $m = $pdo->prepare("SELECT wa_message_id FROM wa_mensajes WHERE id = ? AND conversacion_id = ? AND direccion = 'in'");
+    $m->execute([$msgId, $convId]);
+    $waId = $m->fetchColumn();
+    if (!$waId) { echo json_encode(['ok' => false, 'msg' => 'No se puede reaccionar a ese mensaje']); exit; }
+
+    if (WhatsAppService::reaccionar($conv['telefono'], $waId, $emoji) !== null) {
+        $pdo->prepare("UPDATE wa_mensajes SET reaccion = ? WHERE id = ?")->execute([$emoji ?: null, $msgId]);
+        echo json_encode(['ok' => true]);
+    } else {
+        echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo reaccionar']);
+    }
+    exit;
+}
+
+// ══ Marcar como no leída (manual) ════════════════════════════════════════════
+if ($accion === 'sin_leer') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+
+    $id = (int) ($_POST['id'] ?? 0);
+    if (!$id) { echo json_encode(['ok' => false, 'msg' => 'ID inválido']); exit; }
+
+    // Marca manual: se limpia sola cuando llega un mensaje nuevo o se abre el hilo
+    $pdo->prepare("UPDATE wa_conversaciones SET sin_leer_manual = 1 WHERE id = ?")->execute([$id]);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
 // ══ Enviar mensaje ═══════════════════════════════════════════════════════════
 if ($accion === 'enviar') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -691,7 +740,7 @@ if ($accion === 'lista') {
     }
 
     $st = $pdo->prepare(
-        "SELECT c.id, c.telefono, c.cliente_id, c.asignado_a, c.asignado_at, c.no_leidos,
+        "SELECT c.id, c.telefono, c.cliente_id, c.asignado_a, c.asignado_at, c.no_leidos, c.sin_leer_manual,
                 c.ventana_expira_at, c.ultimo_mensaje_at, c.ultimo_mensaje_preview, cl.razon_social,
                 TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS asignado_nombre
            FROM wa_conversaciones c
@@ -728,6 +777,7 @@ if ($accion === 'lista') {
             'preview'   => $r['ultimo_mensaje_preview'] ?? '',
             'cuando'    => $r['ultimo_mensaje_at'],
             'no_leidos' => (int) $r['no_leidos'],
+            'sin_leer'  => (bool) $r['sin_leer_manual'],
             'asignado_a'      => $r['asignado_a'] ? (int) $r['asignado_a'] : null,
             'asignado_nombre' => $r['asignado_nombre'] ?: null,
             'es_mia'          => ((int) $r['asignado_a']) === $yo,
@@ -807,7 +857,8 @@ if ($accion === 'hilo') {
     }
 
     $ms = $pdo->prepare(
-        "SELECT m.id, m.direccion, m.tipo, m.texto, m.template_name, m.estado, m.error_msg,
+        "SELECT m.id, m.wa_message_id, m.direccion, m.tipo, m.reenviado, m.reaccion, m.texto,
+                m.template_name, m.estado, m.error_msg,
                 m.enviado_por, m.created_at, m.media_id, m.media_path, m.media_mime, m.media_nombre,
                 TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS autor
            FROM wa_mensajes m LEFT JOIN usuarios u ON u.id = m.enviado_por
@@ -819,7 +870,10 @@ if ($accion === 'hilo') {
     foreach ($ms as $m) {
         $mensajes[] = [
             'id'         => (int) $m['id'],
+            'wa_id'      => $m['wa_message_id'],
             'tipo'       => $m['tipo'],
+            'reenviado'  => (bool) $m['reenviado'],
+            'reaccion'   => $m['reaccion'],
             'media'      => ($m['media_id'] || $m['media_path']) ? (int) $m['id'] : null,
             'media_mime' => $m['media_mime'],
             'media_nombre' => $m['media_nombre'],
@@ -853,7 +907,7 @@ if ($accion === 'hilo') {
     $qe->execute([$id]);
     $etiquetas = $qe->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    $pdo->prepare("UPDATE wa_conversaciones SET no_leidos = 0 WHERE id = ?")->execute([$id]);
+    $pdo->prepare("UPDATE wa_conversaciones SET no_leidos = 0, sin_leer_manual = 0 WHERE id = ?")->execute([$id]);
 
     echo json_encode(['ok' => true, 'conv' => [
         'id'              => (int) $conv['id'],

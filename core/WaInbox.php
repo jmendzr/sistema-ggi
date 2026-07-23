@@ -64,17 +64,18 @@ class WaInbox
         string $tipo,
         ?string $texto,
         ?string $phoneNumberId = null,
-        ?array $media = null
+        ?array $media = null,
+        bool $reenviado = false
     ): int {
         $convId = self::ensureConversacion($pdo, $telefono, $phoneNumberId);
 
         $ins = $pdo->prepare(
             "INSERT IGNORE INTO wa_mensajes
-                (conversacion_id, wa_message_id, direccion, tipo, texto, media_id, media_mime, media_nombre)
-             VALUES (?, ?, 'in', ?, ?, ?, ?, ?)"
+                (conversacion_id, wa_message_id, direccion, tipo, reenviado, texto, media_id, media_mime, media_nombre)
+             VALUES (?, ?, 'in', ?, ?, ?, ?, ?, ?)"
         );
         $ins->execute([
-            $convId, $waMessageId, $tipo, $texto,
+            $convId, $waMessageId, $tipo, $reenviado ? 1 : 0, $texto,
             $media['id'] ?? null, $media['mime'] ?? null, $media['nombre'] ?? null,
         ]);
 
@@ -86,6 +87,7 @@ class WaInbox
                         ultimo_mensaje_at      = NOW(),
                         ultimo_mensaje_preview = ?,
                         no_leidos              = no_leidos + 1,
+                        sin_leer_manual        = 0,
                         estado                 = 'abierta'
                   WHERE id = ?"
             )->execute([self::preview($texto, $tipo), $convId]);

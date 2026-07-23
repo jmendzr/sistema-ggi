@@ -149,6 +149,19 @@ try {
                 if (!$from) continue;
 
                 $tipo  = $msg['type'] ?? 'text';
+
+                // Reacción a un mensaje nuestro: no es un mensaje nuevo, es un
+                // emoji sobre uno existente. Se guarda en ese mensaje.
+                if ($tipo === 'reaction') {
+                    $sobre = $msg['reaction']['message_id'] ?? null;
+                    $emoji = $msg['reaction']['emoji'] ?? null;   // vacío = reacción quitada
+                    if ($sobre) {
+                        $pdo->prepare("UPDATE wa_mensajes SET reaccion = ? WHERE wa_message_id = ?")
+                            ->execute([$emoji ?: null, $sobre]);
+                    }
+                    continue;
+                }
+
                 // Extraer texto según el tipo de mensaje
                 $texto = match ($tipo) {
                     'text'        => $msg['text']['body']            ?? null,
@@ -174,6 +187,10 @@ try {
                         ];
                     }
                 }
+
+                // Meta marca los mensajes reenviados en context.forwarded
+                $reenviado = !empty($msg['context']['forwarded'])
+                          || !empty($msg['context']['frequently_forwarded']);
 
                 // Resolver cliente por los últimos 9 dígitos (móvil Perú)
                 $cliente_id = null;
@@ -209,7 +226,7 @@ try {
                 // Hilo del inbox multiagente: crea/actualiza la conversación y
                 // reabre la ventana de 24h de Meta.
                 $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
-                WaInbox::registrarEntrante($pdo, $from, $wa_id, $tipo, $texto, $phoneNumberId, $media);
+                WaInbox::registrarEntrante($pdo, $from, $wa_id, $tipo, $texto, $phoneNumberId, $media, $reenviado);
             }
         }
     }

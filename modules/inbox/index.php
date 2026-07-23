@@ -277,6 +277,41 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-b-err { font-size: .7rem; margin-top: 5px; padding: 5px 8px; border-radius: 7px;
               background: var(--s-err-bg); color: var(--s-err-tx); white-space: normal; }
 
+  /* Reenviado */
+  .ib-fwd { font-size: .68rem; font-style: italic; color: inherit; opacity: .7; margin-bottom: 3px;
+            display: flex; align-items: center; gap: 3px; }
+
+  /* Reacción del cliente: emoji flotante en la esquina de la burbuja.
+     El wrap toma la alineación izq/der; dentro, la burbuja ya no se auto-alinea
+     (si no, pelearía con el wrap). max-width se mueve al wrap. */
+  .ib-b-wrap { position: relative; display: flex; align-items: center; gap: 4px; max-width: 76%; }
+  .ib-b-wrap.in  { align-self: flex-start; }
+  .ib-b-wrap.out { align-self: flex-end; flex-direction: row-reverse; }
+  .ib-b-wrap .ib-b { position: relative; align-self: auto; max-width: 100%; }
+  .ib-rx { position: absolute; bottom: -10px; right: 8px; font-size: .82rem;
+           background: var(--bg-surface); border: 1px solid var(--brd);
+           border-radius: 999px; padding: 0 3px; line-height: 1.5; }
+  .ib-b-wrap.in .ib-rx { right: auto; left: 8px; }
+
+  /* Botón de reaccionar: aparece al pasar el cursor sobre el mensaje */
+  .ib-rx-btn { border: none; background: var(--bg-surface); border: 1px solid var(--brd);
+               width: 26px; height: 26px; border-radius: 50%; cursor: pointer; flex-shrink: 0;
+               color: var(--tx2); font-size: .9rem; opacity: 0; transition: opacity .12s; }
+  .ib-b-wrap:hover .ib-rx-btn { opacity: 1; }
+  .ib-rx-btn:hover { background: var(--bg-hover); color: var(--tx); }
+  .ib-rx-pick { display: flex; gap: 2px; }
+  .ib-rx-pick button { border: none; background: transparent; font-size: 1.25rem; cursor: pointer;
+                       padding: 5px 6px; border-radius: 8px; line-height: 1; }
+  .ib-rx-pick button:hover { background: var(--bg-hover); transform: scale(1.15); }
+
+  /* Marcar como no leída: menú "•••" y punto azul */
+  .ib-item-menu { margin-left: 6px; color: var(--tx3); font-size: .7rem; letter-spacing: -1px;
+                  cursor: pointer; opacity: 0; transition: opacity .12s; }
+  .ib-item:hover .ib-item-menu { opacity: 1; }
+  .ib-item-menu:hover { color: var(--ac); }
+  .ib-item.nuevo .ib-item-n { font-weight: 800; }
+  .ib-unread.punto { min-width: 10px; width: 10px; height: 10px; padding: 0; }
+
   /* Formato de WhatsApp renderizado dentro de la burbuja */
   .ib-b b { font-weight: 700; }
   .ib-b i { font-style: italic; }
@@ -636,18 +671,25 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
             return '<span class="ib-etq ' + esc(e.color || 'neutral') + '">' + esc(e.nombre) + '</span>';
           }).join('');
 
-          return '<button type="button" class="ib-item' + (st.sel === it.id ? ' sel' : '') + '" data-id="' + it.id + '">'
+          // "No leída" manual O mensajes nuevos → punto azul en la fila
+          var pendiente = it.no_leidos || it.sin_leer;
+
+          return '<button type="button" class="ib-item' + (st.sel === it.id ? ' sel' : '')
+            +     (pendiente ? ' nuevo' : '') + '" data-id="' + it.id + '">'
             + '<span class="ib-av ' + colorDe(it.telefono) + (it.ventana_abierta ? ' viva' : '') + '">'
             +   esc(ini(it.titulo)) + '</span>'
             + '<span class="ib-item-body">'
             +   '<span class="ib-item-r1"><span class="ib-item-n">' + esc(it.titulo) + '</span>'
-            +   '<span class="ib-item-t">' + relativo(it.cuando) + '</span></span>'
+            +   '<span class="ib-item-t">' + relativo(it.cuando)
+            +     '<span class="ib-item-menu" data-sinleer="' + it.id + '" title="Marcar como no leída" aria-label="Marcar como no leída">•••</span>'
+            +   '</span></span>'
             +   '<span class="ib-item-ph">+' + esc(it.telefono) + '</span>'
             // formato(), no esc(): en la lista se guardaba el texto crudo y se
             // veían los marcadores (*hola*) en vez del texto en negrita.
             +   '<span class="ib-item-p">' + formato(it.preview) + '</span>'
             +   '<span class="ib-item-m">' + tag + viejo + etqs
-            +     (it.no_leidos ? '<span class="ib-unread">' + it.no_leidos + '</span>' : '')
+            +     (it.no_leidos ? '<span class="ib-unread">' + it.no_leidos + '</span>'
+                  : (it.sin_leer ? '<span class="ib-unread punto"></span>' : ''))
             +   '</span>'
             + '</span></button>';
         }).join('');
@@ -728,6 +770,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   function chat(j, previo) {
     var c = j.conv, ultDia = '', cuerpo = '';
 
+    // Reaccionar y responder solo si es mía y la ventana está abierta
+    var puedeEscribir = c.es_mia && c.ventana_abierta;
+
     j.mensajes.forEach(function (m) {
       var dia = fechaLarga(m.cuando);
       if (dia !== ultDia) { cuerpo += '<div class="ib-sep">' + esc(dia) + '</div>'; ultDia = dia; }
@@ -767,9 +812,24 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       if (m.texto) cuerpoMsg += (cuerpoMsg ? '<div class="ib-pie-foto">' : '')
                               + formato(m.texto) + (cuerpoMsg ? '</div>' : '');
 
-      cuerpo += '<div class="ib-b ' + cls + '">' + who + cuerpoMsg + err
+      // Etiqueta "Reenviado" cuando Meta lo marca como tal
+      var fwd = m.reenviado
+        ? '<div class="ib-fwd">↪ Reenviado</div>' : '';
+
+      // Reacción del cliente sobre este mensaje (emoji flotante)
+      var rx = m.reaccion
+        ? '<span class="ib-rx">' + esc(m.reaccion) + '</span>' : '';
+
+      // Botón de reaccionar: solo sobre mensajes ENTRANTES y si la conversación es mía
+      var actrx = (m.dir === 'in' && puedeEscribir)
+        ? '<button type="button" class="ib-rx-btn" data-rx="' + m.id + '" title="Reaccionar" aria-label="Reaccionar">☺</button>'
+        : '';
+
+      cuerpo += '<div class="ib-b-wrap ' + (m.dir === 'in' ? 'in' : 'out') + '">'
+             +  '<div class="ib-b ' + cls + '">' + fwd + who + cuerpoMsg + err
              +  '<div class="ib-b-foot">' + hhmm(m.cuando)
-             +  (m.dir === 'out' ? ' <span>' + ticks(m.estado) + '</span>' : '') + '</div></div>';
+             +  (m.dir === 'out' ? ' <span>' + ticks(m.estado) + '</span>' : '') + '</div>'
+             +  rx + '</div>' + actrx + '</div>';
     });
 
     // Acción de asignación: el candado que pediste
@@ -1021,9 +1081,16 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     // Leer la selección ANTES de tocar el foco: enfocar puede colapsarla
     var o = _offsets(el), v = el.innerText.replace(/\n$/, '');
     el.focus();
-    var sel = v.slice(o.a, o.b) || 'texto';
-    repintar_con(el, v.slice(0, o.a) + marca + sel + marca + v.slice(o.b),
-                 o.a + marca.length + sel.length + marca.length);
+    var sel = v.slice(o.a, o.b);
+
+    // Sin selección: insertar los marcadores vacíos y dejar el cursor EN MEDIO,
+    // para escribir dentro (como WhatsApp Web). Con selección, envolverla y
+    // dejar el cursor tras el cierre.
+    var cursor = sel === ''
+      ? o.a + marca.length
+      : o.a + marca.length + sel.length + marca.length;
+
+    repintar_con(el, v.slice(0, o.a) + marca + sel + marca + v.slice(o.b), cursor);
   }
 
   function insertar(txt) {
@@ -1878,6 +1945,33 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     if (e.target.closest('#ib-adj-quitar')) { quitarAdjunto(); return; }
 
     if (e.target.closest('#ib-plantilla')) { popPlantillas(); return; }
+
+    // Reaccionar a un mensaje: abre un mini-selector de emoji
+    var rxb = e.target.closest('[data-rx]');
+    if (rxb) {
+      var mid = rxb.dataset.rx;
+      var EMORX = ['👍','❤️','😂','😮','😢','🙏','🔥','✅'];
+      abrirPop(rxb, '<div class="ib-rx-pick">' + EMORX.map(function (x) {
+        return '<button type="button" data-rxe="' + mid + '" data-emo="' + x + '">' + x + '</button>';
+      }).join('') + '</div>');
+      return;
+    }
+    var rxe = e.target.closest('[data-rxe]');
+    if (rxe) {
+      cerrarPop();
+      ggiPost('ajax.php', { accion: 'reaccionar', id: st.sel, mensaje_id: rxe.dataset.rxe, emoji: rxe.dataset.emo })
+        .then(function (r) { if (r.ok) { st.firma = null; abrir(st.sel); } });
+      return;
+    }
+
+    // Marcar una conversación como no leída, desde el menú de la fila
+    var sl = e.target.closest('[data-sinleer]');
+    if (sl) {
+      e.stopPropagation();
+      ggiPost('ajax.php', { accion: 'sin_leer', id: sl.dataset.sinleer })
+        .then(function (r) { if (r.ok) { if (window.showToast) showToast('Marcada como no leída', 'ok'); lista(); } });
+      return;
+    }
 
     var elegida = e.target.closest('.ib-plt');
     if (elegida && _plt) { formPlantilla(_plt[parseInt(elegida.dataset.plt, 10)]); return; }
