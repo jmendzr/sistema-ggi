@@ -508,6 +508,14 @@ if ($accion === 'adjuntar') {
     $peso   = filesize($tmp);
     $aviso  = null;
     $tempConvertido = null;   // temporal a limpiar si hubo conversión
+    $esVoz  = !empty($_POST['voz']);
+
+    // Nota de voz: mime_content_type de un .ogg suele devolver application/ogg,
+    // pero Meta exige audio/ogg. Se corrige por la extensión del archivo grabado.
+    if ($esVoz) {
+        $ext  = strtolower(pathinfo($nombre, PATHINFO_EXTENSION));
+        $mime = $ext === 'ogg' ? 'audio/ogg' : ($ext === 'mp4' ? 'audio/mp4' : $mime);
+    }
 
     // Cada formato va por un tipo distinto de la API, no todos son "imagen":
     //  - webp  → sticker (WhatsApp solo anima stickers en ese formato)

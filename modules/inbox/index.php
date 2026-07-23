@@ -281,6 +281,18 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-fwd { font-size: .68rem; font-style: italic; color: inherit; opacity: .7; margin-bottom: 3px;
             display: flex; align-items: center; gap: 3px; }
 
+  /* Barra de grabación de voz */
+  .ib-voz-barra { display: flex; align-items: center; gap: 11px; padding: 8px 12px;
+                  background: var(--bg-surface2); border: 1px solid var(--brd); border-radius: 12px; }
+  .ib-voz-x { border: none; background: transparent; color: var(--s-err); font-size: 1.1rem;
+              cursor: pointer; width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; }
+  .ib-voz-x:hover { background: var(--s-err-bg); }
+  .ib-voz-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--s-err);
+                animation: ib-pulso 1s ease-in-out infinite; flex-shrink: 0; }
+  @keyframes ib-pulso { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+  .ib-voz-t { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--tx); font-size: .9rem; }
+  .ib-voz-msg { flex: 1; font-size: .78rem; color: var(--tx2); }
+
   /* Zona de arrastre para adjuntar (estilo WhatsApp Web) */
   .ib-drop { border: 2px dashed var(--brd); border-radius: 14px; padding: 34px 20px;
              text-align: center; cursor: pointer; color: var(--tx3); transition: border-color .13s, background .13s; }
@@ -523,24 +535,61 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
 
   @media (max-width: 768px) {
+    /* Ocupa toda la pantalla: sin el borde ni el radio que dejan un marco raro */
     .ib, .ib.sin-lista, .ib.sin-ctx { grid-template-columns: 1fr; }
-    .ib { height: calc(100dvh - 50px - 24px); border-radius: 12px; }
+    .ib { height: calc(100dvh - 50px - 24px); border-radius: 12px; overflow: hidden; }
     .ib-chat-col { display: none; }
     .ib.abierto .ib-lista-col { display: none; }
     .ib.abierto .ib-chat-col  { display: flex; }
     .ib-volver { display: inline-flex; }
-    /* En móvil la lista ocupa todo: el colapsar no aplica */
     .ib.sin-lista .ib-lista-col { display: flex; }
-    .ib-b { max-width: 88%; }
-    /* 16px evita el zoom automático de iOS al enfocar el campo */
-    .ib-box input, .ib-search input, .ib-editable { font-size: 16px; }
-    .ib-fmt { min-width: 38px; height: 38px; }
-    .ib-emojis { grid-template-columns: repeat(7, 1fr); }
-    .ib-emojis button { min-height: 40px; font-size: 1.3rem; }
-    .ib-pop { max-width: calc(100vw - 24px); }
-    .ib-item { padding: 12px 14px; }
+
+    /* Cabecera de la lista más compacta */
+    .ib-head { padding: 10px 12px 8px; }
+    .ib-pills { gap: 4px; }
+    .ib-pill { padding: 4px 10px; }
+
+    /* Cabecera del hilo: los controles no deben apretujar el nombre */
+    .ib-chat-head { padding: 9px 12px; gap: 8px; }
+    .ib-chat-n { font-size: .88rem; }
+    .ib-chat-head .ib-icon { width: 34px; height: 34px; }
+
+    /* Mensajes */
+    .ib-b-wrap { max-width: 86%; }
     .ib-msgs { padding: 14px 12px; }
+
+    /* La barra de formato tiene 8 botones: en móvil se desliza en horizontal
+       en vez de romper el layout o apilarse. */
+    .ib-barra { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+                scrollbar-width: none; padding-bottom: 2px; }
+    .ib-barra::-webkit-scrollbar { display: none; }
+    .ib-fmt { min-width: 40px; height: 40px; flex-shrink: 0; }
+
+    /* 16px evita el zoom automático de iOS al enfocar */
+    .ib-box input, .ib-search input, .ib-editable,
+    #it-body, [data-btn], [data-opt], .ib-plt-f input, .ib-plt-f textarea { font-size: 16px; }
+    .ib-box .btn, .ib-btn-sm { min-height: 42px; }
+
+    .ib-emojis { grid-template-columns: repeat(6, 1fr); }
+    .ib-emojis button { min-height: 44px; font-size: 1.4rem; }
+    .ib-stk { grid-template-columns: repeat(3, 1fr); }
+    .ib-pop { max-width: calc(100vw - 20px); }
+
+    .ib-item { padding: 12px 14px; }
+    .ib-item-menu { opacity: 1; }   /* sin hover en táctil: siempre visible */
+    .ib-rx-btn { opacity: 1; }      /* el botón de reaccionar, idem */
+
     .ib-foot { padding: 10px 12px calc(10px + var(--safe-bottom, 0px)); }
+
+    /* Zona de arrastre: en móvil el drag no existe, es solo un botón grande */
+    .ib-drop { padding: 26px 16px; }
+  }
+
+  /* Pantallas muy chicas: recuperar aún más espacio */
+  @media (max-width: 420px) {
+    .ib-pill b { display: none; }          /* ocultar los contadores */
+    .ib-chat-ph { display: none; }         /* el teléfono bajo el nombre */
+    .ib-b-wrap { max-width: 90%; }
   }
 </style>
 
@@ -605,6 +654,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   <div class="ib-col ib-ctx" id="ib-ctx"></div>
 </div>
 
+<!-- Reempaquetador WebM→OGG: solo lo usa la nota de voz en Chrome -->
+<script src="<?= APP_URL ?>/assets/js/webm-opus-to-ogg.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/webm-opus-to-ogg.js') ?>"></script>
 <script>
 (function () {
   var st = { f: 'todas', q: '', sel: null, etq: 0, etqActuales: [], firma: null, adjunto: null, bandeja: '' };
@@ -938,6 +989,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<button type="button" class="ib-fmt" id="ib-interactivo" title="Mensaje interactivo (botones o lista)" aria-label="Mensaje interactivo">'
           + '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
           + '<rect x="3" y="5" width="18" height="4" rx="1"/><rect x="3" y="12" width="18" height="4" rx="1"/><path d="M7 19h10"/></svg></button>'
+          + '<button type="button" class="ib-fmt" id="ib-voz" title="Grabar mensaje de voz" aria-label="Grabar mensaje de voz">'
+          + '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+          + '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 17v4"/></svg></button>'
           + '<input type="file" id="ib-file" hidden '
           + 'accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,audio/*,'
           + '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">'
@@ -1220,6 +1274,115 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       if (j.aviso && typeof showToast === 'function') showToast(j.aviso, 'warn', 6000);
       st.firma = null;          // forzar repintado con el mensaje nuevo
       abrir(st.sel);
+    });
+  }
+
+  // ── Mensaje de voz ─────────────────────────────────────────────────────────
+  // WhatsApp solo acepta audio Opus en contenedor OGG. Firefox y Safari graban
+  // un formato que Meta acepta directo; Chrome graba WebM/Opus y hay que
+  // reempaquetarlo a OGG en el navegador (webm-opus-to-ogg.js).
+  var _rec = null, _recChunks = [], _recMime = '', _recTimer = null, _recT0 = 0, _recStream = null;
+
+  function mejorFormatoAudio() {
+    var candidatos = [
+      'audio/ogg;codecs=opus',   // Firefox → directo
+      'audio/mp4',               // Safari → directo (AAC)
+      'audio/webm;codecs=opus',  // Chrome → se reempaqueta a OGG
+    ];
+    for (var i = 0; i < candidatos.length; i++) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(candidatos[i])) return candidatos[i];
+    }
+    return '';
+  }
+
+  function toggleVoz() {
+    if (_rec && _rec.state === 'recording') { _rec.stop(); return; }
+    if (!st.sel) return;
+
+    var mime = mejorFormatoAudio();
+    if (!mime || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      if (window.showToast) showToast('Este navegador no permite grabar audio', 'error');
+      return;
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      _recStream = stream;
+      _recChunks = []; _recMime = mime;
+      _rec = new MediaRecorder(stream, { mimeType: mime });
+      _rec.ondataavailable = function (e) { if (e.data && e.data.size) _recChunks.push(e.data); };
+      _rec.onstop = function () {
+        clearInterval(_recTimer);
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        pintarBarraVoz(false);
+        if (_recCancelado) { _recCancelado = false; return; }
+        procesarVoz();
+      };
+      _rec.start();
+      _recT0 = Date.now();
+      pintarBarraVoz(true);
+      _recTimer = setInterval(function () {
+        var s = Math.floor((Date.now() - _recT0) / 1000);
+        var el = document.getElementById('ib-voz-t');
+        if (el) el.textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + (s % 60)).slice(-2);
+        if (s >= 300) _rec.stop();   // tope de 5 min
+      }, 250);
+    }).catch(function () {
+      if (window.showToast) showToast('No se pudo acceder al micrófono', 'error');
+    });
+  }
+
+  var _recCancelado = false;
+  function cancelarVoz() {
+    if (!_rec) return;
+    _recCancelado = true;
+    _rec.stop();
+  }
+
+  // Barra de grabación en lugar del compositor
+  function pintarBarraVoz(grabando) {
+    var foot = document.querySelector('.ib-foot');
+    if (!foot) return;
+    if (!grabando) { if (foot.dataset.voz) { foot.dataset.voz = ''; abrir(st.sel); } return; }
+    foot.dataset.voz = '1';
+    foot.innerHTML =
+        '<div class="ib-voz-barra">'
+      +   '<button type="button" class="ib-voz-x" id="ib-voz-cancel" title="Cancelar" aria-label="Cancelar">✕</button>'
+      +   '<span class="ib-voz-dot"></span>'
+      +   '<span class="ib-voz-t" id="ib-voz-t">00:00</span>'
+      +   '<span class="ib-voz-msg">Grabando… suelta para enviar</span>'
+      +   '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-voz-stop">Enviar</button>'
+      + '</div>';
+  }
+
+  function procesarVoz() {
+    var blob = new Blob(_recChunks, { type: _recMime.split(';')[0] });
+    if (blob.size < 400) { if (window.showToast) showToast('La grabación fue muy corta', 'error'); return; }
+
+    if (window.showToast) showToast('Enviando nota de voz…', 'ok');
+
+    var listo = Promise.resolve({ blob: blob, ext: 'mp4', mime: 'audio/mp4' });
+
+    if (_recMime.indexOf('ogg') !== -1) {
+      listo = Promise.resolve({ blob: blob, ext: 'ogg', mime: 'audio/ogg' });
+    } else if (_recMime.indexOf('webm') !== -1) {
+      // Chrome: reempaquetar WebM → OGG antes de enviar
+      listo = webmOpusToOgg(blob).then(function (ogg) {
+        return { blob: ogg, ext: 'ogg', mime: 'audio/ogg' };
+      });
+    }
+
+    listo.then(function (r) {
+      var fd = new FormData();
+      fd.append('accion', 'adjuntar');
+      fd.append('id', st.sel);
+      fd.append('voz', '1');
+      fd.append('archivo', r.blob, 'nota_de_voz.' + r.ext);
+      ggiPost('ajax.php', fd).then(function (j) {
+        st.firma = null; abrir(st.sel);
+        if (!j.ok && window.showToast) showToast(j.msg || 'No se pudo enviar la nota de voz', 'error');
+      });
+    }).catch(function (err) {
+      if (window.showToast) showToast('No se pudo procesar el audio: ' + (err.message || ''), 'error');
     });
   }
 
@@ -2081,6 +2244,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     if (e.target.closest('#ib-plantilla')) { popPlantillas(); return; }
     if (e.target.closest('#ib-interactivo')) { formInteractivo(); return; }
+    if (e.target.closest('#ib-voz'))        { toggleVoz(); return; }
+    if (e.target.closest('#ib-voz-stop'))   { if (_rec) _rec.stop(); return; }
+    if (e.target.closest('#ib-voz-cancel'))  { cancelarVoz(); return; }
 
     // Reaccionar a un mensaje: abre un mini-selector de emoji
     var rxb = e.target.closest('[data-rx]');
