@@ -516,6 +516,57 @@
   }
 }
 
+/* ════════════════════════════════════════════════════════════
+   MOBILE — Modales SIMPLES (sin iframe) como POPUP centrado.
+   Los modales grandes con iframe (.mant-modal-lg: editar empresa,
+   propuestas…) siguen a pantalla completa arriba. Los simples
+   (adjuntar, plantillas, interactivo, confirmaciones…) se ven como
+   popup con márgenes y letra más chica, no cubriendo toda la pantalla.
+   Mayor especificidad + !important para ganar a las reglas de arriba.
+   ════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  .mant-modal-overlay:has(.mant-modal-box:not(.mant-modal-lg)) {
+    padding:      18px !important;
+    align-items:  center !important;
+    background:   rgba(0,0,0,.5) !important;
+  }
+  .mant-modal-box:not(.mant-modal-lg) {
+    max-width:     460px !important;
+    width:         100% !important;
+    max-height:    86dvh !important;
+    height:        auto !important;
+    border-radius: 14px !important;
+    box-shadow:    0 20px 60px rgba(0,0,0,.35) !important;
+    overflow-y:    hidden !important;
+    display:       flex;
+    flex-direction: column;
+  }
+  .mant-modal-box:not(.mant-modal-lg) .mant-modal-header {
+    min-height:   46px !important;
+    height:       auto !important;
+    padding:      10px 8px 10px 14px !important;
+  }
+  /* Popup: botón de cierre = "✕" a la derecha (no el "← Volver" de pantalla completa) */
+  .mant-modal-box:not(.mant-modal-lg) .mant-modal-close {
+    order:        0 !important;
+    width:        32px !important;
+    min-width:    32px !important;
+    height:       32px !important;
+    padding:      0 !important;
+    border-radius: 8px !important;
+    font-size:    16px !important;
+  }
+  .mant-modal-box:not(.mant-modal-lg) .mant-modal-close .ggi-close-icon-mobile  { display: none !important; }
+  .mant-modal-box:not(.mant-modal-lg) .mant-modal-close .ggi-close-icon-desktop { display: flex !important; }
+  .mant-modal-box:not(.mant-modal-lg) .mant-modal-title {
+    flex:         1 !important;
+    text-align:   left !important;
+    font-size:    14px !important;
+    padding-right: 8px !important;
+  }
+  .mant-modal-box:not(.mant-modal-lg) .mant-modal-body { padding: 16px !important; }
+}
+
 /* Desktop: iconos originales */
 @media (min-width: 768px) {
   .mant-modal-close .ggi-close-icon-mobile  { display: none  !important; }
@@ -2249,10 +2300,16 @@ function mantClose() {
   _ggiModalFocusRestore(); // a11y: quitar trampa de foco y devolverlo al disparador
 }
 
-/* ── mantCloseOnBg: cierra al tocar el fondo (solo desktop) ── */
+/* ── mantCloseOnBg: cierra al tocar el fondo ── */
 function mantCloseOnBg(e) {
-  if (_ggiIsMobile()) return; // en mobile NO cerrar al tocar fuera
-  if (e.target === document.getElementById('mant-modal')) ggiModalClose();
+  if (e.target !== document.getElementById('mant-modal')) return;
+  // En móvil los modales grandes (iframe, pantalla completa) NO cierran al tocar
+  // fuera; los popups simples sí (tienen fondo oscurecido visible).
+  if (_ggiIsMobile()) {
+    var box = document.querySelector('#mant-modal .mant-modal-box');
+    if (box && box.classList.contains('mant-modal-lg')) return;
+  }
+  ggiModalClose();
 }
 
 /* ════════════════════════════════════════════════════════════
