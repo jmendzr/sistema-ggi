@@ -1974,6 +1974,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
   // ── Envío ──
   function enviar() {
+    // Guardia anti doble envío: el mismo "Enviar" puede dispararse por la tecla
+    // Enter (keydown) y por el clic delegado; sin este flag el mensaje se
+    // mandaba dos veces porque ambos corren antes de deshabilitar el botón.
+    if (st.enviando) return;
+
     var inp = $('#ib-texto'), btn = $('#ib-enviar');
     if (!inp || !st.sel) return;
 
@@ -1984,11 +1989,13 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     if (!texto) return;
 
+    st.enviando = true;
     inp.setAttribute('contenteditable', 'false');
     if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
 
     // Restaura la caja pase lo que pase, para que nunca quede en "Enviando…"
     function restaurar() {
+      st.enviando = false;
       if (!document.body.contains(inp)) return;   // el hilo ya se re-renderizó
       inp.setAttribute('contenteditable', 'true');
       if (btn) { btn.disabled = false; btn.textContent = 'Enviar'; }
