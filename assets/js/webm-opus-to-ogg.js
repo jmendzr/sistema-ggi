@@ -46,10 +46,18 @@
   }
 
   // Lee un tamaño VINT (quita el marcador de longitud).
+  // MediaRecorder escribe Segment y Cluster con "tamaño desconocido" (todos los
+  // bits de datos en 1) porque graba en streaming; eso se marca con unknown=true
+  // para que quien recorre use el final del padre en vez de un tamaño gigante.
   function readSize(buf, p) {
-    var len = vintLen(buf[p]), val = buf[p] & (0xff >> len);
-    for (var i = 1; i < len; i++) val = (val * 256) + buf[p + i];
-    return { size: val, next: p + len };
+    var len = vintLen(buf[p]);
+    var val = buf[p] & (0xff >> len);
+    var allOnes = val === (0xff >> len);
+    for (var i = 1; i < len; i++) {
+      val = (val * 256) + buf[p + i];
+      if (buf[p + i] !== 0xff) allOnes = false;
+    }
+    return { size: val, next: p + len, unknown: allOnes };
   }
 
   /**
@@ -68,7 +76,9 @@
       while (p < end) {
         var e = readId(buf, p); p = e.next;
         var s = readSize(buf, p); p = s.next;
-        var cid = e.id, size = s.size, body = p, bodyEnd = p + size;
+        var cid = e.id, body = p;
+        // Tamaño desconocido (Segment/Cluster en streaming) → hasta el final del padre
+        var bodyEnd = s.unknown ? end : Math.min(p + s.size, end);
 
         // IDs de Matroska usados
         if (cid === 0x18538067 || cid === 0x1654AE6B || cid === 0xAE || cid === 0x1F43B675) {

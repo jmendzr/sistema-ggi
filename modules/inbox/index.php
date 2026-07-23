@@ -291,9 +291,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-msg-acts { display: flex; gap: 3px; opacity: 0; transition: opacity .12s; flex-shrink: 0; }
   .ib-b-wrap:hover .ib-msg-acts { opacity: 1; }
   .ib-msg-act { border: 1px solid var(--brd); background: var(--bg-surface); color: var(--tx2);
-                width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: .92rem;
+                width: 30px; height: 30px; border-radius: 50%; cursor: pointer; padding: 0;
                 display: inline-flex; align-items: center; justify-content: center; }
-  .ib-msg-act:hover { background: var(--bg-hover); color: var(--ac); }
+  .ib-msg-act svg { width: 15px; height: 15px; }
+  .ib-msg-act:hover { background: var(--bg-hover); color: var(--ac); border-color: var(--ac); }
 
   /* Barra "Respondiendo a…" sobre el compositor */
   .ib-resp { display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin-bottom: 8px;
@@ -593,9 +594,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     .ib-pill { padding: 4px 10px; }
 
     /* Cabecera del hilo: los controles no deben apretujar el nombre */
-    .ib-chat-head { padding: 9px 12px; gap: 8px; }
-    .ib-chat-n { font-size: .88rem; }
-    .ib-chat-head .ib-icon { width: 34px; height: 34px; }
+    .ib-chat-head { padding: 9px 10px; gap: 7px; flex-wrap: nowrap; }
+    .ib-chat-n { font-size: .9rem; }
+    .ib-chat-head .ib-icon { width: 36px; height: 36px; flex-shrink: 0; }
+    /* El botón de acción (Tomar/Soltar) se compacta para no romper la fila */
+    .ib-chat-head .ib-btn-sm { padding: 6px 10px; font-size: .74rem; white-space: nowrap; flex-shrink: 0; }
+    .ib-chat-head .ib-tag { flex-shrink: 0; }
 
     /* Mensajes */
     .ib-b-wrap { max-width: 86%; }
@@ -704,6 +708,33 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   var st = { f: 'todas', q: '', sel: null, etq: 0, etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null };
   var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)) ?>;
   var $ = function (s) { return document.querySelector(s); };
+
+  // Iconos SVG (nunca emoji como icono de UI). Trazo, heredan currentColor.
+  var _ICO = {
+    reply:   '<path d="M9 17l-5-5 5-5M4 12h11a5 5 0 015 5v1"/>',
+    forward: '<path d="M15 17l5-5-5-5M20 12H9a5 5 0 00-5 5v1"/>',
+    smile:   '<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
+    emoji:   '<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
+    clip:    '<path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 014.95 4.95l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>',
+    x:       '<path d="M18 6L6 18M6 6l12 12"/>',
+    send:    '<path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>',
+    mic:     '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 17v4"/>',
+    chat:    '<path d="M21 11.5a8.38 8.38 0 01-9 8.5 8.4 8.4 0 01-4-1L3 21l1-4a8.4 8.4 0 01-1-4 8.38 8.38 0 018.5-9 8.38 8.38 0 019 8.5z"/>',
+    list:    '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    link:    '<path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.5 1.5M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7L12 19"/>',
+    person:  '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/>',
+    doc:     '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>',
+    image:   '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
+    video:   '<rect x="2" y="6" width="14" height="12" rx="2"/><path d="M22 8l-6 4 6 4V8z"/>',
+    audio:   '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 17v4"/>',
+    sticker: '<path d="M15.5 3H5a2 2 0 00-2 2v14a2 2 0 002 2h9l7-7V5a2 2 0 00-2-2z"/><path d="M14 21v-5a2 2 0 012-2h5"/>'
+  };
+  function svg(nombre, size) {
+    size = size || 15;
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" '
+      + 'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+      + 'style="vertical-align:middle;flex-shrink:0">' + _ICO[nombre] + '</svg>';
+  }
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -922,12 +953,13 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           cuerpoMsg += '<audio src="' + src + '" controls preload="none" style="max-width:100%"></audio>';
         } else {
           cuerpoMsg += '<a class="ib-doc" href="' + src + '" target="_blank" rel="noopener">'
-                     + '📄 ' + esc(m.media_nombre || 'Documento') + '</a>';
+                     + svg('doc', 15) + ' ' + esc(m.media_nombre || 'Documento') + '</a>';
         }
       } else if (m.tipo && m.tipo !== 'text' && !m.texto) {
-        var etq = { image: '📷 Imagen', sticker: 'Sticker', video: '🎬 Video',
-                    audio: '🎤 Audio', document: '📄 Documento', location: '📍 Ubicación' };
-        cuerpoMsg += '<span class="ib-adj">' + (etq[m.tipo] || m.tipo) + '</span>';
+        var etq = { image: ['image','Imagen'], sticker: ['sticker','Sticker'], video: ['video','Video'],
+                    audio: ['audio','Audio'], document: ['doc','Documento'], location: ['image','Ubicación'] };
+        var ei = etq[m.tipo] || ['doc', m.tipo];
+        cuerpoMsg += '<span class="ib-adj">' + svg(ei[0], 15) + ' ' + esc(ei[1]) + '</span>';
       }
 
       // Interactivo saliente: se guardó como "cuerpo\n[Botones: a · b · c]".
@@ -952,7 +984,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
       // Etiqueta "Reenviado" cuando Meta lo marca como tal
       var fwd = m.reenviado
-        ? '<div class="ib-fwd">↪ Reenviado</div>' : '';
+        ? '<div class="ib-fwd">' + svg('forward',13) + ' Reenviado</div>' : '';
 
       // Cita: si este mensaje responde a otro, se muestra arriba el fragmento
       var cita = m.cita
@@ -968,10 +1000,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       var acts = '';
       if (puedeEscribir) {
         acts += '<button type="button" class="ib-msg-act" data-reply="' + m.id + '" '
-              + 'title="Responder" aria-label="Responder">↩</button>';
+              + 'title="Responder" aria-label="Responder">' + svg('reply',16) + '</button>';
         if (m.dir === 'in') {
           acts += '<button type="button" class="ib-msg-act" data-rx="' + m.id + '" '
-                + 'title="Reaccionar" aria-label="Reaccionar">☺</button>';
+                + 'title="Reaccionar" aria-label="Reaccionar">' + svg('smile',16) + '</button>';
         }
       }
 
@@ -1035,8 +1067,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<button type="button" class="ib-fmt" data-fmt="~" title="Tachado (~texto~)" aria-label="Tachado"><s>S</s></button>'
           + '<button type="button" class="ib-fmt" data-fmt="```" title="Monoespaciado" aria-label="Monoespaciado">&lt;/&gt;</button>'
           + '<span class="ib-barra-sep"></span>'
-          + '<button type="button" class="ib-fmt" id="ib-emoji" title="Emojis" aria-label="Insertar emoji">☺</button>'
-          + '<button type="button" class="ib-fmt" id="ib-adjunto" title="Adjuntar archivo" aria-label="Adjuntar archivo">📎</button>'
+          + '<button type="button" class="ib-fmt" id="ib-emoji" title="Emojis" aria-label="Insertar emoji">' + svg('emoji') + '</button>'
+          + '<button type="button" class="ib-fmt" id="ib-adjunto" title="Adjuntar archivo" aria-label="Adjuntar archivo">' + svg('clip') + '</button>'
           // También dentro de la ventana: hay plantillas útiles en una
           // conversación viva (factura, documentos completos) y no tiene
           // sentido obligar a reescribirlas a mano.
@@ -1357,7 +1389,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     box.innerHTML = '<div class="ib-resp"><div class="ib-resp-txt">'
       + '<b>Respondiendo</b>' + esc(st.responder.texto) + '</div>'
       + '<button type="button" class="ib-resp-x" id="ib-resp-quitar" '
-      + 'title="Cancelar" aria-label="Cancelar respuesta">✕</button></div>';
+      + 'title="Cancelar" aria-label="Cancelar respuesta">' + svg('x',14) + '</button></div>';
   }
 
   // ── Mensaje de voz ─────────────────────────────────────────────────────────
@@ -1429,7 +1461,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     foot.dataset.voz = '1';
     foot.innerHTML =
         '<div class="ib-voz-barra">'
-      +   '<button type="button" class="ib-voz-x" id="ib-voz-cancel" title="Cancelar" aria-label="Cancelar">✕</button>'
+      +   '<button type="button" class="ib-voz-x" id="ib-voz-cancel" title="Cancelar" aria-label="Cancelar">' + svg('x',16) + '</button>'
       +   '<span class="ib-voz-dot"></span>'
       +   '<span class="ib-voz-t" id="ib-voz-t">00:00</span>'
       +   '<span class="ib-voz-msg">Grabando… suelta para enviar</span>'
@@ -1450,7 +1482,14 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     } else if (_recMime.indexOf('webm') !== -1) {
       // Chrome: reempaquetar WebM → OGG antes de enviar
       listo = webmOpusToOgg(blob).then(function (ogg) {
-        return { blob: ogg, ext: 'ogg', mime: 'audio/ogg' };
+        // Validar que salió un OGG real (empieza con "OggS") antes de subirlo
+        return ogg.slice(0, 4).arrayBuffer().then(function (h) {
+          var b = new Uint8Array(h);
+          if (b[0] !== 0x4F || b[1] !== 0x67 || b[2] !== 0x67 || b[3] !== 0x53) {
+            throw new Error('El audio no se pudo convertir a un formato válido');
+          }
+          return { blob: ogg, ext: 'ogg', mime: 'audio/ogg' };
+        });
       });
     }
 
@@ -1550,8 +1589,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     var mini;
     if (a.mime.indexOf('image/') === 0)      mini = '<img src="' + a.url + '" alt="">';
     else if (a.mime.indexOf('video/') === 0) mini = '<video src="' + a.url + '" muted></video>';
-    else if (a.mime.indexOf('audio/') === 0) mini = '<span class="ib-adj-ico">🎤</span>';
-    else                                     mini = '<span class="ib-adj-ico">📄</span>';
+    else if (a.mime.indexOf('audio/') === 0) mini = '<span class="ib-adj-ico">' + svg('audio',20) + '</span>';
+    else                                     mini = '<span class="ib-adj-ico">' + svg('doc',20) + '</span>';
 
     var nota = a.sticker ? 'Se enviará como sticker (sin texto)'
              : (a.gif ? 'Se convertirá a sticker animado' : '');
@@ -1805,10 +1844,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     // Modal con pestañas, como el chat de Kapso: Botones / Lista / Enlace / Contacto
     mantOpen('Enviar mensaje interactivo',
         '<div class="ib-int-tabs">'
-      +   '<button type="button" class="ib-int-tab on" data-it="button">💬 Botones</button>'
-      +   '<button type="button" class="ib-int-tab" data-it="list">☰ Lista</button>'
-      +   '<button type="button" class="ib-int-tab" data-it="cta_url">🔗 Enlace</button>'
-      +   '<button type="button" class="ib-int-tab" data-it="contact">👤 Contacto</button>'
+      +   '<button type="button" class="ib-int-tab on" data-it="button">' + svg('chat',14) + ' Botones</button>'
+      +   '<button type="button" class="ib-int-tab" data-it="list">' + svg('list',14) + ' Lista</button>'
+      +   '<button type="button" class="ib-int-tab" data-it="cta_url">' + svg('link',14) + ' Enlace</button>'
+      +   '<button type="button" class="ib-int-tab" data-it="contact">' + svg('person',14) + ' Contacto</button>'
       + '</div>'
       + '<div id="it-comun">'
       +   '<label class="ib-plt-f"><span>Encabezado <small>(opcional)</small></span>'
@@ -1822,7 +1861,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       + '<div id="it-especifico"></div>'
       + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">'
       + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
-      + '<button type="button" class="ggi-btn-confirm-action" id="it-enviar">✈ Enviar</button></div>');
+      + '<button type="button" class="ggi-btn-confirm-action" id="it-enviar">Enviar</button></div>');
 
     var sub = 'button';
     pintarEspecifico(sub);
@@ -1884,7 +1923,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
       btn.disabled = true; btn.textContent = 'Enviando…';
       ggiPost('ajax.php', datos).then(function (j) {
-        btn.disabled = false; btn.textContent = '✈ Enviar';
+        btn.disabled = false; btn.textContent = 'Enviar';
         if (!j.ok) return;
         ggiModalClose();
         if (window.showToast) showToast('Mensaje enviado', 'ok');
@@ -2273,7 +2312,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       var chip = $('#ib-etq-activa');
       if (chip) {
         chip.style.display = st.etq ? '' : 'none';
-        chip.textContent   = st.etq ? (fEtq.dataset.nom || 'Etiqueta') + ' ✕' : '';
+        chip.textContent   = st.etq ? (fEtq.dataset.nom || 'Etiqueta') + ' ×' : '';
         chip.classList.toggle('on', !!st.etq);
       }
       var bEtq = $('#ib-filtro-etq');
