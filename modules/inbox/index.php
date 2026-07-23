@@ -281,6 +281,33 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-fwd { font-size: .68rem; font-style: italic; color: inherit; opacity: .7; margin-bottom: 3px;
             display: flex; align-items: center; gap: 3px; }
 
+  /* Zona de arrastre para adjuntar (estilo WhatsApp Web) */
+  .ib-drop { border: 2px dashed var(--brd); border-radius: 14px; padding: 34px 20px;
+             text-align: center; cursor: pointer; color: var(--tx3); transition: border-color .13s, background .13s; }
+  .ib-drop:hover, .ib-drop:focus { border-color: var(--ac); background: var(--ac-soft); outline: none; }
+  .ib-drop.sobre { border-color: var(--ac); background: var(--ac-soft); color: var(--ac); }
+  .ib-drop-t { font-size: .92rem; font-weight: 700; color: var(--tx); margin: 12px 0 6px; }
+  .ib-drop-s { font-size: .76rem; color: var(--tx2); line-height: 1.5; }
+
+  /* Modal de mensaje interactivo */
+  .ib-int-tabs { display: flex; gap: 4px; margin-bottom: 14px; background: var(--bg-surface2);
+                 padding: 3px; border-radius: 10px; }
+  .ib-int-tab { flex: 1; border: none; background: transparent; padding: 8px; border-radius: 8px;
+                font: inherit; font-size: .8rem; font-weight: 600; color: var(--tx2); cursor: pointer; }
+  .ib-int-tab.on { background: var(--bg-surface); color: var(--ac); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  #it-especifico textarea, #it-body { width: 100%; padding: 9px 12px; font: inherit; font-size: .85rem;
+    border: 1px solid var(--brd); border-radius: 9px; background: var(--bg-input); color: var(--tx); resize: vertical; }
+  [data-btn], [data-opt] { width: 100%; padding: 8px 11px; font: inherit; font-size: .84rem;
+    border: 1px solid var(--brd); border-radius: 8px; background: var(--bg-input); color: var(--tx); }
+
+  /* Interactivo en el hilo: cuerpo + botones/opciones dibujados */
+  .ib-int-body { margin-bottom: 6px; }
+  .ib-int-opts { border-top: 1px solid rgba(255,255,255,.2); margin-top: 6px; padding-top: 4px; }
+  .ib-b.out .ib-int-opt, .ib-b.sis .ib-int-opt { border-top: 1px solid rgba(255,255,255,.18); }
+  .ib-int-opt { text-align: center; padding: 6px; font-size: .8rem; font-weight: 600;
+                opacity: .92; border-top: 1px solid var(--brd); }
+  .ib-int-opt:first-child { border-top: none; }
+
   /* Reacción del cliente: emoji flotante en la esquina de la burbuja.
      El wrap toma la alineación izq/der; dentro, la burbuja ya no se auto-alinea
      (si no, pelearía con el wrap). max-width se mueve al wrap. */
@@ -809,8 +836,25 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         cuerpoMsg += '<span class="ib-adj">' + (etq[m.tipo] || m.tipo) + '</span>';
       }
 
-      if (m.texto) cuerpoMsg += (cuerpoMsg ? '<div class="ib-pie-foto">' : '')
-                              + formato(m.texto) + (cuerpoMsg ? '</div>' : '');
+      // Interactivo saliente: se guardó como "cuerpo\n[Botones: a · b · c]".
+      // Se dibuja el cuerpo arriba y las opciones como botones simulados.
+      if (m.tipo === 'interactive' && m.texto) {
+        var mm = m.texto.match(/^([\s\S]*?)\n\[(Botones|Lista|Enlace):\s*([\s\S]*)\]$/);
+        if (mm) {
+          var opts = mm[2] === 'Enlace'
+            ? [mm[3].split('→')[0].trim()]
+            : mm[3].split('·').map(function (x) { return x.trim(); });
+          cuerpoMsg += '<div class="ib-int-body">' + formato(mm[1]) + '</div>'
+                     + '<div class="ib-int-opts">' + opts.map(function (o) {
+                         return '<div class="ib-int-opt">' + esc(o) + '</div>';
+                       }).join('') + '</div>';
+        } else {
+          cuerpoMsg += formato(m.texto);
+        }
+      } else if (m.texto) {
+        cuerpoMsg += (cuerpoMsg ? '<div class="ib-pie-foto">' : '')
+                   + formato(m.texto) + (cuerpoMsg ? '</div>' : '');
+      }
 
       // Etiqueta "Reenviado" cuando Meta lo marca como tal
       var fwd = m.reenviado
@@ -891,6 +935,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<button type="button" class="ib-fmt" id="ib-plantilla" title="Enviar una plantilla" aria-label="Enviar una plantilla">'
           + '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
           + '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h8"/></svg></button>'
+          + '<button type="button" class="ib-fmt" id="ib-interactivo" title="Mensaje interactivo (botones o lista)" aria-label="Mensaje interactivo">'
+          + '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+          + '<rect x="3" y="5" width="18" height="4" rx="1"/><rect x="3" y="12" width="18" height="4" rx="1"/><path d="M7 19h10"/></svg></button>'
           + '<input type="file" id="ib-file" hidden '
           + 'accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,audio/*,'
           + '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">'
@@ -1176,6 +1223,52 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     });
   }
 
+  // ── Modal de adjuntar con zona de arrastre (estilo WhatsApp Web) ───────────
+  function modalAdjuntar() {
+    if (!st.sel) return;
+
+    mantOpen('Adjuntar archivo',
+        '<div class="ib-drop" id="ib-drop" tabindex="0" role="button" '
+      + 'aria-label="Soltar archivos aquí o clic para elegir">'
+      +   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="42" height="42">'
+      +     '<path stroke-linecap="round" stroke-linejoin="round" d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 014.95 4.95l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>'
+      +   '<div class="ib-drop-t">Suelta el archivo aquí o haz clic para elegir</div>'
+      +   '<div class="ib-drop-s">Imágenes, video, audio o documentos. Cada archivo se envía por separado.</div>'
+      +   '<div class="ib-drop-s">Máx.: imágenes 5 MB · video/audio 16 MB · documentos 100 MB</div>'
+      + '</div>'
+      + '<input type="file" id="ib-drop-file" hidden '
+      +   'accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,audio/*,'
+      +   '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">'
+      + '<div style="display:flex;justify-content:flex-end;margin-top:14px">'
+      + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button></div>');
+
+    var drop = document.getElementById('ib-drop');
+    var file = document.getElementById('ib-drop-file');
+
+    function tomar(f) {
+      if (!f) return;
+      ggiModalClose();
+      ponerAdjunto(f);   // va a la franja del compositor, con vista previa y pie
+    }
+
+    drop.addEventListener('click', function () { file.click(); });
+    drop.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); }
+    });
+    file.addEventListener('change', function () { if (file.files[0]) tomar(file.files[0]); });
+
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('sobre'); });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('sobre'); });
+    });
+    drop.addEventListener('drop', function (e) {
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) tomar(f);
+    });
+  }
+
   // ── Adjunto en la propia caja de escritura ─────────────────────────────────
   function ponerAdjunto(archivo) {
     if (st.adjunto && st.adjunto.url) URL.revokeObjectURL(st.adjunto.url);
@@ -1233,81 +1326,6 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       caja.setAttribute('data-ph', a.sticker ? 'Los stickers se envían sin texto' : 'Añade un mensaje…');
       if (!a.sticker) caja.focus();
     }
-  }
-
-  // ── Vista previa del adjunto antes de enviarlo (queda sin uso) ─────────────
-  function previewAdjunto(archivo, inputFile) {
-    var url  = URL.createObjectURL(archivo);
-    var mime = archivo.type || '';
-    var kb   = archivo.size / 1024;
-    var peso = kb < 1024 ? Math.round(kb) + ' KB' : (kb / 1024).toFixed(1) + ' MB';
-
-    // El sticker no admite pie de foto: Meta rechaza el mensaje si se manda
-    var esSticker = mime === 'image/webp';
-    var esGif     = mime === 'image/gif';
-
-    var vista;
-    if (mime.indexOf('image/') === 0) {
-      vista = '<img src="' + url + '" alt="Vista previa" class="ib-prev-img">';
-    } else if (mime.indexOf('video/') === 0) {
-      vista = '<video src="' + url + '" class="ib-prev-img" controls preload="metadata"></video>';
-    } else if (mime.indexOf('audio/') === 0) {
-      vista = '<audio src="' + url + '" controls style="width:100%"></audio>';
-    } else {
-      vista = '<div class="ib-prev-doc">📄 ' + esc(archivo.name) + '</div>';
-    }
-
-    mantOpen('Enviar archivo',
-        '<div class="ib-prev">' + vista + '</div>'
-      + '<div class="ib-prev-meta">' + esc(archivo.name) + ' · ' + peso
-      + (esSticker ? ' · se enviará como <b>sticker</b>' : '')
-      + (esGif ? ' · <b>GIF</b>: se convertirá a sticker animado para que se reproduzca' : '')
-      + '</div>'
-      + (esSticker
-          ? '<p class="ib-prev-nota">Los stickers no admiten texto acompañante.</p>'
-          : '<label class="ib-plt-f"><span>Mensaje (opcional)</span>'
-            + '<input type="text" id="ib-prev-txt" maxlength="1024" placeholder="Añade un mensaje…"></label>')
-      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
-      + '<button type="button" class="ggi-btn-confirm-cancel" id="ib-prev-cancel">Cancelar</button>'
-      + '<button type="button" class="ggi-btn-confirm-action" id="ib-prev-ok">Enviar</button>'
-      + '</div>');
-
-    // Arrastrar el texto ya escrito en la caja, si lo había
-    var pie = document.getElementById('ib-prev-txt');
-    if (pie) { pie.value = textoActual().trim(); pie.focus(); }
-
-    function limpiar() {
-      URL.revokeObjectURL(url);
-      if (inputFile) inputFile.value = '';
-    }
-
-    var cancelar = document.getElementById('ib-prev-cancel');
-    if (cancelar) cancelar.addEventListener('click', function () {
-      limpiar();
-      if (typeof ggiModalClose === 'function') ggiModalClose();
-    });
-
-    var ok = document.getElementById('ib-prev-ok');
-    if (ok) ok.addEventListener('click', function () {
-      ok.disabled = true; ok.textContent = 'Enviando…';
-
-      var fd = new FormData();
-      fd.append('accion', 'adjuntar');
-      fd.append('id', st.sel);
-      fd.append('archivo', archivo);
-      fd.append('texto', pie ? pie.value.trim() : '');
-
-      ggiPost('ajax.php', fd).then(function (j) {
-        ok.disabled = false; ok.textContent = 'Enviar';
-        if (!j.ok) return;
-        limpiar();
-        if (typeof ggiModalClose === 'function') ggiModalClose();
-        var caja = $('#ib-texto');
-        if (caja) caja.innerHTML = '';
-        if (j.aviso && typeof showToast === 'function') showToast(j.aviso, 'warn', 7000);
-        abrir(st.sel);
-      });
-    });
   }
 
   // ── Plantillas (única vía fuera de la ventana de 24 h) ─────────────────────
@@ -1532,6 +1550,127 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         abrir(st.sel);
       });
     });
+  }
+
+  // ── Mensaje interactivo (botones / lista / enlace) ─────────────────────────
+  function formInteractivo() {
+    if (!st.sel) return;
+
+    mantOpen('Mensaje interactivo',
+        '<div class="ib-int-tabs">'
+      +   '<button type="button" class="ib-int-tab on" data-it="button">Botones</button>'
+      +   '<button type="button" class="ib-int-tab" data-it="list">Lista</button>'
+      +   '<button type="button" class="ib-int-tab" data-it="cta_url">Enlace</button>'
+      + '</div>'
+      + '<label class="ib-plt-f"><span>Encabezado (opcional)</span>'
+      +   '<input type="text" id="it-header" maxlength="60" placeholder="Título breve"></label>'
+      + '<label class="ib-plt-f"><span>Mensaje</span>'
+      +   '<textarea id="it-body" maxlength="1024" rows="3" placeholder="Escribe el mensaje…"></textarea></label>'
+      + '<label class="ib-plt-f"><span>Pie de página (opcional)</span>'
+      +   '<input type="text" id="it-footer" maxlength="60" placeholder="Texto pequeño al final"></label>'
+      + '<div id="it-especifico"></div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
+      + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
+      + '<button type="button" class="ggi-btn-confirm-action" id="it-enviar">Enviar</button></div>');
+
+    var sub = 'button';
+    pintarEspecifico(sub);
+
+    document.querySelectorAll('.ib-int-tab').forEach(function (t) {
+      t.addEventListener('click', function () {
+        document.querySelectorAll('.ib-int-tab').forEach(function (x) { x.classList.toggle('on', x === t); });
+        sub = t.dataset.it;
+        pintarEspecifico(sub);
+      });
+    });
+
+    document.getElementById('it-enviar').addEventListener('click', function () {
+      var btn = this;
+      var cuerpo = document.getElementById('it-body').value.trim();
+      if (!cuerpo) { if (window.showToast) showToast('Escribe el mensaje', 'error'); return; }
+
+      var datos = {
+        accion: 'enviar_interactivo', id: st.sel, subtipo: sub,
+        cuerpo: cuerpo,
+        header: document.getElementById('it-header').value.trim(),
+        pie: document.getElementById('it-footer').value.trim()
+      };
+
+      if (sub === 'button') {
+        var i = 0;
+        document.querySelectorAll('[data-btn]').forEach(function (b) {
+          if (b.value.trim()) datos['botones[' + (i++) + ']'] = b.value.trim();
+        });
+        if (i === 0) { if (window.showToast) showToast('Agrega al menos un botón', 'error'); return; }
+      } else if (sub === 'list') {
+        datos.boton_lista = document.getElementById('it-lbtn').value.trim();
+        var k = 0;
+        document.querySelectorAll('[data-opt]').forEach(function (o) {
+          if (o.value.trim()) datos['opciones[' + (k++) + ']'] = o.value.trim();
+        });
+        if (k === 0) { if (window.showToast) showToast('Agrega al menos una opción', 'error'); return; }
+      } else {
+        datos.cta_texto = document.getElementById('it-ctxt').value.trim();
+        datos.cta_url   = document.getElementById('it-curl').value.trim();
+        if (!datos.cta_url) { if (window.showToast) showToast('Falta la URL', 'error'); return; }
+      }
+
+      btn.disabled = true; btn.textContent = 'Enviando…';
+      ggiPost('ajax.php', datos).then(function (j) {
+        btn.disabled = false; btn.textContent = 'Enviar';
+        if (!j.ok) return;
+        ggiModalClose();
+        if (window.showToast) showToast('Mensaje interactivo enviado', 'ok');
+        st.firma = null; abrir(st.sel);
+      });
+    });
+  }
+
+  function pintarEspecifico(sub) {
+    var box = document.getElementById('it-especifico');
+    if (!box) return;
+
+    if (sub === 'button') {
+      box.innerHTML = '<div class="ib-plt-f"><span>Botones de respuesta (máx. 3, 20 caracteres)</span>'
+        + '<div id="it-btns">'
+        + '<input type="text" data-btn maxlength="20" placeholder="Botón 1" style="margin-bottom:6px">'
+        + '</div>'
+        + '<button type="button" class="btn btn-ghost btn-sm" id="it-add-btn">+ Agregar botón</button></div>';
+      document.getElementById('it-add-btn').addEventListener('click', function () {
+        var cont = document.getElementById('it-btns');
+        if (cont.querySelectorAll('[data-btn]').length >= 3) return;
+        var inp = document.createElement('input');
+        inp.type = 'text'; inp.setAttribute('data-btn', ''); inp.maxLength = 20;
+        inp.placeholder = 'Botón ' + (cont.querySelectorAll('[data-btn]').length + 1);
+        inp.style.marginBottom = '6px';
+        cont.appendChild(inp); inp.focus();
+      });
+
+    } else if (sub === 'list') {
+      box.innerHTML = '<label class="ib-plt-f"><span>Texto del botón que abre la lista</span>'
+        + '<input type="text" id="it-lbtn" maxlength="20" placeholder="Ver opciones"></label>'
+        + '<div class="ib-plt-f"><span>Opciones (máx. 10, 24 caracteres)</span>'
+        + '<div id="it-opts">'
+        + '<input type="text" data-opt maxlength="24" placeholder="Opción 1" style="margin-bottom:6px">'
+        + '<input type="text" data-opt maxlength="24" placeholder="Opción 2" style="margin-bottom:6px">'
+        + '</div>'
+        + '<button type="button" class="btn btn-ghost btn-sm" id="it-add-opt">+ Agregar opción</button></div>';
+      document.getElementById('it-add-opt').addEventListener('click', function () {
+        var cont = document.getElementById('it-opts');
+        if (cont.querySelectorAll('[data-opt]').length >= 10) return;
+        var inp = document.createElement('input');
+        inp.type = 'text'; inp.setAttribute('data-opt', ''); inp.maxLength = 24;
+        inp.placeholder = 'Opción ' + (cont.querySelectorAll('[data-opt]').length + 1);
+        inp.style.marginBottom = '6px';
+        cont.appendChild(inp); inp.focus();
+      });
+
+    } else {
+      box.innerHTML = '<label class="ib-plt-f"><span>Texto del botón</span>'
+        + '<input type="text" id="it-ctxt" maxlength="20" placeholder="Abrir enlace"></label>'
+        + '<label class="ib-plt-f"><span>Dirección web</span>'
+        + '<input type="url" id="it-curl" placeholder="https://…"></label>';
+    }
   }
 
   // ── Envío ──
@@ -1936,15 +2075,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     if (e.target.closest('#ib-emoji')) { popEmojis(e.target.closest('#ib-emoji')); return; }
 
-    if (e.target.closest('#ib-adjunto')) {
-      var f = $('#ib-file');
-      if (f) f.click();
-      return;
-    }
+    if (e.target.closest('#ib-adjunto')) { modalAdjuntar(); return; }
 
     if (e.target.closest('#ib-adj-quitar')) { quitarAdjunto(); return; }
 
     if (e.target.closest('#ib-plantilla')) { popPlantillas(); return; }
+    if (e.target.closest('#ib-interactivo')) { formInteractivo(); return; }
 
     // Reaccionar a un mensaje: abre un mini-selector de emoji
     var rxb = e.target.closest('[data-rx]');

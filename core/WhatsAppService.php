@@ -550,6 +550,49 @@ class WhatsAppService
     }
 
     /**
+     * Envía un mensaje INTERACTIVO (botones de respuesta o lista).
+     * Solo dentro de la ventana de 24 h, como el texto libre.
+     *
+     * @param array $interactive Objeto 'interactive' ya armado por quien llama.
+     */
+    public static function sendInteractive(string $to, array $interactive): ?string
+    {
+        self::$lastError = null;
+        $phoneId = self::phoneId();
+        if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return null; }
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type'    => 'individual',
+            'to'                => $to,
+            'type'              => 'interactive',
+            'interactive'       => $interactive,
+        ];
+
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/messages");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', self::authHeader()],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $d = json_decode((string) $res, true);
+        if ($code >= 200 && $code < 300) return $d['messages'][0]['id'] ?? null;
+
+        $e      = $d['error'] ?? [];
+        $errMsg = $e['message'] ?? (string) $res;
+        if (!empty($e['code'])) $errMsg .= ' [code ' . $e['code'] . ']';
+        if (!empty($e['error_data']['details'])) $errMsg .= ' — ' . $e['error_data']['details'];
+        self::$lastError = mb_substr('HTTP ' . $code . ': ' . $errMsg, 0, 400);
+        error_log('[WhatsAppService] sendInteractive: ' . self::$lastError);
+
+        return null;
+    }
+
+    /**
      * Reacciona a un mensaje con un emoji. Emoji vacío = quita la reacción.
      * Solo dentro de la ventana de 24 h.
      */

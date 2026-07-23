@@ -635,6 +635,103 @@ if ($accion === 'sin_leer') {
     exit;
 }
 
+// ══ Enviar mensaje interactivo (botones o lista) ════════════════════════════
+if ($accion === 'enviar_interactivo') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $id    = (int) ($_POST['id'] ?? 0);
+    $sub   = $_POST['subtipo'] ?? '';   // 'button' | 'list' | 'cta_url'
+    $cuerpo = trim($_POST['cuerpo'] ?? '');
+    $pie    = trim($_POST['pie'] ?? '');
+    $header = trim($_POST['header'] ?? '');
+
+    if (!$id || $cuerpo === '') { echo json_encode(['ok' => false, 'msg' => 'Falta el mensaje']); exit; }
+
+    $c = $pdo->prepare("SELECT telefono, asignado_a, ventana_expira_at, phone_number_id FROM wa_conversaciones WHERE id = ?");
+    $c->execute([$id]);
+    $conv = $c->fetch(PDO::FETCH_ASSOC);
+    if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+    if ((int) $conv['asignado_a'] !== $yo) { echo json_encode(['ok' => false, 'msg' => 'Toma la conversación primero']); exit; }
+    if (!WaInbox::ventanaAbierta($conv['ventana_expira_at'])) {
+        echo json_encode(['ok' => false, 'msg' => 'La ventana de 24 h venció: solo se pueden enviar plantillas']); exit;
+    }
+
+    $interactive = ['body' => ['text' => mb_substr($cuerpo, 0, 1024)]];
+    if ($pie !== '')    $interactive['footer'] = ['text' => mb_substr($pie, 0, 60)];
+    if ($header !== '') $interactive['header'] = ['type' => 'text', 'text' => mb_substr($header, 0, 60)];
+
+    // Resumen legible del interactivo para guardarlo en el hilo
+    $resumen = $cuerpo;
+
+    if ($sub === 'button') {
+        // Hasta 3 botones de respuesta rápida; título máx. 20 caracteres
+        $botones = array_values(array_filter(array_map('trim', (array) ($_POST['botones'] ?? [])), fn($b) => $b !== ''));
+        if (!$botones) { echo json_encode(['ok' => false, 'msg' => 'Agrega al menos un botón']); exit; }
+        if (count($botones) > 3) $botones = array_slice($botones, 0, 3);
+
+        $interactive['type']   = 'button';
+        $interactive['action'] = ['buttons' => array_map(fn($t, $i) => [
+            'type'  => 'reply',
+            'reply' => ['id' => 'btn_' . ($i + 1), 'title' => mb_substr($t, 0, 20)],
+        ], $botones, array_keys($botones))];
+
+        $resumen .= "\n[Botones: " . implode(' · ', $botones) . ']';
+
+    } elseif ($sub === 'list') {
+        // Una sección con opciones; título de fila máx. 24 caracteres
+        $boton    = trim($_POST['boton_lista'] ?? '') ?: 'Ver opciones';
+        $opciones = array_values(array_filter(array_map('trim', (array) ($_POST['opciones'] ?? [])), fn($o) => $o !== ''));
+        if (!$opciones) { echo json_encode(['ok' => false, 'msg' => 'Agrega al menos una opción a la lista']); exit; }
+        if (count($opciones) > 10) $opciones = array_slice($opciones, 0, 10);
+
+        $interactive['type']   = 'list';
+        $interactive['action'] = [
+            'button'   => mb_substr($boton, 0, 20),
+            'sections' => [[
+                'title' => 'Opciones',
+                'rows'  => array_map(fn($o, $i) => [
+                    'id'    => 'opt_' . ($i + 1),
+                    'title' => mb_substr($o, 0, 24),
+                ], $opciones, array_keys($opciones)),
+            ]],
+        ];
+
+        $resumen .= "\n[Lista: " . implode(' · ', $opciones) . ']';
+
+    } elseif ($sub === 'cta_url') {
+        // Botón que abre una URL
+        $txt = trim($_POST['cta_texto'] ?? '') ?: 'Abrir enlace';
+        $url = trim($_POST['cta_url'] ?? '');
+        if (!filter_var($url, FILTER_VALIDATE_URL)) { echo json_encode(['ok' => false, 'msg' => 'La URL no es válida']); exit; }
+
+        $interactive['type']   = 'cta_url';
+        $interactive['action'] = ['name' => 'cta_url', 'parameters' => [
+            'display_text' => mb_substr($txt, 0, 20),
+            'url'          => $url,
+        ]];
+
+        $resumen .= "\n[Enlace: {$txt} → {$url}]";
+
+    } else {
+        echo json_encode(['ok' => false, 'msg' => 'Tipo de mensaje inválido']); exit;
+    }
+
+    $waId = WhatsAppService::sendInteractive($conv['telefono'], $interactive);
+
+    WaInbox::registrarSaliente(
+        $pdo, $conv['telefono'], $waId, 'interactive', $resumen,
+        null, $yo, $waId ? 'sent' : 'failed',
+        $waId ? null : WhatsAppService::lastError(), $conv['phone_number_id']
+    );
+
+    echo $waId
+        ? json_encode(['ok' => true])
+        : json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar']);
+    exit;
+}
+
 // ══ Enviar mensaje ═══════════════════════════════════════════════════════════
 if ($accion === 'enviar') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
