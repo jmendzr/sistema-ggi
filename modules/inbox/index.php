@@ -586,7 +586,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     .ib.abierto .ib-chat-col  { display: flex; }
     .ib-ctx { display: none; }                    /* el contexto no va en móvil */
     .ib-volver { display: inline-flex; }
-    .ib.sin-lista .ib-lista-col { display: flex; }
+    /* sin-lista es un toggle de escritorio; en móvil solo debe remostrar la lista
+       cuando NO hay un hilo abierto. Si no, la lista y el chat (ambos absolute
+       inset:0) se pintan encima y el título del hilo se mezcla con el listado. */
+    .ib.sin-lista:not(.abierto) .ib-lista-col { display: flex; }
 
     /* Cabecera de la lista más compacta */
     .ib-head { padding: 10px 12px 8px; }
@@ -701,8 +704,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   <div class="ib-col ib-ctx" id="ib-ctx"></div>
 </div>
 
-<!-- Reempaquetador WebM→OGG: solo lo usa la nota de voz en Chrome -->
-<script src="<?= APP_URL ?>/assets/js/webm-opus-to-ogg.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/webm-opus-to-ogg.js') ?>"></script>
+<!-- Grabador de nota de voz: opus-recorder graba OGG/Opus nativo en Chrome,
+     Firefox y Safari (encoder WASM), único formato que WhatsApp entrega como voz -->
+<script src="<?= APP_URL ?>/assets/js/recorder.min.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/recorder.min.js') ?>"></script>
 <script>
 (function () {
   var st = { f: 'todas', q: '', sel: null, etq: 0, etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null };
@@ -1393,60 +1397,60 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
 
   // ── Mensaje de voz ─────────────────────────────────────────────────────────
-  // WhatsApp solo acepta audio Opus en contenedor OGG. Firefox y Safari graban
-  // un formato que Meta acepta directo; Chrome graba WebM/Opus y hay que
-  // reempaquetarlo a OGG en el navegador (webm-opus-to-ogg.js).
-  var _rec = null, _recChunks = [], _recMime = '', _recTimer = null, _recT0 = 0, _recStream = null;
+  // WhatsApp solo ENTREGA notas de voz en OGG/Opus. Los navegadores graban
+  // formatos que Meta acepta al subir pero luego no reproduce (Chrome=webm,
+  // Safari=mp4/aac), por eso quedaban en "sent" sin llegar al destinatario. Con
+  // opus-recorder (encoder Opus en WASM) grabamos OGG/Opus real en todos.
+  var _rec = null, _recTimer = null, _recT0 = 0, _recBytes = null, _recCancelado = false;
 
-  function mejorFormatoAudio() {
-    var candidatos = [
-      'audio/ogg;codecs=opus',   // Firefox → directo
-      'audio/mp4',               // Safari → directo (AAC)
-      'audio/webm;codecs=opus',  // Chrome → se reempaqueta a OGG
-    ];
-    for (var i = 0; i < candidatos.length; i++) {
-      if (window.MediaRecorder && MediaRecorder.isTypeSupported(candidatos[i])) return candidatos[i];
-    }
-    return '';
+  function vozDisponible() {
+    return !!(window.Recorder && window.WebAssembly &&
+      navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   }
 
   function toggleVoz() {
-    if (_rec && _rec.state === 'recording') { _rec.stop(); return; }
+    if (_rec) { _rec.stop(); return; }   // segunda pulsación → detener y enviar
     if (!st.sel) return;
-
-    var mime = mejorFormatoAudio();
-    if (!mime || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (!vozDisponible()) {
       if (window.showToast) showToast('Este navegador no permite grabar audio', 'error');
       return;
     }
 
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
-      _recStream = stream;
-      _recChunks = []; _recMime = mime;
-      _rec = new MediaRecorder(stream, { mimeType: mime });
-      _rec.ondataavailable = function (e) { if (e.data && e.data.size) _recChunks.push(e.data); };
-      _rec.onstop = function () {
-        clearInterval(_recTimer);
-        stream.getTracks().forEach(function (t) { t.stop(); });
-        pintarBarraVoz(false);
-        if (_recCancelado) { _recCancelado = false; return; }
-        procesarVoz();
-      };
-      _rec.start();
+    _recBytes = null; _recCancelado = false;
+    _rec = new Recorder({
+      encoderPath: '<?= APP_URL ?>/assets/js/encoderWorker.min.js',
+      encoderApplication: 2048,   // 2048 = VOIP, optimizado para voz
+      encoderSampleRate: 48000,
+      numberOfChannels: 1,
+      streamPages: false,         // entrega el archivo OGG completo al terminar
+      recordingGain: 1,
+      monitorGain: 0,
+      maxFramesPerPage: 40,
+    });
+    _rec.ondataavailable = function (typedArray) { _recBytes = typedArray; };
+    _rec.onstop = function () {
+      clearInterval(_recTimer);
+      pintarBarraVoz(false);
+      var cancel = _recCancelado, bytes = _recBytes;
+      _rec = null; _recBytes = null;
+      if (cancel) return;
+      procesarVoz(bytes);
+    };
+    _rec.start().then(function () {
       _recT0 = Date.now();
       pintarBarraVoz(true);
       _recTimer = setInterval(function () {
         var s = Math.floor((Date.now() - _recT0) / 1000);
         var el = document.getElementById('ib-voz-t');
         if (el) el.textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + (s % 60)).slice(-2);
-        if (s >= 300) _rec.stop();   // tope de 5 min
+        if (s >= 300 && _rec) _rec.stop();   // tope de 5 min
       }, 250);
     }).catch(function () {
+      _rec = null;
       if (window.showToast) showToast('No se pudo acceder al micrófono', 'error');
     });
   }
 
-  var _recCancelado = false;
   function cancelarVoz() {
     if (!_rec) return;
     _recCancelado = true;
@@ -1469,42 +1473,28 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       + '</div>';
   }
 
-  function procesarVoz() {
-    var blob = new Blob(_recChunks, { type: _recMime.split(';')[0] });
-    if (blob.size < 400) { if (window.showToast) showToast('La grabación fue muy corta', 'error'); return; }
+  function procesarVoz(bytes) {
+    if (!bytes || bytes.length < 400) {
+      if (window.showToast) showToast('La grabación fue muy corta', 'error');
+      return;
+    }
+    // opus-recorder ya entrega OGG/Opus válido; confirmamos la firma "OggS".
+    if (bytes[0] !== 0x4F || bytes[1] !== 0x67 || bytes[2] !== 0x67 || bytes[3] !== 0x53) {
+      if (window.showToast) showToast('El audio no se grabó en un formato válido', 'error');
+      return;
+    }
 
     if (window.showToast) showToast('Enviando nota de voz…', 'ok');
 
-    var listo = Promise.resolve({ blob: blob, ext: 'mp4', mime: 'audio/mp4' });
-
-    if (_recMime.indexOf('ogg') !== -1) {
-      listo = Promise.resolve({ blob: blob, ext: 'ogg', mime: 'audio/ogg' });
-    } else if (_recMime.indexOf('webm') !== -1) {
-      // Chrome: reempaquetar WebM → OGG antes de enviar
-      listo = webmOpusToOgg(blob).then(function (ogg) {
-        // Validar que salió un OGG real (empieza con "OggS") antes de subirlo
-        return ogg.slice(0, 4).arrayBuffer().then(function (h) {
-          var b = new Uint8Array(h);
-          if (b[0] !== 0x4F || b[1] !== 0x67 || b[2] !== 0x67 || b[3] !== 0x53) {
-            throw new Error('El audio no se pudo convertir a un formato válido');
-          }
-          return { blob: ogg, ext: 'ogg', mime: 'audio/ogg' };
-        });
-      });
-    }
-
-    listo.then(function (r) {
-      var fd = new FormData();
-      fd.append('accion', 'adjuntar');
-      fd.append('id', st.sel);
-      fd.append('voz', '1');
-      fd.append('archivo', r.blob, 'nota_de_voz.' + r.ext);
-      ggiPost('ajax.php', fd).then(function (j) {
-        st.firma = null; abrir(st.sel);
-        if (!j.ok && window.showToast) showToast(j.msg || 'No se pudo enviar la nota de voz', 'error');
-      });
-    }).catch(function (err) {
-      if (window.showToast) showToast('No se pudo procesar el audio: ' + (err.message || ''), 'error');
+    var blob = new Blob([bytes], { type: 'audio/ogg' });
+    var fd = new FormData();
+    fd.append('accion', 'adjuntar');
+    fd.append('id', st.sel);
+    fd.append('voz', '1');
+    fd.append('archivo', blob, 'nota_de_voz.ogg');
+    ggiPost('ajax.php', fd).then(function (j) {
+      st.firma = null; abrir(st.sel);
+      if (!j.ok && window.showToast) showToast(j.msg || 'No se pudo enviar la nota de voz', 'error');
     });
   }
 
