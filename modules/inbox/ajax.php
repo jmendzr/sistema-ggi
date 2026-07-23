@@ -722,6 +722,23 @@ if ($accion === 'enviar_interactivo') {
 
         $resumen .= "\n[Enlace: {$txt} → {$url}]";
 
+    } elseif ($sub === 'contact') {
+        // Tarjeta de contacto: no es 'interactive', va por su propio tipo
+        $nom = trim($_POST['ct_nombre'] ?? '');
+        $tel = trim($_POST['ct_telefono'] ?? '');
+        $emp = trim($_POST['ct_empresa'] ?? '');
+        if ($nom === '' || $tel === '') { echo json_encode(['ok' => false, 'msg' => 'Nombre y teléfono son obligatorios']); exit; }
+
+        $waId = WhatsAppService::sendContacto($conv['telefono'], $nom, $tel, $emp);
+        WaInbox::registrarSaliente(
+            $pdo, $conv['telefono'], $waId, 'contacts', '👤 ' . $nom . ' · ' . $tel,
+            null, $yo, $waId ? 'sent' : 'failed',
+            $waId ? null : WhatsAppService::lastError(), $conv['phone_number_id']
+        );
+        echo $waId ? json_encode(['ok' => true])
+                   : json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar']);
+        exit;
+
     } else {
         echo json_encode(['ok' => false, 'msg' => 'Tipo de mensaje inválido']); exit;
     }

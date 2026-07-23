@@ -332,12 +332,19 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-drop-t { font-size: .92rem; font-weight: 700; color: var(--tx); margin: 12px 0 6px; }
   .ib-drop-s { font-size: .76rem; color: var(--tx2); line-height: 1.5; }
 
-  /* Modal de mensaje interactivo */
-  .ib-int-tabs { display: flex; gap: 4px; margin-bottom: 14px; background: var(--bg-surface2);
-                 padding: 3px; border-radius: 10px; }
-  .ib-int-tab { flex: 1; border: none; background: transparent; padding: 8px; border-radius: 8px;
-                font: inherit; font-size: .8rem; font-weight: 600; color: var(--tx2); cursor: pointer; }
-  .ib-int-tab.on { background: var(--bg-surface); color: var(--ac); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  /* Modal de mensaje interactivo (pestañas estilo Kapso) */
+  .ib-int-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--brd);
+                 padding-bottom: 2px; overflow-x: auto; scrollbar-width: none; }
+  .ib-int-tabs::-webkit-scrollbar { display: none; }
+  .ib-int-tab { border: none; background: transparent; padding: 8px 12px; border-radius: 8px 8px 0 0;
+                font: inherit; font-size: .82rem; font-weight: 600; color: var(--tx2); cursor: pointer;
+                white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -3px; }
+  .ib-int-tab:hover { color: var(--tx); }
+  .ib-int-tab.on { color: var(--ac); border-bottom-color: var(--ac); }
+  .ib-int-in { width: 100%; padding: 8px 11px; font: inherit; font-size: .84rem; margin-bottom: 6px;
+               border: 1px solid var(--brd); border-radius: 8px; background: var(--bg-input); color: var(--tx); }
+  .ib-plt-hint { font-size: .68rem; color: var(--tx3); text-align: right; margin-top: 2px; }
+  .ib-plt-f small { color: var(--tx3); font-weight: 400; }
   #it-especifico textarea, #it-body { width: 100%; padding: 9px 12px; font: inherit; font-size: .85rem;
     border: 1px solid var(--brd); border-radius: 9px; background: var(--bg-input); color: var(--tx); resize: vertical; }
   [data-btn], [data-opt] { width: 100%; padding: 8px 11px; font: inherit; font-size: .84rem;
@@ -1795,71 +1802,92 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   function formInteractivo() {
     if (!st.sel) return;
 
-    mantOpen('Mensaje interactivo',
+    // Modal con pestañas, como el chat de Kapso: Botones / Lista / Enlace / Contacto
+    mantOpen('Enviar mensaje interactivo',
         '<div class="ib-int-tabs">'
-      +   '<button type="button" class="ib-int-tab on" data-it="button">Botones</button>'
-      +   '<button type="button" class="ib-int-tab" data-it="list">Lista</button>'
-      +   '<button type="button" class="ib-int-tab" data-it="cta_url">Enlace</button>'
+      +   '<button type="button" class="ib-int-tab on" data-it="button">💬 Botones</button>'
+      +   '<button type="button" class="ib-int-tab" data-it="list">☰ Lista</button>'
+      +   '<button type="button" class="ib-int-tab" data-it="cta_url">🔗 Enlace</button>'
+      +   '<button type="button" class="ib-int-tab" data-it="contact">👤 Contacto</button>'
       + '</div>'
-      + '<label class="ib-plt-f"><span>Encabezado (opcional)</span>'
-      +   '<input type="text" id="it-header" maxlength="60" placeholder="Título breve"></label>'
-      + '<label class="ib-plt-f"><span>Mensaje</span>'
-      +   '<textarea id="it-body" maxlength="1024" rows="3" placeholder="Escribe el mensaje…"></textarea></label>'
-      + '<label class="ib-plt-f"><span>Pie de página (opcional)</span>'
-      +   '<input type="text" id="it-footer" maxlength="60" placeholder="Texto pequeño al final"></label>'
+      + '<div id="it-comun">'
+      +   '<label class="ib-plt-f"><span>Encabezado <small>(opcional)</small></span>'
+      +     '<input type="text" id="it-header" maxlength="60" placeholder="Título breve"></label>'
+      +   '<label class="ib-plt-f"><span>Mensaje</span>'
+      +     '<textarea id="it-body" maxlength="1024" rows="3" placeholder="Escribe el mensaje…"></textarea>'
+      +     '<div class="ib-plt-hint" id="it-count">0/1024</div></label>'
+      +   '<label class="ib-plt-f"><span>Pie de página <small>(opcional)</small></span>'
+      +     '<input type="text" id="it-footer" maxlength="60" placeholder="Texto pequeño al final"></label>'
+      + '</div>'
       + '<div id="it-especifico"></div>'
-      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">'
       + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
-      + '<button type="button" class="ggi-btn-confirm-action" id="it-enviar">Enviar</button></div>');
+      + '<button type="button" class="ggi-btn-confirm-action" id="it-enviar">✈ Enviar</button></div>');
 
     var sub = 'button';
     pintarEspecifico(sub);
+
+    // Contador del cuerpo, como en Kapso
+    var body = document.getElementById('it-body');
+    body.addEventListener('input', function () {
+      var c = document.getElementById('it-count');
+      if (c) c.textContent = body.value.length + '/1024';
+    });
 
     document.querySelectorAll('.ib-int-tab').forEach(function (t) {
       t.addEventListener('click', function () {
         document.querySelectorAll('.ib-int-tab').forEach(function (x) { x.classList.toggle('on', x === t); });
         sub = t.dataset.it;
+        // El bloque común (encabezado/mensaje/pie) no aplica al contacto
+        document.getElementById('it-comun').style.display = (sub === 'contact') ? 'none' : '';
         pintarEspecifico(sub);
       });
     });
 
     document.getElementById('it-enviar').addEventListener('click', function () {
       var btn = this;
-      var cuerpo = document.getElementById('it-body').value.trim();
-      if (!cuerpo) { if (window.showToast) showToast('Escribe el mensaje', 'error'); return; }
+      var datos = { accion: 'enviar_interactivo', id: st.sel, subtipo: sub };
 
-      var datos = {
-        accion: 'enviar_interactivo', id: st.sel, subtipo: sub,
-        cuerpo: cuerpo,
-        header: document.getElementById('it-header').value.trim(),
-        pie: document.getElementById('it-footer').value.trim()
-      };
-
-      if (sub === 'button') {
-        var i = 0;
-        document.querySelectorAll('[data-btn]').forEach(function (b) {
-          if (b.value.trim()) datos['botones[' + (i++) + ']'] = b.value.trim();
-        });
-        if (i === 0) { if (window.showToast) showToast('Agrega al menos un botón', 'error'); return; }
-      } else if (sub === 'list') {
-        datos.boton_lista = document.getElementById('it-lbtn').value.trim();
-        var k = 0;
-        document.querySelectorAll('[data-opt]').forEach(function (o) {
-          if (o.value.trim()) datos['opciones[' + (k++) + ']'] = o.value.trim();
-        });
-        if (k === 0) { if (window.showToast) showToast('Agrega al menos una opción', 'error'); return; }
+      if (sub === 'contact') {
+        datos.ct_nombre   = document.getElementById('it-cn').value.trim();
+        datos.ct_telefono = document.getElementById('it-ct').value.trim();
+        datos.ct_empresa  = document.getElementById('it-ce').value.trim();
+        if (!datos.ct_nombre || !datos.ct_telefono) {
+          if (window.showToast) showToast('Nombre y teléfono son obligatorios', 'error'); return;
+        }
       } else {
-        datos.cta_texto = document.getElementById('it-ctxt').value.trim();
-        datos.cta_url   = document.getElementById('it-curl').value.trim();
-        if (!datos.cta_url) { if (window.showToast) showToast('Falta la URL', 'error'); return; }
+        var cuerpo = body.value.trim();
+        if (!cuerpo) { if (window.showToast) showToast('Escribe el mensaje', 'error'); return; }
+        datos.cuerpo = cuerpo;
+        datos.header = document.getElementById('it-header').value.trim();
+        datos.pie    = document.getElementById('it-footer').value.trim();
+
+        if (sub === 'button') {
+          var i = 0;
+          document.querySelectorAll('[data-btn]').forEach(function (b) {
+            if (b.value.trim()) datos['botones[' + (i++) + ']'] = b.value.trim();
+          });
+          if (i === 0) { if (window.showToast) showToast('Agrega al menos un botón', 'error'); return; }
+        } else if (sub === 'list') {
+          datos.boton_lista = document.getElementById('it-lbtn').value.trim();
+          var k = 0;
+          document.querySelectorAll('[data-opt]').forEach(function (o) {
+            if (o.value.trim()) datos['opciones[' + (k++) + ']'] = o.value.trim();
+          });
+          if (k === 0) { if (window.showToast) showToast('Agrega al menos una opción', 'error'); return; }
+        } else {
+          datos.cta_texto = document.getElementById('it-ctxt').value.trim();
+          datos.cta_url   = document.getElementById('it-curl').value.trim();
+          if (!datos.cta_url) { if (window.showToast) showToast('Falta la URL', 'error'); return; }
+        }
       }
 
       btn.disabled = true; btn.textContent = 'Enviando…';
       ggiPost('ajax.php', datos).then(function (j) {
-        btn.disabled = false; btn.textContent = 'Enviar';
+        btn.disabled = false; btn.textContent = '✈ Enviar';
         if (!j.ok) return;
         ggiModalClose();
-        if (window.showToast) showToast('Mensaje interactivo enviado', 'ok');
+        if (window.showToast) showToast('Mensaje enviado', 'ok');
         st.firma = null; abrir(st.sel);
       });
     });
@@ -1870,48 +1898,51 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     if (!box) return;
 
     if (sub === 'button') {
-      box.innerHTML = '<div class="ib-plt-f"><span>Botones de respuesta (máx. 3, 20 caracteres)</span>'
-        + '<div id="it-btns">'
-        + '<input type="text" data-btn maxlength="20" placeholder="Botón 1" style="margin-bottom:6px">'
-        + '</div>'
+      box.innerHTML = '<div class="ib-plt-f"><span>Botones de respuesta <small>(máx. 3, 20 caracteres)</small></span>'
+        + '<div id="it-btns"><input type="text" data-btn maxlength="20" placeholder="Botón 1" class="ib-int-in"></div>'
         + '<button type="button" class="btn btn-ghost btn-sm" id="it-add-btn">+ Agregar botón</button></div>';
       document.getElementById('it-add-btn').addEventListener('click', function () {
         var cont = document.getElementById('it-btns');
         if (cont.querySelectorAll('[data-btn]').length >= 3) return;
         var inp = document.createElement('input');
-        inp.type = 'text'; inp.setAttribute('data-btn', ''); inp.maxLength = 20;
+        inp.type = 'text'; inp.setAttribute('data-btn', ''); inp.maxLength = 20; inp.className = 'ib-int-in';
         inp.placeholder = 'Botón ' + (cont.querySelectorAll('[data-btn]').length + 1);
-        inp.style.marginBottom = '6px';
         cont.appendChild(inp); inp.focus();
       });
 
     } else if (sub === 'list') {
       box.innerHTML = '<label class="ib-plt-f"><span>Texto del botón que abre la lista</span>'
         + '<input type="text" id="it-lbtn" maxlength="20" placeholder="Ver opciones"></label>'
-        + '<div class="ib-plt-f"><span>Opciones (máx. 10, 24 caracteres)</span>'
+        + '<div class="ib-plt-f"><span>Opciones <small>(máx. 10, 24 caracteres)</small></span>'
         + '<div id="it-opts">'
-        + '<input type="text" data-opt maxlength="24" placeholder="Opción 1" style="margin-bottom:6px">'
-        + '<input type="text" data-opt maxlength="24" placeholder="Opción 2" style="margin-bottom:6px">'
+        + '<input type="text" data-opt maxlength="24" placeholder="Opción 1" class="ib-int-in">'
+        + '<input type="text" data-opt maxlength="24" placeholder="Opción 2" class="ib-int-in">'
         + '</div>'
         + '<button type="button" class="btn btn-ghost btn-sm" id="it-add-opt">+ Agregar opción</button></div>';
       document.getElementById('it-add-opt').addEventListener('click', function () {
         var cont = document.getElementById('it-opts');
         if (cont.querySelectorAll('[data-opt]').length >= 10) return;
         var inp = document.createElement('input');
-        inp.type = 'text'; inp.setAttribute('data-opt', ''); inp.maxLength = 24;
+        inp.type = 'text'; inp.setAttribute('data-opt', ''); inp.maxLength = 24; inp.className = 'ib-int-in';
         inp.placeholder = 'Opción ' + (cont.querySelectorAll('[data-opt]').length + 1);
-        inp.style.marginBottom = '6px';
         cont.appendChild(inp); inp.focus();
       });
 
-    } else {
+    } else if (sub === 'cta_url') {
       box.innerHTML = '<label class="ib-plt-f"><span>Texto del botón</span>'
         + '<input type="text" id="it-ctxt" maxlength="20" placeholder="Abrir enlace"></label>'
         + '<label class="ib-plt-f"><span>Dirección web</span>'
         + '<input type="url" id="it-curl" placeholder="https://…"></label>';
+
+    } else {   // contact
+      box.innerHTML = '<label class="ib-plt-f"><span>Nombre</span>'
+        + '<input type="text" id="it-cn" placeholder="Nombre del contacto"></label>'
+        + '<label class="ib-plt-f"><span>Teléfono</span>'
+        + '<input type="tel" id="it-ct" placeholder="Ej.: 51987654321"></label>'
+        + '<label class="ib-plt-f"><span>Empresa <small>(opcional)</small></span>'
+        + '<input type="text" id="it-ce" placeholder="Empresa"></label>';
     }
   }
-
   // ── Envío ──
   function enviar() {
     var inp = $('#ib-texto'), btn = $('#ib-enviar');

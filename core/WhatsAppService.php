@@ -593,6 +593,47 @@ class WhatsAppService
     }
 
     /**
+     * Envía una tarjeta de contacto. Solo dentro de la ventana de 24 h.
+     */
+    public static function sendContacto(string $to, string $nombre, string $telefono, string $empresa = ''): ?string
+    {
+        self::$lastError = null;
+        $phoneId = self::phoneId();
+        if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return null; }
+
+        $contacto = [
+            'name'   => ['formatted_name' => $nombre, 'first_name' => $nombre],
+            'phones' => [['phone' => $telefono, 'type' => 'CELL', 'wa_id' => preg_replace('/\D/', '', $telefono)]],
+        ];
+        if ($empresa !== '') $contacto['org'] = ['company' => $empresa];
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type'    => 'individual',
+            'to'                => $to,
+            'type'              => 'contacts',
+            'contacts'          => [$contacto],
+        ];
+
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/messages");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', self::authHeader()],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $d = json_decode((string) $res, true);
+        if ($code >= 200 && $code < 300) return $d['messages'][0]['id'] ?? null;
+
+        $e = $d['error'] ?? [];
+        self::$lastError = mb_substr('HTTP ' . $code . ': ' . ($e['message'] ?? (string) $res), 0, 400);
+        return null;
+    }
+
+    /**
      * Reacciona a un mensaje con un emoji. Emoji vacío = quita la reacción.
      * Solo dentro de la ventana de 24 h.
      */
