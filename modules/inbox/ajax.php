@@ -660,6 +660,77 @@ if ($accion === 'conv_flag') {
     exit;
 }
 
+// ══ Llamadas: sondeo de llamada entrante pendiente (softphone) ═══════════════
+// Devuelve el último evento "connect" reciente que aún no fue contestado ni
+// terminado, con el SDP offer para que el navegador arme el answer (WebRTC).
+if ($accion === 'llamada_pendiente') {
+    $vis = WaInbox::numerosVisibles($pdo, $yo, $esJefe);
+    $wNum = ''; $args = [];
+    if ($vis !== null && $vis) {
+        $wNum = ' AND l.phone_number_id IN (' . implode(',', array_fill(0, count($vis), '?')) . ')';
+        $args = $vis;
+    }
+    // connect de los últimos 60 s sin un terminate posterior para el mismo call
+    $sql = "SELECT l.wa_call_id, l.telefono, l.phone_number_id, l.conversacion_id, l.payload_json, l.created_at
+              FROM wa_llamadas l
+             WHERE l.evento = 'connect'
+               AND l.created_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)
+               AND NOT EXISTS (SELECT 1 FROM wa_llamadas t
+                                WHERE t.wa_call_id = l.wa_call_id
+                                  AND t.evento IN ('terminate','reject') AND t.id > l.id)
+               $wNum
+             ORDER BY l.id DESC LIMIT 1";
+    $stp = $pdo->prepare($sql);
+    $stp->execute($args);
+    $row = $stp->fetch(PDO::FETCH_ASSOC);
+    if (!$row) { echo json_encode(['ok' => true, 'llamada' => null]); exit; }
+
+    $pl  = json_decode($row['payload_json'] ?? '{}', true) ?: [];
+    $sdp = $pl['session']['sdp'] ?? null;
+    // Nombre del contacto si lo tenemos en la conversación / cliente
+    $nombre = '+' . $row['telefono'];
+    if ($row['conversacion_id']) {
+        $q = $pdo->prepare("SELECT COALESCE(cl.razon_social, CONCAT('+', c.telefono)) n
+                              FROM wa_conversaciones c LEFT JOIN clientes cl ON cl.id = c.cliente_id
+                             WHERE c.id = ?");
+        $q->execute([$row['conversacion_id']]);
+        $nombre = $q->fetchColumn() ?: $nombre;
+    }
+    echo json_encode(['ok' => true, 'llamada' => [
+        'call_id'         => $row['wa_call_id'],
+        'telefono'        => $row['telefono'],
+        'phone_number_id' => $row['phone_number_id'],
+        'conversacion_id' => $row['conversacion_id'] ? (int) $row['conversacion_id'] : null,
+        'nombre'          => $nombre,
+        'sdp'             => $sdp,
+    ]]);
+    exit;
+}
+
+// ══ Llamadas: contestar / rechazar / colgar (proxy a la Graph API) ══════════
+if ($accion === 'llamada_accion') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $callId  = trim($_POST['call_id'] ?? '');
+    $phoneId = trim($_POST['phone_number_id'] ?? '');
+    $act     = $_POST['accion_llamada'] ?? '';
+    $sdp     = $_POST['sdp'] ?? null;
+    if (!$callId || !$phoneId || !in_array($act, ['pre_accept', 'accept', 'reject', 'terminate'], true)) {
+        echo json_encode(['ok' => false, 'msg' => 'Datos inválidos']); exit;
+    }
+
+    $r = WhatsAppService::llamadaAccion($phoneId, $callId, $act, $sdp);
+    // Registrar el cambio de estado en nuestra bitácora
+    $pdo->prepare("INSERT INTO wa_llamadas (wa_call_id, phone_number_id, evento, estado)
+                   VALUES (?, ?, ?, ?)")
+        ->execute([$callId, $phoneId, $act, $r['ok'] ? 'ok' : 'error']);
+
+    echo json_encode(['ok' => $r['ok'], 'msg' => $r['error'] ?? null]);
+    exit;
+}
+
 // ══ Enviar mensaje interactivo (botones o lista) ════════════════════════════
 if ($accion === 'enviar_interactivo') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }

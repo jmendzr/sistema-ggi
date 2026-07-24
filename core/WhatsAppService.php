@@ -670,6 +670,46 @@ class WhatsAppService
     }
 
     /**
+     * Controla una llamada de la Calling API: pre_accept / accept / reject /
+     * terminate. Para pre_accept y accept hay que mandar nuestro SDP answer
+     * (generado por WebRTC en el navegador).
+     *
+     * @param string      $phoneId  phone_number_id que recibió la llamada
+     * @param string      $callId   id de la llamada (del webhook connect)
+     * @param string      $action   pre_accept | accept | reject | terminate
+     * @param string|null $sdp      SDP answer (solo pre_accept/accept)
+     * @return array  ['ok'=>bool, 'error'=>string|null, 'raw'=>array]
+     */
+    public static function llamadaAccion(string $phoneId, string $callId, string $action, ?string $sdp = null): array
+    {
+        self::$lastError = null;
+        if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return ['ok' => false, 'error' => 'Sin credenciales']; }
+
+        $payload = ['messaging_product' => 'whatsapp', 'call_id' => $callId, 'action' => $action];
+        if (in_array($action, ['pre_accept', 'accept'], true) && $sdp) {
+            $payload['session'] = ['sdp_type' => 'answer', 'sdp' => $sdp];
+        }
+
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/calls");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', self::authHeader()],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $d = json_decode((string) $res, true) ?: [];
+        if ($code >= 200 && $code < 300) return ['ok' => true, 'error' => null, 'raw' => $d];
+
+        $e = $d['error'] ?? [];
+        self::$lastError = mb_substr('HTTP ' . $code . ': ' . ($e['message'] ?? (string) $res), 0, 400);
+        error_log('[WhatsAppService] llamadaAccion(' . $action . '): ' . self::$lastError);
+        return ['ok' => false, 'error' => self::$lastError, 'raw' => $d];
+    }
+
+    /**
      * Envía un mensaje de TEXTO LIBRE (no plantilla).
      *
      * Solo es válido dentro de la ventana de servicio de 24 h de Meta, contada

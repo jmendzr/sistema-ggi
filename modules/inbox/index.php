@@ -683,6 +683,31 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     .ib-chat-ph { display: none; }         /* el teléfono bajo el nombre */
     .ib-b-wrap { max-width: 90%; }
   }
+
+  /* ── Softphone: panel flotante de llamada ── */
+  .sf-pop {
+    position: fixed; right: 20px; bottom: 20px; z-index: 10500;
+    width: 280px; padding: 16px 18px; border-radius: 16px;
+    background: var(--bg-surface); border: 1px solid var(--brd);
+    box-shadow: 0 16px 48px rgba(0,0,0,.28); color: var(--tx);
+    animation: sf-in .18s ease-out;
+  }
+  @keyframes sf-in { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .sf-head { display: flex; align-items: center; gap: 7px; font-size: .72rem; font-weight: 700;
+             text-transform: uppercase; letter-spacing: .06em; color: var(--tx3); }
+  .sf-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--s-warn); }
+  .sf-dot.viva { background: var(--s-ok); animation: sf-pulse 1.2s infinite; }
+  @keyframes sf-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  .sf-ring .sf-dot { animation: sf-pulse .9s infinite; }
+  .sf-nombre { font-size: 1.02rem; font-weight: 700; margin-top: 10px; word-break: break-word; }
+  .sf-sub { font-size: .78rem; color: var(--tx2); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .sf-acts { display: flex; gap: 8px; margin-top: 14px; }
+  .sf-btn { flex: 1; border: none; border-radius: 10px; padding: 10px; font: inherit;
+            font-size: .82rem; font-weight: 700; cursor: pointer; color: #fff; }
+  .sf-contestar { background: var(--s-ok); }
+  .sf-rechazar, .sf-colgar { background: var(--s-err); }
+  .sf-btn:disabled { opacity: .6; cursor: default; }
+  @media (max-width: 768px) { .sf-pop { right: 10px; left: 10px; bottom: 10px; width: auto; } }
 </style>
 
 <div class="ib" id="ib">
@@ -752,6 +777,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 <script src="<?= APP_URL ?>/assets/js/recorder.min.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/recorder.min.js') ?>"></script>
 <!-- Catálogo de emojis por categorías para el picker -->
 <script src="<?= APP_URL ?>/assets/js/emojis.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/emojis.js') ?>"></script>
+<!-- Softphone: recibir llamadas de WhatsApp (Calling API) -->
+<script src="<?= APP_URL ?>/assets/js/softphone.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/softphone.js') ?>"></script>
 <script>
 (function () {
   var st = { f: 'todas', q: '', sel: null, etqs: [], etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null, abrirSeq: 0 };
