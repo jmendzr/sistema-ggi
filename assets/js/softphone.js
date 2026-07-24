@@ -15,7 +15,7 @@
   if (!window.RTCPeerConnection) return;   // navegador sin WebRTC
 
   var AJAX = 'ajax.php';
-  var pc = null, micStream = null, actual = null, sonando = null, tempo = null, manejados = {};
+  var pc = null, micStream = null, actual = null, sonando = null, tempo = null, manejados = {}, enCurso = false;
 
   // ── Tono de llamada (Web Audio, sin archivos externos) ─────────────────────
   var ringCtx = null, ringTimer = null;
@@ -210,7 +210,7 @@
     if (pc) { try { pc.close(); } catch (_) {} pc = null; }
     if (micStream) { micStream.getTracks().forEach(function (t) { t.stop(); }); micStream = null; }
     var a = document.getElementById('sf-audio'); if (a) a.remove();
-    actual = null; sonando = null;
+    actual = null; sonando = null; enCurso = false;
     quitarUI();
   }
 
@@ -244,9 +244,11 @@
           if (j.terminada) { clearInterval(t); toast('La llamada no fue contestada'); finalizar(); return; }
           if (j.sdp && pc && !pc.currentRemoteDescription) {
             clearInterval(t);
-            pc.setRemoteDescription({ type: 'answer', sdp: j.sdp }).then(function () {
-              pintarEnCurso(ll);
-            }).catch(function () { toast('No se pudo conectar el audio'); finalizar(); });
+            // Se aplica el answer, pero se sigue mostrando "Llamando…": el
+            // cronómetro arranca recién cuando el medio conecta de verdad
+            // (onconnectionstatechange = connected ≈ cuando contestan).
+            pc.setRemoteDescription({ type: 'answer', sdp: j.sdp })
+              .catch(function () { toast('No se pudo conectar el audio'); finalizar(); });
           }
         })
         .catch(function () {});
@@ -265,7 +267,10 @@
         a.srcObject = e.streams[0];
       };
       pc.onconnectionstatechange = function () {
-        if (pc && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')) finalizar();
+        if (!pc) return;
+        // El medio conectó = contestaron → recién ahí el cronómetro
+        if (pc.connectionState === 'connected' && actual && !enCurso) { enCurso = true; pintarEnCurso(actual); }
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') finalizar();
       };
       stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
       pintarSaliente(nombre);

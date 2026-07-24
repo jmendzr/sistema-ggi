@@ -671,9 +671,12 @@ if ($accion === 'llamada_pendiente') {
         $args = $vis;
     }
     // connect de los últimos 60 s sin un terminate posterior para el mismo call
+    // Solo llamadas ENTRANTES: se excluye BUSINESS_INITIATED (el connect de una
+    // llamada saliente nuestra trae el SDP answer y no debe sonar como entrante).
     $sql = "SELECT l.wa_call_id, l.telefono, l.phone_number_id, l.conversacion_id, l.payload_json, l.created_at
               FROM wa_llamadas l
              WHERE l.evento = 'connect'
+               AND (l.direccion IS NULL OR l.direccion <> 'BUSINESS_INITIATED')
                AND l.created_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)
                AND NOT EXISTS (SELECT 1 FROM wa_llamadas t
                                 WHERE t.wa_call_id = l.wa_call_id
