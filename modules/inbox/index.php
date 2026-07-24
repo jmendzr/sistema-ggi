@@ -1430,7 +1430,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       + '</div>'
       + '<div id="ib-panel-sticker" hidden><div class="ib-emojis ib-stk" id="ib-stk-lista">'
       +   '<div class="ib-emo-vacio">Cargando…</div>'
-      + '</div></div>');
+      + '</div></div>', { arriba: true });
 
     var scroll = d.querySelector('#ib-emo-scroll');
 
@@ -2247,7 +2247,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     if (p) p.remove();
   }
 
-  function abrirPop(ancla, html) {
+  function abrirPop(ancla, html, opts) {
+    opts = opts || {};
     cerrarPop();
     var r = ancla.getBoundingClientRect();
     var d = document.createElement('div');
@@ -2257,8 +2258,18 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     document.body.appendChild(d);
     // position:fixed para no depender del contenedor con overflow del inbox
     d.style.position = 'fixed';
-    d.style.top  = Math.min(r.bottom + 6, window.innerHeight - d.offsetHeight - 10) + 'px';
-    d.style.left = Math.min(r.left, window.innerWidth - d.offsetWidth - 10) + 'px';
+    // opts.arriba: abrir HACIA ARRIBA (el panel queda por encima del ancla, sin
+    // tapar la caja de texto), como el picker de emojis de WhatsApp. Si no cabe
+    // arriba, cae hacia abajo.
+    var top;
+    if (opts.arriba) {
+      top = r.top - d.offsetHeight - 6;
+      if (top < 10) top = Math.min(r.bottom + 6, window.innerHeight - d.offsetHeight - 10);
+    } else {
+      top = Math.min(r.bottom + 6, window.innerHeight - d.offsetHeight - 10);
+    }
+    d.style.top  = Math.max(10, top) + 'px';
+    d.style.left = Math.max(10, Math.min(r.left, window.innerWidth - d.offsetWidth - 10)) + 'px';
     return d;
   }
 
