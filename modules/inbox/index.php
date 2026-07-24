@@ -1431,6 +1431,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       + '<div id="ib-panel-sticker" hidden><div class="ib-emojis ib-stk" id="ib-stk-lista">'
       +   '<div class="ib-emo-vacio">Cargando…</div>'
       + '</div></div>', { arriba: true });
+    d.dataset.pop = 'emoji';   // marca para poder cerrarlo con el mismo botón
 
     var scroll = d.querySelector('#ib-emo-scroll');
 
@@ -2638,7 +2639,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     var fmt = e.target.closest('.ib-fmt[data-fmt]');
     if (fmt) { envolver(fmt.dataset.fmt); return; }
 
-    if (e.target.closest('#ib-emoji')) { popEmojis(e.target.closest('#ib-emoji')); return; }
+    if (e.target.closest('#ib-emoji')) {
+      if (_popPrev && _popPrev.dataset.pop === 'emoji') { cerrarPop(); return; }  // toggle
+      popEmojis(e.target.closest('#ib-emoji')); return;
+    }
 
     if (e.target.closest('#ib-adjunto')) { modalAdjuntar(); return; }
 
