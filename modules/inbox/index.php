@@ -1532,11 +1532,34 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   // formatos que Meta acepta al subir pero luego no reproduce (Chrome=webm,
   // Safari=mp4/aac), por eso quedaban en "sent" sin llegar al destinatario. Con
   // opus-recorder (encoder Opus en WASM) grabamos OGG/Opus real en todos.
-  var _rec = null, _recTimer = null, _recT0 = 0, _recCancelado = false;
+  var _rec = null, _recTimer = null, _recT0 = 0, _recCancelado = false, _recStream = null, _recCtx = null;
 
   function vozDisponible() {
     return !!(window.Recorder && window.WebAssembly &&
       navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+
+  function _errorMic(err) {
+    var nombre = (err && err.name) || '';
+    var msg;
+    if (nombre === 'NotAllowedError')
+      msg = 'El navegador no dio acceso al micrófono. En Mac revisa también '
+          + 'Ajustes del sistema → Privacidad y seguridad → Micrófono → activa Chrome, y reintenta.';
+    else if (nombre === 'SecurityError')
+      msg = 'El micrófono se bloqueó por seguridad (¿la página está incrustada o sin HTTPS?).';
+    else if (nombre === 'NotFoundError' || nombre === 'DevicesNotFoundError')
+      msg = 'No se detectó ningún micrófono en este equipo.';
+    else if (nombre === 'NotReadableError' || nombre === 'TrackStartError')
+      msg = 'El micrófono está en uso por otra app (Zoom, Meet, otra pestaña). Ciérrala y reintenta.';
+    else
+      msg = 'No se pudo grabar' + (nombre ? ' (' + nombre + ')' : '') + '.';
+    console.error('[voz] error micrófono:', nombre, err);
+    if (window.showToast) showToast(msg, 'error');
+  }
+
+  function _soltarMic() {
+    if (_recStream) { _recStream.getTracks().forEach(function (t) { t.stop(); }); _recStream = null; }
+    if (_recCtx) { try { _recCtx.close(); } catch (_) {} _recCtx = null; }
   }
 
   function toggleVoz() {
@@ -1548,55 +1571,57 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     }
 
     _recCancelado = false;
-    // 16 kHz + VOIP: reproduce EXACTAMENTE cómo WhatsApp codifica sus notas de
-    // voz reales (SILK a 16 kHz). Con 48 kHz salía en modo fullband y WhatsApp
-    // la mostraba como archivo de audio adjunto en vez de nota de voz (con onda).
-    _rec = new Recorder({
-      encoderPath: '<?= APP_URL ?>/assets/js/encoderWorker.min.js',
-      encoderApplication: 2048,   // 2048 = VOIP, optimizado para voz (SILK)
-      encoderSampleRate: 16000,   // igual que las notas de voz de WhatsApp
-      numberOfChannels: 1,
-      streamPages: false,         // entrega el archivo OGG completo al terminar
-      recordingGain: 1,
-      monitorGain: 0,
-      maxFramesPerPage: 40,
-    });
-    // El envío se hace en ondataavailable (no en onstop): con streamPages:false
-    // opus-recorder entrega el OGG completo aquí DESPUÉS de stop(). En laptop el
-    // onstop se disparaba antes de que llegara el audio y el envío se caía en
-    // silencio. _recCancelado se fija al empezar y solo lo cambia cancelarVoz().
-    _rec.ondataavailable = function (typedArray) {
-      if (_recCancelado) return;      // se canceló: no enviar
-      procesarVoz(typedArray);
-    };
-    _rec.onstop = function () {
-      clearInterval(_recTimer);
-      pintarBarraVoz(false);
-      _rec = null;
-    };
-    _rec.start().then(function () {
-      _recT0 = Date.now();
-      pintarBarraVoz(true);
-      _recTimer = setInterval(function () {
-        var s = Math.floor((Date.now() - _recT0) / 1000);
-        var el = document.getElementById('ib-voz-t');
-        if (el) el.textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + (s % 60)).slice(-2);
-        if (s >= 300 && _rec) _rec.stop();   // tope de 5 min
-      }, 250);
+    // Pedimos el micrófono NOSOTROS (no opus-recorder) para tener el error real
+    // y no un genérico. El stream se le pasa a opus-recorder vía sourceNode.
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      _recStream = stream;
+      var AC = window.AudioContext || window.webkitAudioContext;
+      _recCtx = new AC();
+      if (_recCtx.resume) { try { _recCtx.resume(); } catch (_) {} }
+      var source = _recCtx.createMediaStreamSource(stream);
+
+      // 16 kHz + VOIP: igual que las notas de voz reales de WhatsApp (SILK). A
+      // 48 kHz salía en modo fullband y WhatsApp la mostraba como archivo.
+      _rec = new Recorder({
+        sourceNode:         source,       // usa NUESTRO stream, no vuelve a pedir permiso
+        encoderPath:        '<?= APP_URL ?>/assets/js/encoderWorker.min.js',
+        encoderApplication: 2048,         // VOIP, optimizado para voz (SILK)
+        encoderSampleRate:  16000,
+        numberOfChannels:   1,
+        streamPages:        false,        // entrega el OGG completo al terminar
+        recordingGain:      1,
+        monitorGain:        0,
+        maxFramesPerPage:   40,
+      });
+      // El envío va en ondataavailable (no onstop): con streamPages:false el OGG
+      // completo llega aquí DESPUÉS de stop(); en laptop onstop se disparaba antes.
+      _rec.ondataavailable = function (typedArray) {
+        if (_recCancelado) return;
+        procesarVoz(typedArray);
+      };
+      _rec.onstop = function () {
+        clearInterval(_recTimer);
+        pintarBarraVoz(false);
+        _rec = null;
+        _soltarMic();
+      };
+      _rec.start().then(function () {
+        _recT0 = Date.now();
+        pintarBarraVoz(true);
+        _recTimer = setInterval(function () {
+          var s = Math.floor((Date.now() - _recT0) / 1000);
+          var el = document.getElementById('ib-voz-t');
+          if (el) el.textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + (s % 60)).slice(-2);
+          if (s >= 300 && _rec) _rec.stop();   // tope de 5 min
+        }, 250);
+      }).catch(function (err) {
+        _rec = null; _soltarMic();
+        console.error('[voz] fallo al iniciar el encoder:', err);
+        if (window.showToast) showToast('No se pudo iniciar la grabación de voz.', 'error');
+      });
     }).catch(function (err) {
-      _rec = null;
-      var nombre = (err && err.name) || '';
-      var msg = 'No se pudo acceder al micrófono';
-      if (nombre === 'NotAllowedError' || nombre === 'SecurityError')
-        msg = 'Micrófono bloqueado. Toca el candado en la barra de direcciones → Micrófono → Permitir, y reintenta.';
-      else if (nombre === 'NotFoundError' || nombre === 'DevicesNotFoundError')
-        msg = 'No se detectó ningún micrófono en este equipo.';
-      else if (nombre === 'NotReadableError' || nombre === 'TrackStartError')
-        msg = 'El micrófono está siendo usado por otra aplicación.';
-      else if (err && (err.message || nombre))
-        msg = 'No se pudo grabar (' + (nombre || err.message) + ')';
-      console.error('[voz] fallo al iniciar la grabación:', err);
-      if (window.showToast) showToast(msg, 'error');
+      _soltarMic();
+      _errorMic(err);
     });
   }
 
