@@ -643,6 +643,23 @@ if ($accion === 'sin_leer') {
     exit;
 }
 
+// ══ Fijar / archivar / silenciar una conversación (toggle) ══════════════════
+if ($accion === 'conv_flag') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+
+    $id    = (int) ($_POST['id'] ?? 0);
+    $campo = $_POST['campo'] ?? '';
+    $valor = !empty($_POST['valor']) ? 1 : 0;
+    if (!$id || !in_array($campo, ['fijada', 'archivada', 'silenciada'], true)) {
+        echo json_encode(['ok' => false, 'msg' => 'Datos inválidos']); exit;
+    }
+    // Solo columnas de la lista blanca llegan a la consulta (no es interpolación de usuario)
+    $pdo->prepare("UPDATE wa_conversaciones SET {$campo} = ? WHERE id = ?")->execute([$valor, $id]);
+    echo json_encode(['ok' => true, 'campo' => $campo, 'valor' => $valor]);
+    exit;
+}
+
 // ══ Enviar mensaje interactivo (botones o lista) ════════════════════════════
 if ($accion === 'enviar_interactivo') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
@@ -863,6 +880,11 @@ if ($accion === 'lista') {
     // "Sin persona": el número no está vinculado a ninguna empresa del sistema
     elseif ($filtro === 'sin_persona') { $where[] = 'c.cliente_id IS NULL'; }
 
+    // Archivadas: viven fuera del listado principal. Solo la vista "archivadas"
+    // las muestra; cualquier otro filtro las oculta.
+    if ($filtro === 'archivadas') { $where[] = 'c.archivada = 1'; }
+    else                          { $where[] = 'c.archivada = 0'; }
+
     // Filtro por etiquetas: acepta varias (lista separada por comas). Una
     // conversación entra si tiene CUALQUIERA de las etiquetas seleccionadas.
     $etqs = array_values(array_filter(array_map('intval', explode(',', (string) ($_GET['etiqueta'] ?? '')))));
@@ -881,13 +903,14 @@ if ($accion === 'lista') {
 
     $st = $pdo->prepare(
         "SELECT c.id, c.telefono, c.cliente_id, c.asignado_a, c.asignado_at, c.no_leidos, c.sin_leer_manual,
+                c.fijada, c.archivada, c.silenciada,
                 c.ventana_expira_at, c.ultimo_mensaje_at, c.ultimo_mensaje_preview, cl.razon_social,
                 TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS asignado_nombre
            FROM wa_conversaciones c
            LEFT JOIN clientes cl ON cl.id = c.cliente_id
            LEFT JOIN usuarios u  ON u.id  = c.asignado_a
           WHERE " . implode(' AND ', $where) . "
-          ORDER BY c.ultimo_mensaje_at DESC LIMIT 100"
+          ORDER BY c.fijada DESC, c.ultimo_mensaje_at DESC LIMIT 100"
     );
     $st->execute($args);
 
@@ -918,6 +941,9 @@ if ($accion === 'lista') {
             'cuando'    => $r['ultimo_mensaje_at'],
             'no_leidos' => (int) $r['no_leidos'],
             'sin_leer'  => (bool) $r['sin_leer_manual'],
+            'fijada'     => (bool) $r['fijada'],
+            'archivada'  => (bool) $r['archivada'],
+            'silenciada' => (bool) $r['silenciada'],
             'asignado_a'      => $r['asignado_a'] ? (int) $r['asignado_a'] : null,
             'asignado_nombre' => $r['asignado_nombre'] ?: null,
             'es_mia'          => ((int) $r['asignado_a']) === $yo,

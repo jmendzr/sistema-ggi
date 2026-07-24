@@ -393,11 +393,14 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-rx-pick button:hover { background: var(--bg-hover); transform: scale(1.15); }
 
   /* Marcar como no leída: menú "•••" y punto azul */
-  .ib-item-menu { margin-left: 6px; color: var(--tx3); font-size: .7rem; letter-spacing: -1px;
-                  cursor: pointer; opacity: 0; transition: opacity .12s; }
+  .ib-item-menu { margin-left: 6px; color: var(--tx3); cursor: pointer;
+                  opacity: 0; transition: opacity .12s; display: inline-flex; align-items: center; }
   .ib-item:hover .ib-item-menu { opacity: 1; }
   .ib-item-menu:hover { color: var(--ac); }
   .ib-item.nuevo .ib-item-n { font-weight: 800; }
+  /* Indicadores de fijada / silenciada en la fila */
+  .ib-item-pin  { display: inline; vertical-align: -2px; margin-right: 3px; color: var(--ac); }
+  .ib-item-mute { display: inline-flex; vertical-align: -2px; margin-right: 4px; color: var(--tx3); flex-shrink: 0; }
   .ib-unread.punto { min-width: 10px; width: 10px; height: 10px; padding: 0; }
 
   /* Formato de WhatsApp renderizado dentro de la burbuja */
@@ -700,6 +703,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         <button type="button" class="ib-pill" data-f="mias">A mi cargo<b data-c="mias"></b></button>
         <button type="button" class="ib-pill" data-f="sin_asignar">Sin asignar<b data-c="sin_asignar"></b></button>
         <button type="button" class="ib-pill" data-f="sin_persona">Sin persona<b data-c="sin_persona"></b></button>
+        <button type="button" class="ib-pill" data-f="archivadas">Archivados</button>
         <button type="button" class="ib-pill" id="ib-etq-activa" style="display:none"></button>
       </div>
     </div>
@@ -768,7 +772,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     image:   '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
     video:   '<rect x="2" y="6" width="14" height="12" rx="2"/><path d="M22 8l-6 4 6 4V8z"/>',
     audio:   '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 17v4"/>',
-    sticker: '<path d="M15.5 3H5a2 2 0 00-2 2v14a2 2 0 002 2h9l7-7V5a2 2 0 00-2-2z"/><path d="M14 21v-5a2 2 0 012-2h5"/>'
+    sticker: '<path d="M15.5 3H5a2 2 0 00-2 2v14a2 2 0 002 2h9l7-7V5a2 2 0 00-2-2z"/><path d="M14 21v-5a2 2 0 012-2h5"/>',
+    pin:     '<path d="M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6zM12 15v5"/>',
+    archive: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8M10 12h4"/>',
+    bell:    '<path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/>',
+    bell_off:'<path d="M13.7 21a2 2 0 01-3.4 0M18 8a6 6 0 00-9.3-5M6 8c0 7-3 9-3 9h13M3 3l18 18"/>',
+    unread:  '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'
   };
   function svg(nombre, size) {
     size = size || 15;
@@ -879,20 +888,27 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           // "No leída" manual O mensajes nuevos → punto azul en la fila
           var pendiente = it.no_leidos || it.sin_leer;
 
+          var pin  = it.fijada ? '<span class="ib-item-pin" title="Fijada">' + svg('pin', 13) + '</span>' : '';
+          var mute = it.silenciada ? '<span class="ib-item-mute" title="Silenciada">' + svg('bell_off', 13) + '</span>' : '';
+
           return '<button type="button" class="ib-item' + (st.sel === it.id ? ' sel' : '')
             +     (pendiente ? ' nuevo' : '') + '" data-id="' + it.id + '">'
             + '<span class="ib-av ' + colorDe(it.telefono) + (it.ventana_abierta ? ' viva' : '') + '">'
             +   esc(ini(it.titulo)) + '</span>'
             + '<span class="ib-item-body">'
-            +   '<span class="ib-item-r1"><span class="ib-item-n">' + esc(it.titulo) + '</span>'
+            +   '<span class="ib-item-r1"><span class="ib-item-n">' + pin + esc(it.titulo) + '</span>'
             +   '<span class="ib-item-t">' + relativo(it.cuando)
-            +     '<span class="ib-item-menu" data-sinleer="' + it.id + '" title="Marcar como no leída" aria-label="Marcar como no leída">•••</span>'
+            +     '<span class="ib-item-menu" data-menu="' + it.id + '" data-fij="' + (it.fijada ? 1 : 0)
+            +       '" data-sil="' + (it.silenciada ? 1 : 0) + '" data-arch="' + (it.archivada ? 1 : 0)
+            +       '" title="Opciones" aria-label="Opciones de la conversación">'
+            +       '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>'
+            +     '</span>'
             +   '</span></span>'
             +   '<span class="ib-item-ph">+' + esc(it.telefono) + '</span>'
             // formato(), no esc(): en la lista se guardaba el texto crudo y se
             // veían los marcadores (*hola*) en vez del texto en negrita.
             +   '<span class="ib-item-p">' + formato(it.preview) + '</span>'
-            +   '<span class="ib-item-m">' + tag + viejo + etqs
+            +   '<span class="ib-item-m">' + mute + tag + viejo + etqs
             +     (it.no_leidos ? '<span class="ib-unread">' + it.no_leidos + '</span>'
                   : (it.sin_leer ? '<span class="ib-unread punto"></span>' : ''))
             +   '</span>'
@@ -2293,6 +2309,52 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     lista();
   }
 
+  // Menú (…) de una conversación: fijar, archivar, marcar no leída, silenciar.
+  function popMenuConv(ancla) {
+    var id   = ancla.dataset.menu;
+    var fij  = ancla.dataset.fij  === '1';
+    var sil  = ancla.dataset.sil  === '1';
+    var arch = ancla.dataset.arch === '1';
+    function fila(accion, ico, txt) {
+      return '<button type="button" class="ib-pop-item" data-convmenu="' + accion + '" data-cid="' + id + '">'
+           + '<span style="display:inline-flex;color:var(--tx3)">' + svg(ico, 15) + '</span>' + txt + '</button>';
+    }
+    var d = abrirPop(ancla,
+        fila(fij  ? 'desfijar'  : 'fijar',   'pin',      fij  ? 'Desfijar' : 'Fijar arriba')
+      + fila('no_leido', 'unread', 'Marcar como no leída')
+      + fila(sil  ? 'activar'   : 'silenciar', 'bell_off', sil ? 'Activar avisos' : 'Silenciar avisos')
+      + fila(arch ? 'desarchivar' : 'archivar', 'archive', arch ? 'Desarchivar' : 'Archivar'));
+    d.dataset.pop = 'convmenu';   // marca para poder cerrarlo con el mismo ícono
+  }
+
+  // Ejecuta una acción del menú (…) y refresca la lista.
+  function accionMenuConv(accion, cid) {
+    cerrarPop();
+    if (accion === 'no_leido') {
+      ggiPost('ajax.php', { accion: 'sin_leer', id: cid }).then(function (j) { if (j.ok) lista(); });
+      return;
+    }
+    var mapa = {
+      fijar:      ['fijada', 1],     desfijar:    ['fijada', 0],
+      silenciar:  ['silenciada', 1], activar:     ['silenciada', 0],
+      archivar:   ['archivada', 1],  desarchivar: ['archivada', 0]
+    };
+    var m = mapa[accion];
+    if (!m) return;
+    ggiPost('ajax.php', { accion: 'conv_flag', id: cid, campo: m[0], valor: m[1] })
+      .then(function (j) {
+        if (!j.ok) { if (window.showToast) showToast(j.msg || 'No se pudo aplicar', 'error'); return; }
+        // Al archivar la conversación abierta, se limpia el hilo
+        if (accion === 'archivar' && String(st.sel) === String(cid)) {
+          st.sel = null;
+          $('#ib').classList.remove('abierto');
+          $('#ib-chat').innerHTML = '<div class="ib-empty">Elige una conversación para ver el hilo</div>';
+          $('#ib-ctx').innerHTML = '';
+        }
+        lista();
+      });
+  }
+
   // Nueva conversación: busca empresa por nombre/RUC/teléfono
   function popNueva(ancla) {
     var d = abrirPop(ancla,
@@ -2542,12 +2604,19 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       return;
     }
 
-    // Marcar una conversación como no leída, desde el menú de la fila
-    var sl = e.target.closest('[data-sinleer]');
-    if (sl) {
+    // Abrir el menú (…) de una conversación desde la fila del listado
+    var mn = e.target.closest('[data-menu]');
+    if (mn) {
       e.stopPropagation();
-      ggiPost('ajax.php', { accion: 'sin_leer', id: sl.dataset.sinleer })
-        .then(function (r) { if (r.ok) { if (window.showToast) showToast('Marcada como no leída', 'ok'); lista(); } });
+      if (_popPrev && _popPrev.dataset.pop === 'convmenu') { cerrarPop(); return; }  // toggle
+      popMenuConv(mn);
+      return;
+    }
+    // Acción elegida dentro de ese menú
+    var cm = e.target.closest('[data-convmenu]');
+    if (cm) {
+      e.stopPropagation();
+      accionMenuConv(cm.dataset.convmenu, cm.dataset.cid);
       return;
     }
 
