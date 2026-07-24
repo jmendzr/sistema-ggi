@@ -109,3 +109,4 @@ define('META_WA_PHONE_NUMBER_ID', env('META_WA_PHONE_NUMBER_ID', ''));
 define('META_WA_TOKEN',           env('META_WA_TOKEN',           ''));
 define('META_WA_WABA_ID',         env('META_WA_WABA_ID',         ''));
 define('META_APP_SECRET',         env('META_APP_SECRET',         '')); // firma de webhooks
+define('META_APP_ID',             env('META_APP_ID',             '1486329949910978')); // público; usado en el resumable upload del perfil

@@ -709,6 +709,94 @@ class WhatsAppService
         return ['ok' => false, 'error' => self::$lastError, 'raw' => $d];
     }
 
+    /** Lee el perfil de negocio (about, descripción, dirección, email, web…). */
+    public static function perfilLeer(): ?array
+    {
+        self::$lastError = null;
+        $phoneId = self::phoneId();
+        if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return null; }
+
+        $fields = 'about,address,description,email,profile_picture_url,websites,vertical';
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/whatsapp_business_profile?fields={$fields}");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15,
+            CURLOPT_HTTPHEADER => ['Accept: application/json', self::authHeader()],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $d = json_decode((string) $res, true) ?: [];
+        if ($code >= 200 && $code < 300) return $d['data'][0] ?? [];
+        $e = $d['error'] ?? [];
+        self::$lastError = mb_substr('HTTP ' . $code . ': ' . ($e['message'] ?? (string) $res), 0, 400);
+        return null;
+    }
+
+    /**
+     * Actualiza el perfil de negocio. $campos admite: about, address,
+     * description, email, vertical, websites (array) y profile_picture_handle.
+     */
+    public static function perfilActualizar(array $campos): bool
+    {
+        self::$lastError = null;
+        $phoneId = self::phoneId();
+        if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return false; }
+
+        $payload = array_merge(['messaging_product' => 'whatsapp'], $campos);
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/whatsapp_business_profile");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', self::authHeader()],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $d = json_decode((string) $res, true) ?: [];
+        if ($code >= 200 && $code < 300 && !empty($d['success'])) return true;
+        if ($code >= 200 && $code < 300) return true;
+        $e = $d['error'] ?? [];
+        self::$lastError = mb_substr('HTTP ' . $code . ': ' . ($e['message'] ?? (string) $res), 0, 400);
+        return false;
+    }
+
+    /**
+     * Sube una imagen por el "resumable upload" de Meta y devuelve el handle
+     * para usar como profile_picture_handle. Requiere APP_ID y APP_SECRET.
+     */
+    public static function perfilSubirFoto(string $rutaTmp, string $mime): ?string
+    {
+        self::$lastError = null;
+        $appId  = defined('META_APP_ID') ? META_APP_ID : '';
+        $secret = defined('META_APP_SECRET') ? META_APP_SECRET : '';
+        if (!$appId || !$secret) { self::$lastError = 'Falta META_APP_ID/META_APP_SECRET'; return null; }
+        $appTok = $appId . '|' . $secret;
+        $len    = filesize($rutaTmp);
+        $v      = defined('META_WA_VERSION') ? META_WA_VERSION : 'v21.0';
+
+        // 1) Iniciar sesión de subida
+        $ch = curl_init("https://graph.facebook.com/{$v}/{$appId}/uploads?file_length={$len}&file_type=" . rawurlencode($mime) . "&access_token=" . rawurlencode($appTok));
+        curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20]);
+        $r = json_decode((string) curl_exec($ch), true) ?: [];
+        curl_close($ch);
+        $session = $r['id'] ?? null;   // "upload:XXXX"
+        if (!$session) { self::$lastError = 'No se pudo iniciar la subida: ' . json_encode($r); return null; }
+
+        // 2) Subir los bytes (file_offset: 0)
+        $ch = curl_init("https://graph.facebook.com/{$v}/{$session}");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => file_get_contents($rutaTmp),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60,
+            CURLOPT_HTTPHEADER => ['Authorization: OAuth ' . $appTok, 'file_offset: 0'],
+        ]);
+        $r = json_decode((string) curl_exec($ch), true) ?: [];
+        curl_close($ch);
+        if (empty($r['h'])) { self::$lastError = 'No se obtuvo el handle de la imagen: ' . json_encode($r); return null; }
+        return $r['h'];
+    }
+
     /**
      * Envía un mensaje de TEXTO LIBRE (no plantilla).
      *
