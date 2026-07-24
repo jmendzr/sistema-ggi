@@ -256,7 +256,14 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-chat-n a { color: var(--ac); display: inline-flex; }
   .ib-chat-ph { font-size: .74rem; color: var(--tx3); }
 
-  .ib-msgs { padding: 18px; display: flex; flex-direction: column; gap: 8px; background: var(--bg-base); }
+  /* Fondo de conversación: patrón propio de trazos sutiles (no es el arte de
+     WhatsApp). Se adapta a claro/oscuro cambiando el color del trazo. */
+  .ib-msgs { padding: 18px; display: flex; flex-direction: column; gap: 8px;
+    background-color: var(--bg-base);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg fill='none' stroke='%23334155' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' opacity='0.05'%3E%3Ccircle cx='18' cy='20' r='6'/%3E%3Cpath d='M56 13v13M49 19h13'/%3E%3Cpath d='M8 62q6 -8 12 0t12 0'/%3E%3Crect x='62' y='55' width='12' height='12' rx='3'/%3E%3Cpath d='M40 80l5 -9 5 9z'/%3E%3Ccircle cx='78' cy='30' r='3'/%3E%3Cpath d='M22 44h12'/%3E%3Cpath d='M70 82h12'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: 96px 96px; }
+  :root[data-tema="oscuro"] .ib-msgs {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg fill='none' stroke='%23FFFFFF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' opacity='0.045'%3E%3Ccircle cx='18' cy='20' r='6'/%3E%3Cpath d='M56 13v13M49 19h13'/%3E%3Cpath d='M8 62q6 -8 12 0t12 0'/%3E%3Crect x='62' y='55' width='12' height='12' rx='3'/%3E%3Cpath d='M40 80l5 -9 5 9z'/%3E%3Ccircle cx='78' cy='30' r='3'/%3E%3Cpath d='M22 44h12'/%3E%3Cpath d='M70 82h12'/%3E%3C/g%3E%3C/svg%3E"); }
   .ib-sep { align-self: center; font-size: .68rem; font-weight: 600; color: var(--tx2);
             background: var(--bg-surface); border: 1px solid var(--brd);
             padding: 3px 12px; border-radius: 999px; margin: 10px 0 4px; }
@@ -524,12 +531,32 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-fmt:disabled { opacity: .4; cursor: not-allowed; }
   .ib-barra-sep { width: 1px; height: 18px; background: var(--brd); margin: 0 5px; }
 
-  .ib-emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 232px; overflow-y: auto; }
+  .ib-emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; }
   .ib-emojis button {
-    border: none; background: transparent; font-size: 1.15rem; line-height: 1;
-    padding: 5px; border-radius: 6px; cursor: pointer; min-height: 32px;
+    border: none; background: transparent; font-size: 1.4rem; line-height: 1;
+    padding: 4px; border-radius: 7px; cursor: pointer; min-height: 34px;
+    display: inline-flex; align-items: center; justify-content: center;
   }
   .ib-emojis button:hover { background: var(--bg-hover); }
+
+  /* Picker de emojis con categorías (estilo WhatsApp) */
+  #ib-panel-emoji, #ib-panel-sticker { width: 328px; max-width: calc(100vw - 24px); }
+  .ib-emo-buscar { width: 100%; padding: 7px 11px; margin-bottom: 6px; font: inherit;
+    font-size: .8rem; border: 1px solid var(--brd); border-radius: 8px;
+    background: var(--bg-input); color: var(--tx); }
+  .ib-emo-scroll { max-height: 264px; overflow-y: auto; scroll-behavior: smooth; }
+  .ib-emo-sec-h { position: sticky; top: 0; z-index: 1; background: var(--bg-surface);
+    font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--tx3); padding: 5px 3px 3px; }
+  .ib-emo-cats { display: flex; gap: 1px; padding: 6px 2px 0; margin-top: 6px;
+    border-top: 1px solid var(--brd); overflow-x: auto; scrollbar-width: none; }
+  .ib-emo-cats::-webkit-scrollbar { display: none; }
+  .ib-emo-cats button { flex: 1 0 auto; border: none; background: transparent;
+    font-size: 1.15rem; line-height: 1; padding: 6px 8px; border-radius: 7px; cursor: pointer;
+    opacity: .6; transition: opacity .12s, background .12s; }
+  .ib-emo-cats button:hover { opacity: 1; background: var(--bg-hover); }
+  .ib-emo-cats button.on { opacity: 1; background: var(--ac-soft); }
+  .ib-emo-vacio { padding: 22px 10px; text-align: center; color: var(--tx3); font-size: .78rem; }
 
   /* Pestañas del panel emojis / stickers */
   .ib-tabs { display: flex; gap: 4px; padding: 2px 2px 6px; border-bottom: 1px solid var(--brd); margin-bottom: 6px; }
@@ -715,6 +742,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 <!-- Grabador de nota de voz: opus-recorder graba OGG/Opus nativo en Chrome,
      Firefox y Safari (encoder WASM), único formato que WhatsApp entrega como voz -->
 <script src="<?= APP_URL ?>/assets/js/recorder.min.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/recorder.min.js') ?>"></script>
+<!-- Catálogo de emojis por categorías para el picker -->
+<script src="<?= APP_URL ?>/assets/js/emojis.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/emojis.js') ?>"></script>
 <script>
 (function () {
   var st = { f: 'todas', q: '', sel: null, etq: 0, etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null };
@@ -1324,34 +1353,67 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     _setCursor(el, Math.min(pos, plano.length));
   }
 
-  var EMOJIS = ('😀 😃 😄 😁 😅 😂 🙂 😉 😊 😍 😘 🤗 🤔 😐 😴 😎 🥳 😢 😭 😡 '
-    + '👍 👎 👌 🙏 👏 💪 🤝 👋 ✍️ 🫡 ❤️ 🔥 ⭐ ✅ ❌ ⚠️ ℹ️ 📌 📎 📄 '
-    + '📅 ⏰ 📦 🚚 💰 💳 🧾 🏢 📞 📧 🔒 🎯 🎉 🙌 ✨').split(' ');
-
-  // Un solo panel con pestañas, como WhatsApp: emojis y stickers juntos.
-  // Los stickers son los ya usados en conversaciones (propios y recibidos):
-  // no existe un catálogo que ofrecer, pero el historial sí sirve.
+  // Panel con pestañas Emojis / Stickers. Los emojis vienen categorizados de
+  // GGI_EMOJIS (assets/js/emojis.js): barra de categorías abajo + secciones,
+  // como WhatsApp. Los stickers son los ya usados en conversaciones.
   function popEmojis(ancla) {
+    var cats = window.GGI_EMOJIS || [];
+    var barra = cats.map(function (c, i) {
+      return '<button type="button" class="ib-emo-cat' + (i === 0 ? ' on' : '') + '" '
+           + 'data-cat="' + c.id + '" title="' + c.nombre + '" aria-label="' + c.nombre + '">'
+           + c.ico + '</button>';
+    }).join('');
+    var secciones = cats.map(function (c) {
+      return '<div class="ib-emo-sec" id="ib-emo-sec-' + c.id + '">'
+           + '<div class="ib-emo-sec-h">' + c.nombre + '</div>'
+           + '<div class="ib-emojis">' + c.items.map(function (x) {
+               return '<button type="button" data-emoji="' + x + '" aria-label="' + x + '">' + x + '</button>';
+             }).join('') + '</div></div>';
+    }).join('');
+
     var d = abrirPop(ancla,
         '<div class="ib-tabs">'
       +   '<button type="button" class="ib-tab on" data-tab="emoji">Emojis</button>'
       +   '<button type="button" class="ib-tab" data-tab="sticker">Stickers</button>'
       + '</div>'
-      + '<div id="ib-panel-emoji"><div class="ib-emojis">' + EMOJIS.map(function (x) {
-          return '<button type="button" data-emoji="' + x + '" aria-label="' + x + '">' + x + '</button>';
-        }).join('') + '</div></div>'
+      + '<div id="ib-panel-emoji">'
+      +   '<div class="ib-emo-scroll" id="ib-emo-scroll">' + secciones + '</div>'
+      +   '<div class="ib-emo-cats">' + barra + '</div>'
+      + '</div>'
       + '<div id="ib-panel-sticker" hidden><div class="ib-emojis ib-stk" id="ib-stk-lista">'
-      +   '<div style="grid-column:1/-1;padding:14px;color:var(--tx3);font-size:.78rem">Cargando…</div>'
+      +   '<div class="ib-emo-vacio">Cargando…</div>'
       + '</div></div>');
+
+    var scroll = d.querySelector('#ib-emo-scroll');
 
     d.addEventListener('click', function (e) {
       var t = e.target.closest('.ib-tab');
-      if (!t) return;
-      d.querySelectorAll('.ib-tab').forEach(function (b) { b.classList.toggle('on', b === t); });
-      d.querySelector('#ib-panel-emoji').hidden   = t.dataset.tab !== 'emoji';
-      d.querySelector('#ib-panel-sticker').hidden = t.dataset.tab !== 'sticker';
-      if (t.dataset.tab === 'sticker') cargarStickers(d);
+      if (t) {
+        d.querySelectorAll('.ib-tab').forEach(function (b) { b.classList.toggle('on', b === t); });
+        d.querySelector('#ib-panel-emoji').hidden   = t.dataset.tab !== 'emoji';
+        d.querySelector('#ib-panel-sticker').hidden = t.dataset.tab !== 'sticker';
+        if (t.dataset.tab === 'sticker') cargarStickers(d);
+        return;
+      }
+      var c = e.target.closest('.ib-emo-cat');
+      if (c && scroll) {
+        var sec = d.querySelector('#ib-emo-sec-' + c.dataset.cat);
+        if (sec) scroll.scrollTop = sec.offsetTop - scroll.offsetTop;
+      }
     });
+
+    // Resaltar en la barra la categoría visible según el scroll
+    if (scroll) {
+      scroll.addEventListener('scroll', function () {
+        var act = null;
+        d.querySelectorAll('.ib-emo-sec').forEach(function (s) {
+          if (s.offsetTop - scroll.offsetTop <= scroll.scrollTop + 8) act = s.id.replace('ib-emo-sec-', '');
+        });
+        if (act) d.querySelectorAll('.ib-emo-cat').forEach(function (b) {
+          b.classList.toggle('on', b.dataset.cat === act);
+        });
+      });
+    }
   }
 
   function cargarStickers(d) {
@@ -1473,9 +1535,20 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         if (el) el.textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + (s % 60)).slice(-2);
         if (s >= 300 && _rec) _rec.stop();   // tope de 5 min
       }, 250);
-    }).catch(function () {
+    }).catch(function (err) {
       _rec = null;
-      if (window.showToast) showToast('No se pudo acceder al micrófono', 'error');
+      var nombre = (err && err.name) || '';
+      var msg = 'No se pudo acceder al micrófono';
+      if (nombre === 'NotAllowedError' || nombre === 'SecurityError')
+        msg = 'Micrófono bloqueado. Toca el candado en la barra de direcciones → Micrófono → Permitir, y reintenta.';
+      else if (nombre === 'NotFoundError' || nombre === 'DevicesNotFoundError')
+        msg = 'No se detectó ningún micrófono en este equipo.';
+      else if (nombre === 'NotReadableError' || nombre === 'TrackStartError')
+        msg = 'El micrófono está siendo usado por otra aplicación.';
+      else if (err && (err.message || nombre))
+        msg = 'No se pudo grabar (' + (nombre || err.message) + ')';
+      console.error('[voz] fallo al iniciar la grabación:', err);
+      if (window.showToast) showToast(msg, 'error');
     });
   }
 
