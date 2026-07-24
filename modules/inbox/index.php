@@ -2524,28 +2524,41 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   // Nueva conversación: busca empresa por nombre/RUC/teléfono
   function popNueva(ancla) {
     var d = abrirPop(ancla,
-        '<input type="search" id="ib-nq" placeholder="Empresa, RUC o teléfono…" aria-label="Buscar contacto">'
-      + '<div id="ib-nres"><div class="ib-pop-item" style="color:var(--tx3)">Escribe para buscar…</div></div>');
+        '<input type="search" id="ib-nq" placeholder="Empresa, RUC o teléfono…" aria-label="Buscar contacto o teléfono">'
+      + '<div id="ib-nres"><div class="ib-pop-item" style="color:var(--tx3)">Escribe una empresa o un número…</div></div>');
 
     var inp = d.querySelector('#ib-nq'); inp.focus();
     var t;
     inp.addEventListener('input', function () {
       clearTimeout(t);
+      var q = inp.value.trim();
+      // Si escribió un número (9+ dígitos), ofrecer escribirle directo aunque no
+      // esté registrado. Los móviles peruanos de 9 dígitos se prefijan con 51.
+      var digitos = q.replace(/\D/g, '');
+      var telOpc = '';
+      if (digitos.length >= 9) {
+        var telNorm = digitos.length === 9 ? '51' + digitos : digitos;
+        telOpc = '<button type="button" class="ib-pop-item" data-tel="' + telNorm + '">'
+               + '<span>Escribir a +' + telNorm + '<small>Número nuevo (fuera de ventana → se envía una plantilla)</small></span>'
+               + '</button>';
+      }
       t = setTimeout(function () {
-        fetch('ajax.php?accion=buscar_contacto&q=' + encodeURIComponent(inp.value.trim()),
+        fetch('ajax.php?accion=buscar_contacto&q=' + encodeURIComponent(q),
               { credentials: 'same-origin', cache: 'no-store' })
           .then(function (r) { return r.json(); })
           .then(function (j) {
             var box = d.querySelector('#ib-nres');
             if (!box) return;
-            box.innerHTML = (j.items && j.items.length)
+            var empresas = (j.items && j.items.length)
               ? j.items.map(function (c) {
                   return '<button type="button" class="ib-pop-item" data-tel="' + esc(c.contacto_telefono) + '">'
                        + '<span>' + esc(c.razon_social)
                        + '<small>+' + esc(c.contacto_telefono) + (c.ruc ? ' · RUC ' + esc(c.ruc) : '') + '</small></span>'
                        + '</button>';
                 }).join('')
-              : '<div class="ib-pop-item" style="color:var(--tx3)">Sin resultados</div>';
+              : '';
+            box.innerHTML = telOpc + empresas
+              || '<div class="ib-pop-item" style="color:var(--tx3)">Sin resultados. Escribe un número para chatear.</div>';
           });
       }, 280);
     });
