@@ -398,9 +398,13 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-item:hover .ib-item-menu { opacity: 1; }
   .ib-item-menu:hover { color: var(--ac); }
   .ib-item.nuevo .ib-item-n { font-weight: 800; }
-  /* Indicadores de fijada / silenciada en la fila */
-  .ib-item-pin  { display: inline; vertical-align: -2px; margin-right: 3px; color: var(--ac); }
-  .ib-item-mute { display: inline-flex; vertical-align: -2px; margin-right: 4px; color: var(--tx3); flex-shrink: 0; }
+  /* Segunda fila de la conversación: preview + indicadores a la derecha */
+  .ib-item-r2 { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 2px; }
+  .ib-item-r2 .ib-item-p { margin-top: 0; flex: 1; min-width: 0; }
+  .ib-item-ind { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
+  /* Indicadores de fijada / silenciada, a la derecha como WhatsApp Web */
+  .ib-item-pin  { display: inline-flex; color: var(--tx3); }
+  .ib-item-mute { display: inline-flex; color: var(--tx3); }
   .ib-unread.punto { min-width: 10px; width: 10px; height: 10px; padding: 0; }
 
   /* Formato de WhatsApp renderizado dentro de la burbuja */
@@ -896,7 +900,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
             + '<span class="ib-av ' + colorDe(it.telefono) + (it.ventana_abierta ? ' viva' : '') + '">'
             +   esc(ini(it.titulo)) + '</span>'
             + '<span class="ib-item-body">'
-            +   '<span class="ib-item-r1"><span class="ib-item-n">' + pin + esc(it.titulo) + '</span>'
+            +   '<span class="ib-item-r1"><span class="ib-item-n">' + esc(it.titulo) + '</span>'
             +   '<span class="ib-item-t">' + relativo(it.cuando)
             +     '<span class="ib-item-menu" data-menu="' + it.id + '" data-fij="' + (it.fijada ? 1 : 0)
             +       '" data-sil="' + (it.silenciada ? 1 : 0) + '" data-arch="' + (it.archivada ? 1 : 0)
@@ -905,13 +909,18 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
             +     '</span>'
             +   '</span></span>'
             +   '<span class="ib-item-ph">+' + esc(it.telefono) + '</span>'
+            // Segunda fila: preview a la izquierda y, a la derecha, los mismos
+            // indicadores que WhatsApp Web (silenciada, fijada y no leídos).
+            +   '<span class="ib-item-r2">'
             // formato(), no esc(): en la lista se guardaba el texto crudo y se
             // veían los marcadores (*hola*) en vez del texto en negrita.
-            +   '<span class="ib-item-p">' + formato(it.preview) + '</span>'
-            +   '<span class="ib-item-m">' + mute + tag + viejo + etqs
-            +     (it.no_leidos ? '<span class="ib-unread">' + it.no_leidos + '</span>'
-                  : (it.sin_leer ? '<span class="ib-unread punto"></span>' : ''))
+            +     '<span class="ib-item-p">' + formato(it.preview) + '</span>'
+            +     '<span class="ib-item-ind">' + mute + pin
+            +       (it.no_leidos ? '<span class="ib-unread">' + it.no_leidos + '</span>'
+                    : (it.sin_leer ? '<span class="ib-unread punto"></span>' : ''))
+            +     '</span>'
             +   '</span>'
+            +   (tag + viejo + etqs ? '<span class="ib-item-m">' + tag + viejo + etqs + '</span>' : '')
             + '</span></button>';
         }).join('');
       }).catch(function () {});
@@ -1321,7 +1330,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     // Si algo fallara acá, el formato dejaría de aplicarse sin ningún aviso:
     // el texto se sigue escribiendo, así que el fallo pasa desapercibido.
     try {
-      var plano = el.innerText.replace(/\n$/, '');
+      // NO se recorta el \n final: hacerlo borraba el salto de línea recién
+      // hecho con Shift+Enter al final del texto. El recorte va solo al enviar.
+      var plano = el.innerText;
       if (pos === undefined) pos = _offsets(el).b;
       el.innerHTML = formatoVivo(plano);
       _setCursor(el, Math.min(pos, plano.length));
