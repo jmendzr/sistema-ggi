@@ -718,6 +718,62 @@ if ($accion === 'llamada_estado') {
     exit;
 }
 
+// ══ Llamadas: INICIAR una llamada saliente (business-initiated) ═════════════
+if ($accion === 'llamada_iniciar') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $convId = (int) ($_POST['id'] ?? 0);
+    $sdp    = $_POST['sdp'] ?? '';
+    if (!$convId || !$sdp) { echo json_encode(['ok' => false, 'msg' => 'Datos inválidos']); exit; }
+
+    $c = $pdo->prepare("SELECT telefono, phone_number_id, asignado_a FROM wa_conversaciones WHERE id = ?");
+    $c->execute([$convId]);
+    $conv = $c->fetch(PDO::FETCH_ASSOC);
+    if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+    // Debe tenerla a cargo (o ser jefe) para llamar
+    if (!$esJefe && (int) $conv['asignado_a'] !== $yo) {
+        echo json_encode(['ok' => false, 'msg' => 'Toma la conversación primero']); exit;
+    }
+
+    $r = WhatsAppService::llamadaIniciar($conv['phone_number_id'], $conv['telefono'], $sdp);
+    if (!$r['ok'] || !$r['call_id']) {
+        echo json_encode(['ok' => false, 'msg' => $r['error'] ?: 'No se pudo iniciar la llamada']); exit;
+    }
+    // Entrada saliente en el hilo + bitácora
+    $pdo->prepare("INSERT INTO wa_llamadas (wa_call_id, conversacion_id, phone_number_id, telefono, direccion, evento, estado)
+                   VALUES (?, ?, ?, ?, 'BUSINESS_INITIATED', 'iniciar', 'ok')")
+        ->execute([$r['call_id'], $convId, $conv['phone_number_id'], $conv['telefono']]);
+    // Mensaje "Llamada de voz" saliente en el hilo
+    WaInbox::registrarSaliente($pdo, $conv['telefono'], $r['call_id'], 'call', 'call:ringing', null, $yo, 'sent', null, $conv['phone_number_id']);
+
+    echo json_encode(['ok' => true, 'call_id' => $r['call_id'], 'phone_number_id' => $conv['phone_number_id']]);
+    exit;
+}
+
+// ══ Llamadas: obtener el SDP answer que Meta manda por webhook ══════════════
+if ($accion === 'llamada_answer') {
+    $callId = trim($_GET['call_id'] ?? '');
+    if (!$callId) { echo json_encode(['ok' => false]); exit; }
+    // Buscar en la bitácora el evento con session.sdp_type = answer
+    $q = $pdo->prepare("SELECT payload_json FROM wa_llamadas
+                         WHERE wa_call_id = ? AND payload_json IS NOT NULL ORDER BY id DESC LIMIT 10");
+    $q->execute([$callId]);
+    $sdp = null;
+    foreach ($q as $row) {
+        $pl = json_decode($row['payload_json'] ?? '{}', true) ?: [];
+        if (($pl['session']['sdp_type'] ?? '') === 'answer' && !empty($pl['session']['sdp'])) {
+            $sdp = $pl['session']['sdp']; break;
+        }
+    }
+    // ¿ya terminó?
+    $t = $pdo->prepare("SELECT 1 FROM wa_llamadas WHERE wa_call_id = ? AND evento IN ('terminate','reject') LIMIT 1");
+    $t->execute([$callId]);
+    echo json_encode(['ok' => true, 'sdp' => $sdp, 'terminada' => (bool) $t->fetchColumn()]);
+    exit;
+}
+
 // ══ Llamadas: contestar / rechazar / colgar (proxy a la Graph API) ══════════
 if ($accion === 'llamada_accion') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }

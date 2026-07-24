@@ -264,7 +264,10 @@ try {
                     // Al iniciarse la llamada (connect), dejar una entrada en el
                     // hilo del inbox. El "texto" guarda un token de estado que el
                     // inbox renderiza (call:ringing → luego answered/missed/rejected).
-                    if ($evento === 'connect' && $from) {
+                    // Solo las llamadas ENTRANTES (user-initiated) crean entrada
+                    // en el hilo y push. El connect BUSINESS_INITIATED es el SDP
+                    // answer de una llamada que iniciamos nosotros — no es entrante.
+                    if ($evento === 'connect' && $from && $dir !== 'BUSINESS_INITIATED') {
                         WaInbox::registrarEntrante($pdo, $from, $callId, 'call', 'call:ringing', $phoneNumberId, null, false);
 
                         // Push a quien puede atender: el asignado (si hay) + gerencia,

@@ -709,6 +709,42 @@ class WhatsAppService
         return ['ok' => false, 'error' => self::$lastError, 'raw' => $d];
     }
 
+    /**
+     * Inicia una llamada saliente (business-initiated): manda nuestro SDP offer
+     * y Meta responde con el call_id. El SDP answer llega después por webhook.
+     * @return array ['ok'=>bool, 'call_id'=>?string, 'error'=>?string]
+     */
+    public static function llamadaIniciar(string $phoneId, string $to, string $sdpOffer): array
+    {
+        self::$lastError = null;
+        if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return ['ok' => false, 'call_id' => null, 'error' => 'Sin credenciales']; }
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'to'                => $to,
+            'action'            => 'connect',
+            'session'           => ['sdp_type' => 'offer', 'sdp' => $sdpOffer],
+        ];
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/calls");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', self::authHeader()],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $d = json_decode((string) $res, true) ?: [];
+        if ($code >= 200 && $code < 300) {
+            return ['ok' => true, 'call_id' => $d['calls'][0]['id'] ?? null, 'error' => null];
+        }
+        $e = $d['error'] ?? [];
+        self::$lastError = mb_substr('HTTP ' . $code . ': ' . ($e['message'] ?? (string) $res), 0, 400);
+        error_log('[WhatsAppService] llamadaIniciar: ' . self::$lastError);
+        return ['ok' => false, 'call_id' => null, 'error' => self::$lastError];
+    }
+
     /** Lee el perfil de negocio (about, descripción, dirección, email, web…). */
     public static function perfilLeer(): ?array
     {

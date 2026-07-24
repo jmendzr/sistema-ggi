@@ -217,6 +217,78 @@
   function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
   function toast(m) { if (window.showToast) showToast(m, 'error'); else console.warn('[softphone]', m); }
 
+  // ── Llamar (saliente) ──────────────────────────────────────────────────────
+  function pintarSaliente(nombre) {
+    quitarUI();
+    var box = document.createElement('div');
+    box.className = 'sf-pop sf-live'; box.id = 'sf-pop';
+    box.innerHTML =
+        '<div class="sf-head"><span class="sf-dot"></span>Llamando…</div>'
+      + '<div class="sf-nombre">' + esc(nombre || 'Contacto') + '</div>'
+      + '<div class="sf-sub" id="sf-cron">Conectando…</div>'
+      + '<div class="sf-acts"><button type="button" class="sf-btn sf-colgar" id="sf-colgar">Colgar</button></div>';
+    document.body.appendChild(box);
+    document.getElementById('sf-colgar').addEventListener('click', function () { if (actual) colgar(actual); else finalizar(); });
+  }
+
+  // Espera el SDP answer que Meta manda por webhook y conecta el audio.
+  function esperarAnswer(ll) {
+    var intentos = 0;
+    var t = setInterval(function () {
+      intentos++;
+      fetch(AJAX + '?accion=llamada_answer&call_id=' + encodeURIComponent(ll.call_id),
+            { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j || !j.ok) return;
+          if (j.terminada) { clearInterval(t); toast('La llamada no fue contestada'); finalizar(); return; }
+          if (j.sdp && pc && !pc.currentRemoteDescription) {
+            clearInterval(t);
+            pc.setRemoteDescription({ type: 'answer', sdp: j.sdp }).then(function () {
+              pintarEnCurso(ll);
+            }).catch(function () { toast('No se pudo conectar el audio'); finalizar(); });
+          }
+        })
+        .catch(function () {});
+      if (intentos > 20) { clearInterval(t); toast('Sin respuesta'); finalizar(); }   // ~40 s
+    }, 2000);
+  }
+
+  window.SoftphoneLlamar = function (convId, nombre) {
+    if (actual) { toast('Ya hay una llamada en curso'); return; }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      micStream = stream;
+      pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      pc.ontrack = function (e) {
+        var a = document.getElementById('sf-audio');
+        if (!a) { a = document.createElement('audio'); a.id = 'sf-audio'; a.autoplay = true; document.body.appendChild(a); }
+        a.srcObject = e.streams[0];
+      };
+      pc.onconnectionstatechange = function () {
+        if (pc && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')) finalizar();
+      };
+      stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
+      pintarSaliente(nombre);
+
+      pc.createOffer({ offerToReceiveAudio: true })
+        .then(function (o) { return pc.setLocalDescription(o); })
+        .then(esperarIce)
+        .then(function () {
+          return post({ accion: 'llamada_iniciar', id: convId, sdp: pc.localDescription.sdp });
+        })
+        .then(function (j) {
+          if (!j || !j.ok) { toast(j && j.msg ? j.msg : 'No se pudo iniciar la llamada'); finalizar(); return; }
+          actual = { call_id: j.call_id, phone_number_id: j.phone_number_id, nombre: nombre, telefono: '' };
+          esperarAnswer(actual);
+        });
+    }).catch(function (err) {
+      toast(err && err.name === 'NotAllowedError'
+        ? 'Micrófono bloqueado. Actívalo para llamar.'
+        : 'No se pudo iniciar la llamada (' + ((err && err.name) || 'error') + ')');
+      finalizar();
+    });
+  };
+
   // Arranca el sondeo cuando la pestaña está visible.
   function iniciar() {
     sondear();

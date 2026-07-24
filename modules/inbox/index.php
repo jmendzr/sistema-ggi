@@ -700,6 +700,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-ra-op .ib-av { width: 30px; height: 30px; font-size: .7rem; flex-shrink: 0; }
   .ib-av.gris { background: var(--s-neutral); color: #fff; }
 
+  /* Botón de llamar en la cabecera del chat */
+  .ib-llamar { color: var(--s-ok); flex-shrink: 0; }
+  .ib-llamar:hover { background: var(--s-ok-bg); }
+
   /* Burbuja de llamada en el hilo (estilo WhatsApp) */
   .ib-call { display: inline-flex; align-items: center; gap: 10px; }
   .ib-call svg { flex-shrink: 0; color: var(--s-ok); }
@@ -1301,7 +1305,14 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       +         '<path stroke-linecap="round" stroke-linejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg></button>' : '')
       +     '</div>'
       +     '<div class="ib-chat-ph">+' + esc(c.telefono) + '</div>'
-      +   '</div>' + accion
+      +   '</div>'
+      // Llamar por WhatsApp (saliente). Requiere ventana de permiso de Meta
+      // (que el cliente haya llamado o callback habilitado).
+      +   '<button type="button" class="ib-icon ib-llamar" id="ib-llamar" '
+      +     'data-nombre="' + esc(c.titulo) + '" title="Llamar por WhatsApp" aria-label="Llamar por WhatsApp">'
+      +     '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+      +     '<path stroke-linecap="round" stroke-linejoin="round" d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0122 16.92z"/></svg>'
+      +   '</button>' + accion
       +   '<button type="button" class="ib-icon ib-solo-desk" data-panel="ctx" '
       +     'title="Mostrar u ocultar el panel de contexto" aria-label="Mostrar u ocultar el panel de contexto">'
       +     '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
@@ -2736,6 +2747,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     if (e.target.closest('#ib-asignar')) { accionar('asignar', st.sel); return; }
     if (e.target.closest('#ib-liberar')) { accionar('liberar', st.sel); return; }
     if (e.target.closest('#ib-reasignar')) { formReasignar(); return; }
+    var llb = e.target.closest('#ib-llamar');
+    if (llb) {
+      if (window.SoftphoneLlamar && st.sel) window.SoftphoneLlamar(st.sel, llb.dataset.nombre || '');
+      return;
+    }
     if (e.target.closest('#ib-enviar'))  { enviar(); return; }
 
     // Formato de WhatsApp: envuelve la selección con los marcadores
