@@ -17,6 +17,36 @@
   var AJAX = 'ajax.php';
   var pc = null, micStream = null, actual = null, sonando = null, tempo = null;
 
+  // ── Tono de llamada (Web Audio, sin archivos externos) ─────────────────────
+  var ringCtx = null, ringTimer = null;
+  function ringStart() {
+    ringStop();
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      ringCtx = new AC();
+      var tocar = function () {
+        if (!ringCtx) return;
+        // Doble bip tipo timbre: dos tonos cortos
+        [0, 0.4].forEach(function (off) {
+          var o = ringCtx.createOscillator(), g = ringCtx.createGain();
+          o.type = 'sine'; o.frequency.value = off ? 480 : 440;
+          o.connect(g); g.connect(ringCtx.destination);
+          var t = ringCtx.currentTime + off;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.25, t + 0.03);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+          o.start(t); o.stop(t + 0.34);
+        });
+      };
+      tocar();
+      ringTimer = setInterval(tocar, 2600);   // patrón de timbre cada 2.6 s
+    } catch (_) {}
+  }
+  function ringStop() {
+    if (ringTimer) { clearInterval(ringTimer); ringTimer = null; }
+    if (ringCtx) { try { ringCtx.close(); } catch (_) {} ringCtx = null; }
+  }
+
   function post(datos) {
     if (window.ggiPost) return window.ggiPost(AJAX, datos);
     var fd = new FormData();
@@ -57,6 +87,7 @@
     document.body.appendChild(box);
     document.getElementById('sf-contestar').addEventListener('click', function () { contestar(ll); });
     document.getElementById('sf-rechazar').addEventListener('click', function () { rechazar(ll); });
+    ringStart();
   }
 
   function pintarEnCurso(ll) {
@@ -83,11 +114,12 @@
   function quitarUI() {
     var p = document.getElementById('sf-pop'); if (p) p.remove();
     if (tempo) { clearInterval(tempo); tempo = null; }
+    ringStop();
   }
 
   // ── Contestar: WebRTC + pre_accept + accept ────────────────────────────────
   function contestar(ll) {
-    actual = ll; sonando = null;
+    actual = ll; sonando = null; ringStop();
     var cont = document.getElementById('sf-contestar');
     if (cont) { cont.disabled = true; cont.textContent = 'Conectando…'; }
 
@@ -143,7 +175,7 @@
   }
 
   function rechazar(ll) {
-    sonando = null;
+    sonando = null; ringStop();
     post({ accion: 'llamada_accion', call_id: ll.call_id, phone_number_id: ll.phone_number_id, accion_llamada: 'reject' });
     quitarUI();
   }

@@ -1084,7 +1084,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         }
       } else if (m.tipo && m.tipo !== 'text' && !m.texto) {
         var etq = { image: ['image','Imagen'], sticker: ['sticker','Sticker'], video: ['video','Video'],
-                    audio: ['audio','Audio'], document: ['doc','Documento'], location: ['image','Ubicación'] };
+                    audio: ['audio','Audio'], document: ['doc','Documento'], location: ['image','Ubicación'],
+                    interactive: ['list','Mensaje interactivo'], call: ['audio','Llamada de voz'],
+                    button: ['list','Respuesta'], contacts: ['person','Contacto'] };
         var ei = etq[m.tipo] || ['doc', m.tipo];
         cuerpoMsg += '<span class="ib-adj">' + svg(ei[0], 15) + ' ' + esc(ei[1]) + '</span>';
       }

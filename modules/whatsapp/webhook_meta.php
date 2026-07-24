@@ -261,6 +261,13 @@ try {
                         json_encode($call, JSON_UNESCAPED_UNICODE)
                     ]);
 
+                    // Al iniciarse la llamada (connect), dejar una entrada en el
+                    // hilo del inbox para que la conversación muestre "📞 Llamada
+                    // de voz" y quede como no leída (usa la lógica de entrantes).
+                    if ($evento === 'connect' && $from) {
+                        WaInbox::registrarEntrante($pdo, $from, $callId, 'call', null, $phoneNumberId, null, false);
+                    }
+
                     // Traza inmediata para inspeccionar la primera llamada real
                     error_log('[WhatsApp Webhook] CALL event=' . $evento . ' dir=' . $dir
                             . ' from=' . $from . ' id=' . $callId);

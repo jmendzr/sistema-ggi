@@ -326,12 +326,16 @@ class WaInbox
         }
 
         $etiquetas = [
-            'image'    => '📷 Imagen',
-            'document' => '📄 Documento',
-            'audio'    => '🎤 Audio',
-            'video'    => '🎬 Video',
-            'sticker'  => 'Sticker',
-            'location' => '📍 Ubicación',
+            'image'       => '📷 Imagen',
+            'document'    => '📄 Documento',
+            'audio'       => '🎤 Audio',
+            'video'       => '🎬 Video',
+            'sticker'     => 'Sticker',
+            'location'    => '📍 Ubicación',
+            'interactive' => '📋 Mensaje interactivo',
+            'call'        => '📞 Llamada de voz',
+            'button'      => '📋 Respuesta',
+            'contacts'    => '👤 Contacto',
         ];
 
         return $etiquetas[$tipo] ?? ($templateName ? 'Plantilla: ' . $templateName : ucfirst($tipo));
