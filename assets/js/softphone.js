@@ -15,7 +15,7 @@
   if (!window.RTCPeerConnection) return;   // navegador sin WebRTC
 
   var AJAX = 'ajax.php';
-  var pc = null, micStream = null, actual = null, sonando = null, tempo = null;
+  var pc = null, micStream = null, actual = null, sonando = null, tempo = null, manejados = {};
 
   // ── Tono de llamada (Web Audio, sin archivos externos) ─────────────────────
   var ringCtx = null, ringTimer = null;
@@ -61,11 +61,16 @@
     fetch(AJAX + '?accion=llamada_pendiente', { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (!j.ok || !j.llamada) return;
-        if (sonando && sonando.call_id === j.llamada.call_id) return;  // ya sonando
-        if (!j.llamada.sdp) return;   // sin offer no se puede contestar
-        sonando = j.llamada;
-        pintarEntrante(j.llamada);
+        var ll = (j && j.ok && j.llamada) ? j.llamada : null;
+        // Si estábamos sonando y esa llamada ya NO está pendiente (el que llama
+        // colgó, o se rechazó), cancelar el timbre y quitar el panel.
+        if (sonando && (!ll || ll.call_id !== sonando.call_id)) { sonando = null; quitarUI(); }
+        if (!ll) return;
+        if (manejados[ll.call_id]) return;                 // ya rechazada/atendida/terminada
+        if (sonando && sonando.call_id === ll.call_id) return;  // ya sonando
+        if (!ll.sdp) return;                               // sin offer no se puede contestar
+        sonando = ll;
+        pintarEntrante(ll);
       })
       .catch(function () {});
   }
@@ -175,12 +180,14 @@
   }
 
   function rechazar(ll) {
+    manejados[ll.call_id] = true;   // que el sondeo no la vuelva a hacer sonar
     sonando = null; ringStop();
     post({ accion: 'llamada_accion', call_id: ll.call_id, phone_number_id: ll.phone_number_id, accion_llamada: 'reject' });
     quitarUI();
   }
 
   function colgar(ll) {
+    manejados[ll.call_id] = true;
     post({ accion: 'llamada_accion', call_id: ll.call_id, phone_number_id: ll.phone_number_id, accion_llamada: 'terminate' });
     finalizar();
   }

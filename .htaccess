@@ -108,7 +108,11 @@ RewriteRule "(^|/)\.git"  - [F,L]
     Header always set X-Content-Type-Options "nosniff"
     Header always set X-XSS-Protection "1; mode=block"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
-    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    # (self) permite que NUESTRO propio origen use micrófono (notas de voz y
+    # llamadas de WhatsApp), cámara (futuras adjuntos) y geolocalización (punto
+    # exacto en mapa para envíos en Lima). Con "()" quedaba bloqueado para todos,
+    # incluido el propio sitio, y getUserMedia fallaba con NotAllowedError.
+    Header always set Permissions-Policy "geolocation=(self), microphone=(self), camera=(self)"
 </IfModule>
 
 # Desactivar caché de LiteSpeed para páginas PHP
