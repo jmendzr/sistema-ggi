@@ -754,7 +754,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 <script src="<?= APP_URL ?>/assets/js/emojis.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/emojis.js') ?>"></script>
 <script>
 (function () {
-  var st = { f: 'todas', q: '', sel: null, etqs: [], etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null };
+  var st = { f: 'todas', q: '', sel: null, etqs: [], etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null, abrirSeq: 0 };
   var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)) ?>;
   var $ = function (s) { return document.querySelector(s); };
 
@@ -963,6 +963,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     st.sel = id;
     $('#ib').classList.add('abierto');
 
+    // Token de apertura: si se abre otra conversación (o el auto-refresco dispara
+    // otra carga) antes de que esta responda, la respuesta vieja se descarta en
+    // vez de pintarse encima de la nueva. Eso era lo que dejaba el hilo "pegado".
+    var token = ++st.abrirSeq;
+
     var previo = null;
     if (silencioso) {
       var inp = $('#ib-texto'), cont = $('#ib-msgs');
@@ -973,12 +978,25 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         abajo: cont ? (cont.scrollHeight - cont.scrollTop - cont.clientHeight < 60) : true,
         scroll: cont ? cont.scrollTop : 0
       };
+    } else {
+      // Feedback inmediato al hacer clic: marcar la fila y avisar que carga, para
+      // que nunca se sienta "congelado" mientras llega la respuesta.
+      document.querySelectorAll('.ib-item.sel').forEach(function (el) { el.classList.remove('sel'); });
+      var fila = document.querySelector('.ib-item[data-id="' + id + '"]');
+      if (fila) fila.classList.add('sel');
+      var chatEl = $('#ib-chat');
+      if (chatEl) chatEl.innerHTML = '<div class="ib-empty">Cargando conversación…</div>';
     }
 
     fetch('ajax.php?accion=hilo&id=' + id, { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (!j.ok) return;
+        if (token !== st.abrirSeq) return;   // respuesta vieja → descartar
+        if (!j.ok) {
+          if (!silencioso && $('#ib-chat'))
+            $('#ib-chat').innerHTML = '<div class="ib-empty">No se pudo abrir la conversación.</div>';
+          return;
+        }
 
         // Firma del hilo: si nada cambió, NO se repinta. Repintar cada 8 s
         // aunque no hubiera novedades era lo que hacía saltar la conversación.
@@ -994,7 +1012,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         chat(j, previo); ctx(j);
         if (!silencioso) lista(true);
       })
-      .catch(function () {});
+      .catch(function () {
+        if (token === st.abrirSeq && !silencioso && $('#ib-chat'))
+          $('#ib-chat').innerHTML = '<div class="ib-empty">No se pudo abrir. Revisa tu conexión e intenta de nuevo.</div>';
+      });
   }
 
   function chat(j, previo) {
@@ -1027,7 +1048,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
                      + 'alt="' + esc(m.tipo === 'sticker' ? 'Sticker' : 'Imagen recibida') + '" '
                      + 'data-ggi-preview="' + src + '">';
         } else if (m.tipo === 'video') {
-          cuerpoMsg += '<video class="ib-img" src="' + src + '" controls preload="metadata"></video>';
+          cuerpoMsg += '<video class="ib-img" src="' + src + '" controls preload="none"></video>';
         } else if (m.tipo === 'audio') {
           cuerpoMsg += '<audio src="' + src + '" controls preload="none" style="max-width:100%"></audio>';
         } else {
