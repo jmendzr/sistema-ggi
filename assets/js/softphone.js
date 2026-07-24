@@ -215,7 +215,7 @@
   }
 
   function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
-  function toast(m) { if (window.showToast) showToast(m, 'error'); else console.warn('[softphone]', m); }
+  function toast(m, tipo) { if (window.showToast) showToast(m, tipo || 'error'); else console.warn('[softphone]', m); }
 
   // ── Llamar (saliente) ──────────────────────────────────────────────────────
   function pintarSaliente(nombre) {
@@ -256,6 +256,26 @@
     }, 2000);
   }
 
+  // Pide permiso de llamada al cliente (mensaje interactivo dentro de la ventana).
+  function pedirPermiso(convId, nombre, motivo) {
+    var texto = 'No se pudo llamar a ' + (nombre || 'este contacto') + '.\n'
+              + (motivo ? '(' + motivo + ')\n\n' : '\n')
+              + '¿Enviarle una solicitud de permiso para llamarlo por WhatsApp? '
+              + 'Cuando la acepte, vas a poder llamarlo.';
+    var enviar = function () {
+      post({ accion: 'llamada_permiso', id: convId }).then(function (j) {
+        toast(j && j.ok ? 'Solicitud de permiso enviada' : (j && j.msg ? j.msg : 'No se pudo enviar la solicitud'),
+              j && j.ok ? 'ok' : 'error');
+      });
+    };
+    if (window.GGIConfirm && window.GGIConfirm.show) {
+      window.GGIConfirm.show({
+        icon: 'info', title: 'Sin permiso para llamar', message: texto,
+        confirmText: 'Enviar solicitud', cancelText: 'Ahora no', onConfirm: enviar
+      });
+    } else if (window.confirm(texto)) { enviar(); }
+  }
+
   window.SoftphoneLlamar = function (convId, nombre) {
     if (actual) { toast('Ya hay una llamada en curso'); return; }
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
@@ -282,7 +302,15 @@
           return post({ accion: 'llamada_iniciar', id: convId, sdp: pc.localDescription.sdp });
         })
         .then(function (j) {
-          if (!j || !j.ok) { toast(j && j.msg ? j.msg : 'No se pudo iniciar la llamada'); finalizar(); return; }
+          if (!j || !j.ok) {
+            var msg = j && j.msg ? j.msg : 'No se pudo iniciar la llamada';
+            finalizar();
+            // Si es por falta de permiso, ofrecer mandar la solicitud al cliente.
+            var permiso = /permis|permission|consent|no.*autoriz|1013|138/i.test(msg);
+            if (permiso) pedirPermiso(convId, nombre, msg);
+            else toast(msg);
+            return;
+          }
           actual = { call_id: j.call_id, phone_number_id: j.phone_number_id, nombre: nombre, telefono: '' };
           esperarAnswer(actual);
         });

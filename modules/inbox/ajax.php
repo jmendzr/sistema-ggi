@@ -721,6 +721,37 @@ if ($accion === 'llamada_estado') {
     exit;
 }
 
+// ══ Llamadas: pedir PERMISO para llamar (mensaje interactivo, no plantilla) ═══
+// Meta exige permiso para llamar en frío. Se envía dentro de la ventana de 24 h;
+// límite 1 por 24 h y 2 por semana. Al aceptar el cliente, se puede llamar.
+if ($accion === 'llamada_permiso') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $convId = (int) ($_POST['id'] ?? 0);
+    $texto  = trim($_POST['texto'] ?? '');
+    if (!$convId) { echo json_encode(['ok' => false, 'msg' => 'Datos inválidos']); exit; }
+    if ($texto === '') $texto = 'Nos gustaría llamarte para ayudarte con tu certificación. ¿Nos autorizas la llamada?';
+
+    $c = $pdo->prepare("SELECT telefono FROM wa_conversaciones WHERE id = ?");
+    $c->execute([$convId]);
+    $conv = $c->fetch(PDO::FETCH_ASSOC);
+    if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+
+    $waId = WhatsAppService::sendInteractive($conv['telefono'], [
+        'type'   => 'call_permission_request',
+        'action' => ['name' => 'call_permission_request'],
+        'body'   => ['text' => mb_substr($texto, 0, 1024)],
+    ]);
+    if (!$waId) { echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar la solicitud']); exit; }
+
+    WaInbox::registrarSaliente($pdo, $conv['telefono'], $waId, 'text',
+        '🔔 Solicitud de permiso para llamar enviada', null, $yo, 'sent', null, null);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
 // ══ Llamadas: INICIAR una llamada saliente (business-initiated) ═════════════
 if ($accion === 'llamada_iniciar') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
