@@ -746,7 +746,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 <script src="<?= APP_URL ?>/assets/js/emojis.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/emojis.js') ?>"></script>
 <script>
 (function () {
-  var st = { f: 'todas', q: '', sel: null, etq: 0, etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null };
+  var st = { f: 'todas', q: '', sel: null, etqs: [], etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null };
   var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)) ?>;
   var $ = function (s) { return document.querySelector(s); };
 
@@ -849,7 +849,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   function lista(mantener) {
     fetch('ajax.php?accion=lista&filtro=' + encodeURIComponent(st.f)
           + '&q=' + encodeURIComponent(st.q)
-          + '&etiqueta=' + (st.etq || 0)
+          + '&etiqueta=' + (st.etqs || []).join(',')
           + '&bandeja=' + encodeURIComponent(st.bandeja || ''),
           { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
@@ -2240,25 +2240,57 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         var d = abrirPop(ancla,
             '<input type="search" id="ib-etqq" placeholder="Buscar etiqueta…" aria-label="Buscar etiqueta">'
           + '<div id="ib-etql"></div>');
+        d.dataset.pop = 'filtro';   // marca para poder cerrarlo con el mismo ícono
 
+        var check = '<span style="margin-left:auto;color:var(--ac)">✓</span>';
         function pintar(txt) {
           txt = (txt || '').toLowerCase();
           d.querySelector('#ib-etql').innerHTML =
               '<button type="button" class="ib-pop-item" data-fetq="0">'
             + '<span style="color:var(--tx2)">Todas las etiquetas</span>'
-            + (st.etq ? '' : '<span style="margin-left:auto;color:var(--ac)">✓</span>') + '</button>'
+            + (st.etqs.length ? '' : check) + '</button>'
             + j.items.filter(function (e) { return e.nombre.toLowerCase().indexOf(txt) !== -1; })
                 .map(function (e) {
+                  var on = st.etqs.indexOf(e.id) !== -1;
                   return '<button type="button" class="ib-pop-item" data-fetq="' + e.id + '" data-nom="' + esc(e.nombre) + '">'
                        + '<span class="ib-etq ' + esc(e.color) + '">' + esc(e.nombre) + '</span>'
-                       + (st.etq === e.id ? '<span style="margin-left:auto;color:var(--ac)">✓</span>' : '') + '</button>';
+                       + (on ? check : '') + '</button>';
                 }).join('');
         }
         pintar('');
+        // Multi-selección viva: cada clic alterna una etiqueta y re-aplica el
+        // filtro SIN cerrar el panel. "Todas" limpia la selección.
+        d.querySelector('#ib-etql').addEventListener('click', function (e) {
+          var b = e.target.closest('[data-fetq]');
+          if (!b) return;
+          e.stopPropagation();
+          var id = parseInt(b.dataset.fetq, 10) || 0;
+          if (!id) { st.etqs = []; }
+          else {
+            var i = st.etqs.indexOf(id);
+            if (i === -1) st.etqs.push(id); else st.etqs.splice(i, 1);
+          }
+          pintar(d.querySelector('#ib-etqq').value);
+          aplicarFiltroEtq();
+        });
         var inp = d.querySelector('#ib-etqq');
         inp.focus();
         inp.addEventListener('input', function () { pintar(inp.value); });
       });
+  }
+
+  // Refleja st.etqs en el chip y el botón, y recarga la lista.
+  function aplicarFiltroEtq() {
+    var n = st.etqs.length;
+    var chip = $('#ib-etq-activa');
+    if (chip) {
+      chip.style.display = n ? '' : 'none';
+      chip.textContent   = n ? (n === 1 ? '1 etiqueta ×' : n + ' etiquetas ×') : '';
+      chip.classList.toggle('on', n > 0);
+    }
+    var bEtq = $('#ib-filtro-etq');
+    if (bEtq) bEtq.classList.toggle('on', n > 0);
+    lista();
   }
 
   // Nueva conversación: busca empresa por nombre/RUC/teléfono
@@ -2366,6 +2398,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   });
 
   document.addEventListener('click', function (e) {
+    // Estado del popover ANTES de que este mismo clic lo cierre, para permitir
+    // que el ícono de filtro funcione como toggle (abrir/cerrar).
+    var _popPrev = document.getElementById('ib-pop');
+    var _eraFiltro = !!(_popPrev && _popPrev.dataset.pop === 'filtro');
+
     // Empresa / propuesta / envío en modal: salir del inbox perdería el hilo
     var ver = e.target.closest('[data-ver]');
     if (ver) {
@@ -2392,7 +2429,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     // ── Menús emergentes ──
     if (e.target.closest('#ib-nueva'))     { popNueva(e.target.closest('#ib-nueva')); return; }
-    if (e.target.closest('#ib-filtro-etq')){ popFiltroEtiquetas(e.target.closest('#ib-filtro-etq')); return; }
+    if (e.target.closest('#ib-filtro-etq')){
+      if (_eraFiltro) { cerrarPop(); return; }   // ya estaba abierto → cerrar (toggle)
+      popFiltroEtiquetas(e.target.closest('#ib-filtro-etq')); return;
+    }
     if (e.target.closest('#ib-add-etq'))   { popEtiquetas(e.target.closest('#ib-add-etq')); return; }
 
     var elegido = e.target.closest('[data-tel]');
@@ -2403,21 +2443,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       return;
     }
 
-    var fEtq = e.target.closest('[data-fetq]');
-    if (fEtq) {
-      cerrarPop();
-      st.etq = parseInt(fEtq.dataset.fetq, 10) || 0;
-      var chip = $('#ib-etq-activa');
-      if (chip) {
-        chip.style.display = st.etq ? '' : 'none';
-        chip.textContent   = st.etq ? (fEtq.dataset.nom || 'Etiqueta') + ' ×' : '';
-        chip.classList.toggle('on', !!st.etq);
-      }
-      var bEtq = $('#ib-filtro-etq');
-      if (bEtq) bEtq.classList.toggle('on', !!st.etq);
-      lista();
-      return;
-    }
+    // El clic sobre etiquetas del filtro (data-fetq) lo maneja el propio panel
+    // (multi-selección viva en popFiltroEtiquetas), no este manejador global.
 
     var tog = e.target.closest('[data-etq]');
     if (tog) {
@@ -2458,12 +2485,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       return;
     }
 
-    // Quitar el filtro de etiqueta desde su propio chip
+    // Quitar el filtro de etiquetas desde su propio chip
     if (e.target.closest('#ib-etq-activa')) {
-      st.etq = 0;
-      var c2 = $('#ib-etq-activa');
-      if (c2) { c2.style.display = 'none'; c2.classList.remove('on'); }
-      lista();
+      st.etqs = [];
+      aplicarFiltroEtq();
       return;
     }
 

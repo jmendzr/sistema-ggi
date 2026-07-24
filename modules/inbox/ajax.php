@@ -863,11 +863,14 @@ if ($accion === 'lista') {
     // "Sin persona": el número no está vinculado a ninguna empresa del sistema
     elseif ($filtro === 'sin_persona') { $where[] = 'c.cliente_id IS NULL'; }
 
-    $etq = (int) ($_GET['etiqueta'] ?? 0);
-    if ($etq) {
-        $where[] = 'EXISTS (SELECT 1 FROM wa_conversacion_etiquetas x
-                             WHERE x.conversacion_id = c.id AND x.etiqueta_id = ?)';
-        $args[]  = $etq;
+    // Filtro por etiquetas: acepta varias (lista separada por comas). Una
+    // conversación entra si tiene CUALQUIERA de las etiquetas seleccionadas.
+    $etqs = array_values(array_filter(array_map('intval', explode(',', (string) ($_GET['etiqueta'] ?? '')))));
+    if ($etqs) {
+        $ph = implode(',', array_fill(0, count($etqs), '?'));
+        $where[] = "EXISTS (SELECT 1 FROM wa_conversacion_etiquetas x
+                             WHERE x.conversacion_id = c.id AND x.etiqueta_id IN ($ph))";
+        foreach ($etqs as $id) $args[] = $id;
     }
 
     if ($buscar !== '') {
