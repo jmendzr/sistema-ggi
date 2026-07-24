@@ -1422,7 +1422,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   // formatos que Meta acepta al subir pero luego no reproduce (Chrome=webm,
   // Safari=mp4/aac), por eso quedaban en "sent" sin llegar al destinatario. Con
   // opus-recorder (encoder Opus en WASM) grabamos OGG/Opus real en todos.
-  var _rec = null, _recTimer = null, _recT0 = 0, _recBytes = null, _recCancelado = false;
+  var _rec = null, _recTimer = null, _recT0 = 0, _recCancelado = false;
 
   function vozDisponible() {
     return !!(window.Recorder && window.WebAssembly &&
@@ -1437,7 +1437,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       return;
     }
 
-    _recBytes = null; _recCancelado = false;
+    _recCancelado = false;
     // 16 kHz + VOIP: reproduce EXACTAMENTE cómo WhatsApp codifica sus notas de
     // voz reales (SILK a 16 kHz). Con 48 kHz salía en modo fullband y WhatsApp
     // la mostraba como archivo de audio adjunto en vez de nota de voz (con onda).
@@ -1451,14 +1451,18 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       monitorGain: 0,
       maxFramesPerPage: 40,
     });
-    _rec.ondataavailable = function (typedArray) { _recBytes = typedArray; };
+    // El envío se hace en ondataavailable (no en onstop): con streamPages:false
+    // opus-recorder entrega el OGG completo aquí DESPUÉS de stop(). En laptop el
+    // onstop se disparaba antes de que llegara el audio y el envío se caía en
+    // silencio. _recCancelado se fija al empezar y solo lo cambia cancelarVoz().
+    _rec.ondataavailable = function (typedArray) {
+      if (_recCancelado) return;      // se canceló: no enviar
+      procesarVoz(typedArray);
+    };
     _rec.onstop = function () {
       clearInterval(_recTimer);
       pintarBarraVoz(false);
-      var cancel = _recCancelado, bytes = _recBytes;
-      _rec = null; _recBytes = null;
-      if (cancel) return;
-      procesarVoz(bytes);
+      _rec = null;
     };
     _rec.start().then(function () {
       _recT0 = Date.now();
