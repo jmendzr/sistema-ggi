@@ -689,6 +689,17 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-chat-head [data-panel="lista"] { display: none; }
   .ib.sin-lista .ib-chat-head [data-panel="lista"] { display: inline-flex; }
 
+  /* Lista de personas para reasignar (en vez de un select básico) */
+  .ib-ra-lista { display: flex; flex-direction: column; gap: 3px; max-height: 260px; overflow-y: auto;
+                 border: 1px solid var(--brd); border-radius: 10px; padding: 5px; }
+  .ib-ra-op { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+              padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; cursor: pointer;
+              background: transparent; font: inherit; font-size: .85rem; color: var(--tx); }
+  .ib-ra-op:hover { background: var(--bg-hover); }
+  .ib-ra-op.sel { background: var(--ac-soft); border-color: var(--ac); color: var(--ac); font-weight: 600; }
+  .ib-ra-op .ib-av { width: 30px; height: 30px; font-size: .7rem; flex-shrink: 0; }
+  .ib-av.gris { background: var(--s-neutral); color: #fff; }
+
   /* Burbuja de llamada en el hilo (estilo WhatsApp) */
   .ib-call { display: inline-flex; align-items: center; gap: 10px; }
   .ib-call svg { flex-shrink: 0; color: var(--s-ok); }
@@ -2538,11 +2549,17 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       .then(function (j) {
         if (!j.ok) return;
 
-        var opts = '<option value="">— Dejarla libre —</option>'
+        // Lista de personas con avatar (en vez del <select> básico). Sin el
+        // "(gerencia)" entre paréntesis. Se elige haciendo clic en la fila.
+        var opts = '<div class="ib-ra-lista" id="ra-lista">'
+          + '<button type="button" class="ib-ra-op" data-ra="">'
+          +   '<span class="ib-av gris">–</span><span>Dejarla libre</span></button>'
           + j.usuarios.map(function (u) {
-              return '<option value="' + u.id + '">' + esc(u.nombre)
-                   + (u.rol !== 'ejecutivo_ventas' ? ' (gerencia)' : '') + '</option>';
-            }).join('');
+              return '<button type="button" class="ib-ra-op" data-ra="' + u.id + '">'
+                   + '<span class="ib-av ' + colorDe(u.nombre) + '">' + esc(ini(u.nombre)) + '</span>'
+                   + '<span>' + esc(u.nombre) + '</span></button>';
+            }).join('')
+          + '</div>';
 
         var hist = j.historial.length
           ? '<div class="ib-hist-t">Historial</div>' + j.historial.map(function (h) {
@@ -2555,7 +2572,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           : '';
 
         mantOpen('Reasignar conversación',
-            '<label class="ib-plt-f"><span>Pasar a</span><select id="ra-u">' + opts + '</select></label>'
+            '<div class="ib-plt-f"><span>Pasar a</span>' + opts + '</div>'
           + '<label class="ib-plt-f"><span>Motivo (opcional)</span>'
           + '<input type="text" id="ra-m" maxlength="200" placeholder="Ej.: de vacaciones, carga de trabajo"></label>'
           + '<p class="ib-hist-nota">Queda registrado quién hizo el cambio. Si el ejecutivo estaba '
@@ -2565,10 +2582,21 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
           + '<button type="button" class="ggi-btn-confirm-action" id="ra-ok">Reasignar</button></div>');
 
+        // Selección: al tocar una fila se marca como elegida (una sola)
+        var lista = document.getElementById('ra-lista');
+        lista.addEventListener('click', function (e) {
+          var op = e.target.closest('.ib-ra-op');
+          if (!op) return;
+          lista.querySelectorAll('.ib-ra-op').forEach(function (b) { b.classList.remove('sel'); });
+          op.classList.add('sel');
+        });
+
         document.getElementById('ra-ok').addEventListener('click', function () {
+          var sel = lista.querySelector('.ib-ra-op.sel');
+          if (!sel) { if (window.showToast) showToast('Elige a quién pasar la conversación', 'error'); return; }
           ggiPost('ajax.php', {
             accion: 'reasignar', id: st.sel,
-            a_usuario: document.getElementById('ra-u').value,
+            a_usuario: sel.dataset.ra,
             motivo: document.getElementById('ra-m').value.trim()
           }).then(function (r) {
             if (!r.ok) return;

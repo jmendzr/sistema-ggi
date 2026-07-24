@@ -95,8 +95,21 @@
     ringStart();
   }
 
+  var vigTimer = null;
+  function vigilarFin(ll) {
+    if (vigTimer) clearInterval(vigTimer);
+    vigTimer = setInterval(function () {
+      fetch(AJAX + '?accion=llamada_estado&call_id=' + encodeURIComponent(ll.call_id),
+            { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { if (j && j.ok && j.terminada) { finalizar(); } })
+        .catch(function () {});
+    }, 2500);
+  }
+
   function pintarEnCurso(ll) {
     quitarUI();
+    vigilarFin(ll);   // si el otro cuelga, el webhook lo marca y colgamos solos
     var box = document.createElement('div');
     box.className = 'sf-pop sf-live';
     box.id = 'sf-pop';
@@ -193,6 +206,7 @@
   }
 
   function finalizar() {
+    if (vigTimer) { clearInterval(vigTimer); vigTimer = null; }
     if (pc) { try { pc.close(); } catch (_) {} pc = null; }
     if (micStream) { micStream.getTracks().forEach(function (t) { t.stop(); }); micStream = null; }
     var a = document.getElementById('sf-audio'); if (a) a.remove();

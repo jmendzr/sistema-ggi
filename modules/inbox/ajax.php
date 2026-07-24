@@ -707,6 +707,17 @@ if ($accion === 'llamada_pendiente') {
     exit;
 }
 
+// ══ Llamadas: ¿la llamada en curso ya terminó? (para colgar si el otro cortó) ═
+if ($accion === 'llamada_estado') {
+    $callId = trim($_GET['call_id'] ?? '');
+    if (!$callId) { echo json_encode(['ok' => false]); exit; }
+    $q = $pdo->prepare("SELECT 1 FROM wa_llamadas
+                         WHERE wa_call_id = ? AND evento IN ('terminate','reject') LIMIT 1");
+    $q->execute([$callId]);
+    echo json_encode(['ok' => true, 'terminada' => (bool) $q->fetchColumn()]);
+    exit;
+}
+
 // ══ Llamadas: contestar / rechazar / colgar (proxy a la Graph API) ══════════
 if ($accion === 'llamada_accion') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
