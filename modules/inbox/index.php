@@ -1648,49 +1648,20 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       + '</div>';
   }
 
-  // Ogg CRC-32 (polinomio 0x04c11db7, sin reflejar) para reescribir la página.
-  var _OGGCRC = (function () {
-    var t = new Uint32Array(256);
-    for (var i = 0; i < 256; i++) {
-      var r = i << 24;
-      for (var j = 0; j < 8; j++) r = (r & 0x80000000) ? ((r << 1) ^ 0x04c11db7) : (r << 1);
-      t[i] = r >>> 0;
-    }
-    return t;
-  })();
-  function _oggCrc(bytes, ini, fin) {
-    var c = 0;
-    for (var i = ini; i < fin; i++) c = ((c << 8) ^ _OGGCRC[((c >>> 24) ^ bytes[i]) & 0xff]) >>> 0;
-    return c >>> 0;
-  }
-  // Fija el "input sample rate" del OpusHead a 16000 (como las notas de voz
-  // reales de WhatsApp; opus-recorder deja 48000) y recalcula el CRC de la
-  // primera página Ogg. Es lo último que diferenciaba nuestro OGG del de WhatsApp.
-  function _patchOpusHeadRate(bytes) {
-    if (bytes[0] !== 0x4F) return;                       // no "OggS"
-    var segs = bytes[26], payload = 27 + segs;           // inicio del OpusHead
-    if (bytes[payload] !== 0x4F || bytes[payload + 1] !== 0x70) return;  // "Op..."
-    var off = payload + 12;                              // inputSampleRate (4 bytes LE)
-    bytes[off] = 0x80; bytes[off + 1] = 0x3E; bytes[off + 2] = 0x00; bytes[off + 3] = 0x00;  // 16000
-    var pageLen = 27 + segs;
-    for (var s = 0; s < segs; s++) pageLen += bytes[27 + s];
-    bytes[22] = bytes[23] = bytes[24] = bytes[25] = 0;   // CRC a cero antes de calcular
-    var crc = _oggCrc(bytes, 0, pageLen);
-    bytes[22] = crc & 0xff; bytes[23] = (crc >>> 8) & 0xff;
-    bytes[24] = (crc >>> 16) & 0xff; bytes[25] = (crc >>> 24) & 0xff;
-  }
-
   function procesarVoz(bytes) {
     if (!bytes || bytes.length < 400) {
       if (window.showToast) showToast('La grabación fue muy corta', 'error');
       return;
     }
     // opus-recorder ya entrega OGG/Opus válido; confirmamos la firma "OggS".
+    // Nota: WhatsApp Cloud API entrega el audio como ARCHIVO reproducible, no
+    // como nota de voz con waveform (eso es exclusivo de audios grabados dentro
+    // de la app de WhatsApp). Se probó OGG/Opus SILK 16 kHz e incluso reescribir
+    // el OpusHead: WhatsApp igual lo muestra como archivo. Es límite de la API.
     if (bytes[0] !== 0x4F || bytes[1] !== 0x67 || bytes[2] !== 0x67 || bytes[3] !== 0x53) {
       if (window.showToast) showToast('El audio no se grabó en un formato válido', 'error');
       return;
     }
-    try { _patchOpusHeadRate(bytes); } catch (_) {}
 
     if (window.showToast) showToast('Enviando nota de voz…', 'ok');
 
