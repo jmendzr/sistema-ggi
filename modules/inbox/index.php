@@ -261,7 +261,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
             background: var(--bg-surface); border: 1px solid var(--brd);
             padding: 3px 12px; border-radius: 999px; margin: 10px 0 4px; }
 
-  .ib-b { max-width: 72%; padding: 8px 12px 6px; border-radius: 14px;
+  .ib-b { max-width: 72%; min-width: 74px; padding: 8px 12px 6px; border-radius: 14px;
           font-size: .84rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
   .ib-b.in  { align-self: flex-start; background: var(--bg-surface); color: var(--tx);
               border: 1px solid var(--brd); border-bottom-left-radius: 5px; }
@@ -269,11 +269,19 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   /* Automático del sistema: se distingue del mensaje humano sin gritar */
   .ib-b.sis { align-self: flex-end; background: var(--s-neutral-bg); color: var(--tx);
               border: 1px dashed var(--brd); border-bottom-right-radius: 5px; }
-  .ib-b-who { font-size: .68rem; font-weight: 700; margin-bottom: 3px; opacity: .9; }
+  .ib-b-who { font-size: .68rem; font-weight: 700; margin-bottom: 3px; opacity: .9;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .ib-b.out .ib-b-who { color: #fff; }
-  .ib-b-foot { font-size: .64rem; margin-top: 4px; display: flex; gap: 5px;
-               align-items: center; justify-content: flex-end; opacity: .8; }
+  /* El pie (hora + estado) nunca se parte: white-space nowrap + el ancho mínimo
+     de la burbuja garantiza que quepa en una sola línea aun en mensajes cortos. */
+  .ib-b-foot { font-size: .62rem; margin-top: 2px; display: flex; gap: 4px;
+               align-items: center; justify-content: flex-end; opacity: .85;
+               white-space: nowrap; }
   .ib-b.in .ib-b-foot { justify-content: flex-start; }
+  .ib-b-foot .ib-tick { flex-shrink: 0; margin-left: -1px; }
+  /* Doble check de leído en azul WhatsApp (sobre burbuja azul mantiene contraste) */
+  .ib-tick-read { display: inline-flex; color: #6FD0F6; }
+  .ib-tick-err  { display: inline-flex; color: #FCA5A5; }
   .ib-b-err { font-size: .7rem; margin-top: 5px; padding: 5px 8px; border-radius: 7px;
               background: var(--s-err-bg); color: var(--s-err-tx); white-space: normal; }
 
@@ -787,12 +795,24 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     if (f.toDateString() === ayer.toDateString()) return 'Ayer';
     return f.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' });
   }
-  // ✓ enviado · ✓✓ entregado · ✓✓ azul leído — convención que la gente ya conoce
+  // Estado de entrega con el mismo lenguaje visual que WhatsApp:
+  //  ✓ enviado · ✓✓ entregado · ✓✓ azul leído · ⚠ no entregado. Dibujado en SVG
+  //  (íconos "done"/"done_all") para que se vea nítido y no como texto.
   function ticks(e) {
-    if (e === 'read')      return '<span style="color:#7DD3FC">✓✓</span>';
-    if (e === 'delivered') return '✓✓';
-    if (e === 'sent')      return '✓';
-    if (e === 'failed')    return '⚠';
+    var DOBLE  = 'M18 7l-1.41-1.41-6.34 6.34 1.41 1.41L18 7zm4.24-1.41L11.66 16.17 '
+               + '7.48 12l-1.41 1.41L11.66 19l12-12-1.42-1.41zM.41 13.41L6 19l1.41-1.41L1.83 12 .41 13.41z';
+    var SIMPLE = 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z';
+    function svgTick(d) {
+      return '<svg class="ib-tick" viewBox="0 0 24 24" width="15" height="15" '
+           + 'fill="currentColor" aria-hidden="true"><path d="' + d + '"/></svg>';
+    }
+    if (e === 'read')      return '<span class="ib-tick-read" title="Leído">' + svgTick(DOBLE) + '</span>';
+    if (e === 'delivered') return svgTick(DOBLE);
+    if (e === 'sent')      return svgTick(SIMPLE);
+    if (e === 'failed')    return '<span class="ib-tick-err" title="No entregado">'
+                                + '<svg class="ib-tick" viewBox="0 0 24 24" width="14" height="14" '
+                                + 'fill="currentColor" aria-hidden="true"><path d="M12 2L1 21h22L12 2zm1 '
+                                + '15h-2v-2h2v2zm0-4h-2V9h2v4z"/></svg></span>';
     return '';
   }
 
@@ -934,8 +954,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       if (dia !== ultDia) { cuerpo += '<div class="ib-sep">' + esc(dia) + '</div>'; ultDia = dia; }
 
       var cls = m.dir === 'in' ? 'in' : (m.autor ? 'out' : 'sis');
+      var whoTxt = m.autor || 'Sistema · automático';
       var who = m.dir === 'out'
-        ? '<div class="ib-b-who">' + esc(m.autor || 'Sistema · automático') + '</div>' : '';
+        ? '<div class="ib-b-who" title="' + esc(whoTxt) + '">' + esc(whoTxt) + '</div>' : '';
       var err = (m.estado === 'failed' && m.error)
         ? '<div class="ib-b-err">' + esc(m.error) + '</div>' : '';
 
@@ -1417,10 +1438,13 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     }
 
     _recBytes = null; _recCancelado = false;
+    // 16 kHz + VOIP: reproduce EXACTAMENTE cómo WhatsApp codifica sus notas de
+    // voz reales (SILK a 16 kHz). Con 48 kHz salía en modo fullband y WhatsApp
+    // la mostraba como archivo de audio adjunto en vez de nota de voz (con onda).
     _rec = new Recorder({
       encoderPath: '<?= APP_URL ?>/assets/js/encoderWorker.min.js',
-      encoderApplication: 2048,   // 2048 = VOIP, optimizado para voz
-      encoderSampleRate: 48000,
+      encoderApplication: 2048,   // 2048 = VOIP, optimizado para voz (SILK)
+      encoderSampleRate: 16000,   // igual que las notas de voz de WhatsApp
       numberOfChannels: 1,
       streamPages: false,         // entrega el archivo OGG completo al terminar
       recordingGain: 1,
