@@ -321,6 +321,10 @@ class WaInbox
     /** Texto corto para la lista de conversaciones. */
     private static function preview(?string $texto, string $tipo, ?string $templateName = null): string
     {
+        // Las llamadas guardan un token técnico en "texto" (call:answered:154…);
+        // el listado debe mostrar la etiqueta, no el token.
+        if ($tipo === 'call') return '📞 Llamada de voz';
+
         if ($texto !== null && trim($texto) !== '') {
             return mb_substr(trim(preg_replace('/\s+/', ' ', $texto)), 0, 200);
         }

@@ -262,10 +262,32 @@ try {
                     ]);
 
                     // Al iniciarse la llamada (connect), dejar una entrada en el
-                    // hilo del inbox para que la conversación muestre "📞 Llamada
-                    // de voz" y quede como no leída (usa la lógica de entrantes).
+                    // hilo del inbox. El "texto" guarda un token de estado que el
+                    // inbox renderiza (call:ringing → luego answered/missed/rejected).
                     if ($evento === 'connect' && $from) {
-                        WaInbox::registrarEntrante($pdo, $from, $callId, 'call', null, $phoneNumberId, null, false);
+                        WaInbox::registrarEntrante($pdo, $from, $callId, 'call', 'call:ringing', $phoneNumberId, null, false);
+                    }
+
+                    // Al terminar/rechazar: actualizar la entrada del hilo con el
+                    // resultado y la duración, para verlo como WhatsApp.
+                    if (($evento === 'terminate' || $evento === 'reject') && $callId) {
+                        $st = strtoupper((string) $estado);
+                        if ($evento === 'reject' || $st === 'REJECTED')        $tok = 'call:rejected';
+                        elseif ($st === 'COMPLETED' || ($dur !== null && $dur > 0)) $tok = 'call:answered:' . (int) $dur;
+                        elseif ($st === 'FAILED' || $st === 'ERROR')           $tok = 'call:failed';
+                        else                                                   $tok = 'call:missed';
+
+                        $pdo->prepare("UPDATE wa_mensajes SET texto = ? WHERE wa_message_id = ? AND tipo = 'call'")
+                            ->execute([$tok, $callId]);
+
+                        // Preview del listado según el resultado
+                        if ($convId) {
+                            $prev = $tok === 'call:rejected' ? '📞 Llamada rechazada'
+                                  : (strpos($tok, 'answered') !== false ? '📞 Llamada de voz'
+                                  : ($tok === 'call:failed' ? '📞 Llamada fallida' : '📞 Llamada perdida'));
+                            $pdo->prepare("UPDATE wa_conversaciones SET ultimo_mensaje_preview = ? WHERE id = ?")
+                                ->execute([$prev, $convId]);
+                        }
                     }
 
                     // Traza inmediata para inspeccionar la primera llamada real

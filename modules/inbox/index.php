@@ -684,6 +684,16 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     .ib-b-wrap { max-width: 90%; }
   }
 
+  /* Burbuja de llamada en el hilo (estilo WhatsApp) */
+  .ib-call { display: inline-flex; align-items: center; gap: 10px; }
+  .ib-call svg { flex-shrink: 0; color: var(--s-ok); }
+  .ib-call.perdida svg { color: var(--s-err); }
+  .ib-call-txt { display: flex; flex-direction: column; line-height: 1.25; }
+  .ib-call-txt b { font-weight: 600; font-size: .86rem; }
+  .ib-call-txt small { font-size: .68rem; opacity: .7; }
+  .ib-b.out .ib-call svg { color: #fff; }
+  .ib-b.out .ib-call.perdida svg { color: #FCA5A5; }
+
   /* ── Softphone: panel flotante de llamada ── */
   .sf-pop {
     position: fixed; right: 20px; bottom: 20px; z-index: 10500;
@@ -1067,8 +1077,34 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
       // la burbuja vacía y que parezca un mensaje perdido.
       var cuerpoMsg = '';
 
+      // ── Llamada de voz: burbuja con estado y duración, como WhatsApp ──
+      var esLlamada = (m.tipo === 'call');
+      if (esLlamada) {
+        var tk = (m.texto || 'call:ringing').split(':');
+        var eLl = tk[1] || 'ringing';                 // answered|missed|rejected|failed|ringing
+        var durLl = parseInt(tk[2] || '0', 10);
+        var saliente = (m.dir === 'out');
+        var txtLl, clsLl = '';
+        if (eLl === 'answered')      { txtLl = 'Llamada de voz'; }
+        else if (eLl === 'rejected') { txtLl = 'Llamada rechazada'; clsLl = 'perdida'; }
+        else if (eLl === 'failed')   { txtLl = 'Llamada fallida';   clsLl = 'perdida'; }
+        else if (eLl === 'missed')   { txtLl = saliente ? 'Sin respuesta' : 'Llamada perdida'; clsLl = 'perdida'; }
+        else                         { txtLl = 'Llamada de voz…'; }
+        var durTxt = (eLl === 'answered' && durLl > 0)
+          ? ' · ' + Math.floor(durLl / 60) + ':' + ('0' + (durLl % 60)).slice(-2) : '';
+        // Flecha entrante (baja-izq) o saliente (sube-der) sobre el ícono
+        var flecha = saliente ? 'M7 17h10V7' : 'M17 7H7v10';
+        cuerpoMsg = '<span class="ib-call ' + clsLl + '">'
+          + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+          + '<path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0122 16.92z"/></svg>'
+          + '<span class="ib-call-txt"><b>' + txtLl + '</b><small>' + (saliente ? 'Saliente' : 'Entrante') + durTxt + '</small></span>'
+          + '</span>';
+      }
+
       // Adjuntos: el archivo se descarga de Meta la primera vez que se abre
-      if (m.media) {
+      if (esLlamada) {
+        /* ya renderizada arriba */
+      } else if (m.media) {
         var src = 'media.php?id=' + m.media;
         if (m.tipo === 'image' || m.tipo === 'sticker') {
           cuerpoMsg += '<img class="ib-img' + (m.tipo === 'sticker' ? ' ib-sticker' : '') + '" src="' + src + '" loading="lazy" '
@@ -1106,7 +1142,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         } else {
           cuerpoMsg += formato(m.texto);
         }
-      } else if (m.texto) {
+      } else if (m.texto && !esLlamada) {
         cuerpoMsg += (cuerpoMsg ? '<div class="ib-pie-foto">' : '')
                    + formato(m.texto) + (cuerpoMsg ? '</div>' : '');
       }
