@@ -228,6 +228,46 @@ try {
                 $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
                 WaInbox::registrarEntrante($pdo, $from, $wa_id, $tipo, $texto, $phoneNumberId, $media, $reenviado);
             }
+
+            // ── Eventos de LLAMADA (Calling API) ──────────────────────────
+            // Fase A: por ahora solo se REGISTRA el evento crudo para poder ver
+            // su estructura real y construir el softphone contra datos reales.
+            // Aún no se contesta la llamada (eso requiere el cliente WebRTC).
+            $calls = $value['calls'] ?? [];
+            foreach ($calls as $call) {
+                try {
+                    $callId  = $call['id']        ?? null;
+                    $from    = preg_replace('/\D/', '', (string)($call['from'] ?? ''));
+                    $evento  = $call['event']     ?? ($call['status'] ?? null);
+                    $dir     = $call['direction'] ?? null;
+                    $estado  = $call['status']    ?? null;
+                    $dur     = isset($call['duration']) ? (int) $call['duration'] : null;
+                    $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
+
+                    // Vincular con la conversación del inbox si existe
+                    $convId = null;
+                    if ($from) {
+                        $q = $pdo->prepare("SELECT id FROM wa_conversaciones WHERE telefono = ? ORDER BY id DESC LIMIT 1");
+                        $q->execute([$from]);
+                        $convId = $q->fetchColumn() ?: null;
+                    }
+
+                    $pdo->prepare(
+                        "INSERT INTO wa_llamadas
+                            (wa_call_id, conversacion_id, phone_number_id, telefono, direccion, evento, estado, duracion_seg, payload_json)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    )->execute([
+                        $callId, $convId, $phoneNumberId, $from ?: null, $dir, $evento, $estado, $dur,
+                        json_encode($call, JSON_UNESCAPED_UNICODE)
+                    ]);
+
+                    // Traza inmediata para inspeccionar la primera llamada real
+                    error_log('[WhatsApp Webhook] CALL event=' . $evento . ' dir=' . $dir
+                            . ' from=' . $from . ' id=' . $callId);
+                } catch (\Throwable $ce) {
+                    error_log('[WhatsApp Webhook] Error registrando llamada: ' . $ce->getMessage());
+                }
+            }
         }
     }
 } catch (\Throwable $e) {
