@@ -266,6 +266,29 @@ try {
                     // inbox renderiza (call:ringing → luego answered/missed/rejected).
                     if ($evento === 'connect' && $from) {
                         WaInbox::registrarEntrante($pdo, $from, $callId, 'call', 'call:ringing', $phoneNumberId, null, false);
+
+                        // Push a quien puede atender: el asignado (si hay) + gerencia,
+                        // para enterarse de la llamada aunque no tengan el inbox abierto.
+                        try {
+                            require_once __DIR__ . '/../../core/PushService.php';
+                            $nombre = '+' . $from; $asignado = null;
+                            if ($convId) {
+                                $qn = $pdo->prepare("SELECT COALESCE(cl.razon_social, CONCAT('+', c.telefono)) n, c.asignado_a
+                                                       FROM wa_conversaciones c LEFT JOIN clientes cl ON cl.id = c.cliente_id
+                                                      WHERE c.id = ?");
+                                $qn->execute([$convId]);
+                                if ($rw = $qn->fetch(\PDO::FETCH_ASSOC)) { $nombre = $rw['n']; $asignado = $rw['asignado_a']; }
+                            }
+                            $dest = [];
+                            if ($asignado) $dest[] = (int) $asignado;
+                            foreach ($pdo->query("SELECT id FROM usuarios WHERE rol IN ('gerente_general','gerente_operaciones') AND activo = 1") as $u)
+                                $dest[] = (int) $u['id'];
+                            $urlInbox = (defined('APP_URL') ? APP_URL : '') . '/modules/inbox/index.php';
+                            foreach (array_unique($dest) as $uid)
+                                PushService::notify($uid, '📞 Llamada de WhatsApp', $nombre . ' te está llamando', $urlInbox, 'wa-call-' . $callId);
+                        } catch (\Throwable $pe) {
+                            error_log('[WhatsApp Webhook] push llamada: ' . $pe->getMessage());
+                        }
                     }
 
                     // Al terminar/rechazar: actualizar la entrada del hilo con el

@@ -684,6 +684,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     .ib-b-wrap { max-width: 90%; }
   }
 
+  /* El botón de la cabecera del chat para mostrar la lista solo aparece cuando
+     la lista está OCULTA; si no, se duplicaba con el de la propia lista. */
+  .ib-chat-head [data-panel="lista"] { display: none; }
+  .ib.sin-lista .ib-chat-head [data-panel="lista"] { display: inline-flex; }
+
   /* Burbuja de llamada en el hilo (estilo WhatsApp) */
   .ib-call { display: inline-flex; align-items: center; gap: 10px; }
   .ib-call svg { flex-shrink: 0; color: var(--s-ok); }
@@ -1190,11 +1195,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     // Gerencia puede pasarla a otro ejecutivo sin tener que tomarla primero
     if (ES_JEFE) {
-      accion += '<button type="button" class="ib-icon" id="ib-reasignar" '
+      accion += '<button type="button" class="btn btn-ghost ib-btn-sm ib-reasignar-btn" id="ib-reasignar" '
               + 'title="Reasignar a otro ejecutivo" aria-label="Reasignar a otro ejecutivo">'
-              + '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+              + '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="15" height="15" '
+              + 'style="vertical-align:-3px;margin-right:4px">'
               + '<path stroke-linecap="round" stroke-linejoin="round" '
-              + 'd="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7"/></svg></button>';
+              + 'd="M16 3l4 4-4 4M20 7H8M8 21l-4-4 4-4M4 17h12"/></svg>Reasignar</button>';
     }
 
     // Meta solo admite texto libre dentro de las 24h desde el último entrante
