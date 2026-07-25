@@ -811,7 +811,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 <script src="<?= APP_URL ?>/assets/js/softphone.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/softphone.js') ?>"></script>
 <script>
 (function () {
-  var st = { f: 'todas', q: '', sel: null, etqs: [], etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null, abrirSeq: 0 };
+  var st = { f: 'todas', q: '', sel: null, etqs: [], etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null, abrirSeq: 0, listaSeq: 0 };
   var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)) ?>;
   var $ = function (s) { return document.querySelector(s); };
 
@@ -917,6 +917,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
   // ── Lista ──
   function lista(mantener) {
+    // Token anti-carrera: si se cambia de bandeja/filtro (o corre el auto-refresco)
+    // antes de que responda, la respuesta vieja se descarta en vez de pintar
+    // conversaciones de otro número encima (era el "parpadeo" con datos ajenos).
+    var token = ++st.listaSeq;
     fetch('ajax.php?accion=lista&filtro=' + encodeURIComponent(st.f)
           + '&q=' + encodeURIComponent(st.q)
           + '&etiqueta=' + (st.etqs || []).join(',')
@@ -924,6 +928,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
+        if (token !== st.listaSeq) return;   // respuesta vieja → descartar
         if (!j.ok) return;
         ['todas','mias','sin_asignar'].forEach(function (k) {
           var e = document.querySelector('[data-c="' + k + '"]');
