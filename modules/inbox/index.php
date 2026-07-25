@@ -1204,7 +1204,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         }
       }
 
-      cuerpo += '<div class="ib-b-wrap ' + (m.dir === 'in' ? 'in' : 'out') + '">'
+      // La firma permite añadir mensajes nuevos sin desmontar las burbujas que
+      // ya estaban en pantalla. Así, enviar uno no hace parpadear el hilo.
+      cuerpo += '<div class="ib-b-wrap ' + (m.dir === 'in' ? 'in' : 'out')
+             +  '" data-ib-msg="' + m.id + ':' + (m.estado || '') + '">'
              +  '<div class="ib-b ' + cls + '">' + fwd + cita + who + cuerpoMsg + err
              +  '<div class="ib-b-foot">' + hhmm(m.cuando)
              +  (m.dir === 'out' ? ' <span>' + ticks(m.estado) + '</span>' : '') + '</div>'
@@ -1292,6 +1295,34 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 17v4"/></svg></button>'
           + '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-enviar">Enviar</button>'
           + '</div>';
+    }
+
+    // Durante un refresco silencioso (incluido el posterior a un envío), si el
+    // servidor solo agregó mensajes al final, se insertan en el DOM existente.
+    // Reconstruir #ib-chat borraba el historial, cabecera y compositor durante
+    // un instante, que era el parpadeo visible al enviar.
+    var msgsActuales = previo && $('#ib-msgs');
+    if (msgsActuales) {
+      var viejos = Array.prototype.slice.call(msgsActuales.querySelectorAll('[data-ib-msg]'));
+      var temporal = document.createElement('div');
+      temporal.innerHTML = cuerpo;
+      var nuevos = Array.prototype.slice.call(temporal.querySelectorAll('[data-ib-msg]'));
+      var soloAgregados = nuevos.length > viejos.length && viejos.every(function (el, i) {
+        return el.dataset.ibMsg === nuevos[i].dataset.ibMsg;
+      });
+
+      if (soloAgregados) {
+        var firmaUltimoViejo = viejos.length ? viejos[viejos.length - 1].dataset.ibMsg : null;
+        var agregar = !firmaUltimoViejo;
+        Array.prototype.slice.call(temporal.childNodes).forEach(function (nodo) {
+          if (agregar) msgsActuales.appendChild(nodo);
+          if (nodo.nodeType === 1 && nodo.dataset.ibMsg === firmaUltimoViejo) agregar = true;
+        });
+
+        msgsActuales.scrollTop = msgsActuales.scrollHeight;
+        requestAnimationFrame(function () { msgsActuales.scrollTop = msgsActuales.scrollHeight; });
+        return;
+      }
     }
 
     $('#ib-chat').innerHTML =
@@ -2292,9 +2323,10 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     ggiPost('ajax.php', datos)
       .then(function (j) {
         if (j.ok) { inp.innerHTML = ''; quitarResponder(); }
-        // Se recarga el hilo en ambos casos: si falló, el mensaje queda
-        // registrado como fallido con el motivo real de Meta a la vista.
-        abrir(st.sel);
+        // Se refresca sin desmontar la conversación. Si el servidor agregó el
+        // mensaje, chat() lo inserta al final y conserva el resto del hilo.
+        // En un fallo también permite mostrar el estado real de Meta.
+        abrir(st.sel, true);
       })
       .catch(function () {
         if (typeof showToast === 'function') showToast('No se pudo enviar el mensaje', 'error');
