@@ -69,12 +69,13 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   .ib-icon svg { width: 17px; height: 17px; }
 
   /* Selector de bandeja: elegir qué número mirar cuando hay varios */
-  .ib-bandeja { margin-bottom: 8px; }
+  .ib-bandeja { margin-bottom: 10px; }
   .ib-bandeja select {
-    width: 100%; padding: 7px 10px; font: inherit; font-size: .8rem; font-weight: 600;
-    border: 1px solid var(--brd); border-radius: 9px; background: var(--bg-input); color: var(--tx);
+    width: 100%; padding: 10px 12px; font: inherit; font-size: .84rem; font-weight: 700;
+    border: 1px solid var(--brd); border-radius: 10px; background: var(--bg-surface); color: var(--tx);
     cursor: pointer;
   }
+  .ib-bandeja select:hover { border-color: var(--ac); }
   .ib-bandeja select:focus { outline: none; border-color: var(--ac); box-shadow: 0 0 0 3px var(--ac-soft); }
 
   .ib-pills { display: flex; gap: 5px; flex-wrap: wrap; }
@@ -998,8 +999,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     var wrap = $('#ib-bandeja'), sel = $('#ib-bandeja-sel');
     if (!wrap || !sel) return;
 
-    // Con una sola bandeja no se muestra: no hay nada que elegir
-    if (bandejas.length < 2) { wrap.style.display = 'none'; return; }
+    // Se muestra siempre que haya al menos un número (estilo Kapso: el selector
+    // "Todas las bandejas (N)" vive arriba de la lista, aunque haya uno solo).
+    if (bandejas.length < 1) { wrap.style.display = 'none'; return; }
 
     // No repintar si no cambio (perderia la seleccion abierta)
     var firma = bandejas.map(function (b) { return b.phone_number_id + ':' + b.n; }).join('|');
