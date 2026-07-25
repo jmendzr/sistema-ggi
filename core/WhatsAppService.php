@@ -746,10 +746,10 @@ class WhatsAppService
     }
 
     /** Lee el perfil de negocio (about, descripción, dirección, email, web…). */
-    public static function perfilLeer(): ?array
+    public static function perfilLeer(?string $phoneId = null): ?array
     {
         self::$lastError = null;
-        $phoneId = self::phoneId();
+        $phoneId = $phoneId ?: self::phoneId();   // por número; default = el del .env
         if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return null; }
 
         $fields = 'about,address,description,email,profile_picture_url,websites,vertical';
@@ -773,10 +773,10 @@ class WhatsAppService
      * Actualiza el perfil de negocio. $campos admite: about, address,
      * description, email, vertical, websites (array) y profile_picture_handle.
      */
-    public static function perfilActualizar(array $campos): bool
+    public static function perfilActualizar(array $campos, ?string $phoneId = null): bool
     {
         self::$lastError = null;
-        $phoneId = self::phoneId();
+        $phoneId = $phoneId ?: self::phoneId();   // por número; default = el del .env
         if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return false; }
 
         $payload = array_merge(['messaging_product' => 'whatsapp'], $campos);

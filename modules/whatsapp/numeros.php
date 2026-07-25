@@ -77,7 +77,10 @@ $calidad = [
     <h1>Números de WhatsApp</h1>
     <p>Números que el sistema puede usar, con su estado real en Meta</p>
   </div>
-  <button type="button" class="btn btn-primary" id="nm-add">Agregar número</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="<?= APP_URL ?>/modules/whatsapp/conectar.php" class="btn btn-primary">+ Conectar número</a>
+    <button type="button" class="btn btn-ghost" id="nm-add">Agregar por identificador</button>
+  </div>
 </div>
 
 <div id="nm-lista"><div class="nm-aviso info">Consultando Meta…</div></div>
@@ -139,6 +142,8 @@ $calidad = [
                 : (ok ? '' : '<div class="nm-aviso mal" style="margin:12px 0 0">Está en la cuenta pero '
                   + '<b>no registrado en Cloud API</b>: no puede enviar ni recibir.</div>'))
             + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+            +   (ok ? '<button type="button" class="btn btn-ghost btn-sm" data-perfil="' + esc(n.phone_number_id) + '" '
+                + 'data-nom="' + esc(n.verified_name || n.telefono || '') + '">Editar perfil</button>' : '')
             +   '<button type="button" class="btn btn-ghost btn-sm" data-acc="' + n.id + '">'
             +     'Quién la ve: ' + (n.con_acceso ? n.con_acceso + ' ejecutivo' + (n.con_acceso === 1 ? '' : 's') : 'todos')
             +   '</button>'
@@ -179,6 +184,63 @@ $calidad = [
           cargar();
         });
       });
+      return;
+    }
+
+    // Editar el PERFIL de un número (foto, descripción…) — por número
+    var pf = e.target.closest('[data-perfil]');
+    if (pf) {
+      var pid = pf.dataset.perfil, pnom = pf.dataset.nom || '';
+      fetch('ajax_perfil.php?accion=leer&phone_number_id=' + encodeURIComponent(pid),
+            { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j.ok) { if (window.showToast) showToast(j.msg || 'No se pudo leer el perfil', 'error'); return; }
+          var p = j.perfil || {}, w = p.websites || [];
+          var vert = ['UNDEFINED','OTHER','PROF_SERVICES','EDU','FINANCE','HEALTH','RETAIL','RESTAURANT',
+                      'TRAVEL','HOTEL','EVENT_PLAN','GOVT','NONPROFIT','AUTO','BEAUTY','APPAREL','GROCERY','ENTERTAIN'];
+          var vlbl = {UNDEFINED:'Sin definir',OTHER:'Otro',PROF_SERVICES:'Servicios profesionales',EDU:'Educación',
+                      FINANCE:'Finanzas',HEALTH:'Salud',RETAIL:'Comercio',RESTAURANT:'Restaurante',TRAVEL:'Viajes',
+                      HOTEL:'Hotelería',EVENT_PLAN:'Eventos',GOVT:'Gobierno',NONPROFIT:'Sin fines de lucro',
+                      AUTO:'Automotor',BEAUTY:'Belleza',APPAREL:'Indumentaria',GROCERY:'Alimentos',ENTERTAIN:'Entretenimiento'};
+          function inp(id, lbl, val) { return '<label style="display:block;margin-bottom:10px;font-size:.82rem;color:var(--tx2)">'+lbl
+            +'<input id="'+id+'" value="'+esc(val||'')+'" style="width:100%;margin-top:4px;padding:9px 11px;border:1px solid var(--brd);border-radius:8px;background:var(--bg-input);color:var(--tx);font:inherit"></label>'; }
+          var opts = vert.map(function (v) { return '<option value="'+v+'"'+((p.vertical||'UNDEFINED')===v?' selected':'')+'>'+vlbl[v]+'</option>'; }).join('');
+          mantOpen('Perfil · ' + pnom,
+              (p.profile_picture_url ? '<div style="text-align:center;margin-bottom:12px"><img src="'+esc(p.profile_picture_url)+'" style="width:74px;height:74px;border-radius:50%;object-fit:cover;border:1px solid var(--brd)"></div>' : '')
+            + '<div style="text-align:center;margin-bottom:14px"><input type="file" id="pf-foto" accept="image/jpeg,image/png" hidden>'
+            + '<button type="button" class="btn btn-ghost btn-sm" id="pf-foto-btn">Cambiar foto</button></div>'
+            + '<label style="display:block;margin-bottom:10px;font-size:.82rem;color:var(--tx2)">Descripción'
+            + '<textarea id="pf-desc" style="width:100%;margin-top:4px;padding:9px 11px;border:1px solid var(--brd);border-radius:8px;background:var(--bg-input);color:var(--tx);font:inherit;min-height:64px">'+esc(p.description||'')+'</textarea></label>'
+            + inp('pf-about','Estado / recado (about)', p.about)
+            + inp('pf-email','Correo', p.email)
+            + '<label style="display:block;margin-bottom:10px;font-size:.82rem;color:var(--tx2)">Rubro'
+            + '<select id="pf-vert" style="width:100%;margin-top:4px;padding:9px 11px;border:1px solid var(--brd);border-radius:8px;background:var(--bg-input);color:var(--tx);font:inherit">'+opts+'</select></label>'
+            + inp('pf-addr','Dirección', p.address)
+            + inp('pf-web1','Sitio web 1', w[0])
+            + inp('pf-web2','Sitio web 2', w[1])
+            + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
+            + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
+            + '<button type="button" class="ggi-btn-confirm-action" id="pf-ok">Guardar</button></div>');
+
+          var v = function (id) { return (document.getElementById(id).value || '').trim(); };
+          var file = document.getElementById('pf-foto');
+          document.getElementById('pf-foto-btn').addEventListener('click', function () { file.click(); });
+          file.addEventListener('change', function () {
+            if (!file.files || !file.files[0]) return;
+            var fd = new FormData(); fd.append('accion','foto'); fd.append('phone_number_id', pid); fd.append('foto', file.files[0]);
+            if (window.showToast) showToast('Subiendo foto…', 'ok');
+            ggiPost('ajax_perfil.php', fd).then(function (r) { if (window.showToast) showToast(r.ok ? 'Foto actualizada' : (r.msg||'No se pudo'), r.ok?'ok':'error'); });
+          });
+          document.getElementById('pf-ok').addEventListener('click', function () {
+            ggiPost('ajax_perfil.php', { accion:'guardar', phone_number_id: pid, about:v('pf-about'),
+              description:v('pf-desc'), email:v('pf-email'), vertical:v('pf-vert'), address:v('pf-addr'),
+              web1:v('pf-web1'), web2:v('pf-web2') }).then(function (r) {
+              if (r.ok) { ggiModalClose(); if (window.showToast) showToast('Perfil actualizado', 'ok'); }
+              else if (window.showToast) showToast(r.msg || 'No se pudo guardar', 'error');
+            });
+          });
+        });
       return;
     }
 

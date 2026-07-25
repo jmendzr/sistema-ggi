@@ -14,8 +14,11 @@ header('Content-Type: application/json; charset=utf-8');
 
 $accion = $_REQUEST['accion'] ?? 'leer';
 
+// Número sobre el que se opera (multi-número). Vacío = el número por defecto.
+$phoneId = preg_replace('/\D/', '', $_REQUEST['phone_number_id'] ?? '') ?: null;
+
 if ($accion === 'leer') {
-    $p = WhatsAppService::perfilLeer();
+    $p = WhatsAppService::perfilLeer($phoneId);
     if ($p === null) { echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo leer el perfil']); exit; }
     echo json_encode(['ok' => true, 'perfil' => $p]);
     exit;
@@ -54,7 +57,7 @@ if ($accion === 'guardar') {
     }
     $campos['websites'] = $webs;
 
-    $ok = WhatsAppService::perfilActualizar($campos);
+    $ok = WhatsAppService::perfilActualizar($campos, $phoneId);
     echo json_encode($ok ? ['ok' => true] : ['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo guardar']);
     exit;
 }
@@ -74,7 +77,7 @@ if ($accion === 'foto') {
     $handle = WhatsAppService::perfilSubirFoto($tmp, $mime);
     if (!$handle) { echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo subir la foto']); exit; }
 
-    $ok = WhatsAppService::perfilActualizar(['profile_picture_handle' => $handle]);
+    $ok = WhatsAppService::perfilActualizar(['profile_picture_handle' => $handle], $phoneId);
     echo json_encode($ok ? ['ok' => true] : ['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo asignar la foto']);
     exit;
 }
