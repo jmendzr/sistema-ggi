@@ -1003,7 +1003,11 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     // "Todas las bandejas (N)" vive arriba de la lista, aunque haya uno solo).
     if (bandejas.length < 1) { wrap.style.display = 'none'; return; }
 
-    // No repintar si no cambio (perderia la seleccion abierta)
+    // Mostrar SIEMPRE que haya bandejas, ANTES del dedup: si no, con la firma ya
+    // seteada (p. ej. navegación SPA) volvía por el return y quedaba oculto.
+    wrap.style.display = '';
+
+    // No repintar las opciones si no cambió (perdería la selección abierta)
     var firma = bandejas.map(function (b) { return b.phone_number_id + ':' + b.n; }).join('|');
     if (sel.dataset.firma === firma) return;
     sel.dataset.firma = firma;
