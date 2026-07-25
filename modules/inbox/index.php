@@ -70,12 +70,18 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
   /* Selector de bandeja: elegir qué número mirar cuando hay varios */
   .ib-bandeja { margin-bottom: 10px; }
-  .ib-bandeja select {
-    width: 100%; padding: 10px 12px; font: inherit; font-size: .84rem; font-weight: 700;
-    border: 1px solid var(--brd); border-radius: 10px; background: var(--bg-surface); color: var(--tx);
-    cursor: pointer;
+  .ib-bandeja-tabs { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .ib-bandeja-tabs::-webkit-scrollbar { display: none; }
+  .ib-bd-tab {
+    flex: 0 0 auto; border: 1px solid var(--brd); background: var(--bg-surface); color: var(--tx2);
+    padding: 7px 12px; border-radius: 999px; font: inherit; font-size: .76rem; font-weight: 600;
+    cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px;
+    transition: background .12s, color .12s, border-color .12s;
   }
-  .ib-bandeja select:hover { border-color: var(--ac); }
+  .ib-bd-tab:hover { background: var(--bg-hover); color: var(--tx); }
+  .ib-bd-tab.on { background: var(--ac); border-color: var(--ac); color: #fff; }
+  .ib-bd-tab b { font-weight: 700; opacity: .85; font-size: .72rem; }
+  .ib-bd-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--s-ok); flex-shrink: 0; }
   .ib-bandeja select:focus { outline: none; border-color: var(--ac); box-shadow: 0 0 0 3px var(--ac-soft); }
 
   .ib-pills { display: flex; gap: 5px; flex-wrap: wrap; }
@@ -759,9 +765,9 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
         </a>
         <?php endif; ?>
       </div>
-      <!-- Selector de bandeja (número): solo aparece si hay más de uno -->
+      <!-- Bandejas (números) como pestañas horizontales, estilo Kapso -->
       <div class="ib-bandeja" id="ib-bandeja" style="display:none">
-        <select id="ib-bandeja-sel" aria-label="Elegir bandeja"></select>
+        <div class="ib-bandeja-tabs" id="ib-bandeja-sel" role="tablist" aria-label="Bandejas por número"></div>
       </div>
       <div class="ib-pills">
         <button type="button" class="ib-pill on" data-f="todas">Todas<b data-c="todas"></b></button>
@@ -1007,23 +1013,31 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
     // seteada (p. ej. navegación SPA) volvía por el return y quedaba oculto.
     wrap.style.display = '';
 
-    // No repintar las opciones si no cambió (perdería la selección abierta)
-    var firma = bandejas.map(function (b) { return b.phone_number_id + ':' + b.n; }).join('|');
+    // Repintar solo si cambiaron las bandejas O la seleccionada (la firma incluye
+    // st.bandeja para que se actualice el resaltado del tab activo).
+    var firma = bandejas.map(function (b) { return b.phone_number_id + ':' + b.n; }).join('|') + '#' + (st.bandeja || '');
     if (sel.dataset.firma === firma) return;
     sel.dataset.firma = firma;
 
     var total = bandejas.reduce(function (a, b) { return a + parseInt(b.n, 10); }, 0);
-    sel.innerHTML = '<option value="">Todas las bandejas (' + total + ')</option>'
+    sel.innerHTML =
+        '<button type="button" class="ib-bd-tab' + (!st.bandeja ? ' on' : '') + '" data-bd="" role="tab">'
+      +   'Todas <b>' + total + '</b></button>'
       + bandejas.map(function (b) {
-          return '<option value="' + esc(b.phone_number_id) + '"' + (st.bandeja === b.phone_number_id ? ' selected' : '') + '>'
-               + esc(b.etiqueta) + ' (' + b.n + ')</option>';
+          return '<button type="button" class="ib-bd-tab' + (st.bandeja === b.phone_number_id ? ' on' : '') + '" '
+               + 'data-bd="' + esc(b.phone_number_id) + '" role="tab">'
+               + '<span class="ib-bd-dot"></span>' + esc(b.etiqueta) + ' <b>' + b.n + '</b></button>';
         }).join('');
-    wrap.style.display = '';
   }
 
-  var _selB = document.getElementById('ib-bandeja-sel');
-  if (_selB) _selB.addEventListener('change', function () {
-    st.bandeja = _selB.value;
+  // Clic en una pestaña de bandeja → filtra por ese número (delegado en el wrap,
+  // que persiste aunque se repinten las pestañas).
+  var _wrapB = document.getElementById('ib-bandeja');
+  if (_wrapB) _wrapB.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-bd]');
+    if (!t) return;
+    if (st.bandeja === t.dataset.bd) return;   // ya seleccionada
+    st.bandeja = t.dataset.bd;
     st.firma = null;
     lista();
   });
