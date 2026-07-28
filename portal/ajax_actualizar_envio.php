@@ -57,28 +57,43 @@ $tienda         = trim($_POST['tienda_destino']      ?? '');
 $direccion      = trim($_POST['direccion_destino']   ?? '');
 $destinatario   = trim($_POST['destinatario']        ?? '');
 $destinatario_dni = preg_replace('/\D/', '', $_POST['destinatario_dni'] ?? '');
+$referencia     = trim($_POST['referencia_direccion'] ?? '');
+$lat            = isset($_POST['lat']) && $_POST['lat'] !== '' ? (float) $_POST['lat'] : null;
+$lng            = isset($_POST['lng']) && $_POST['lng'] !== '' ? (float) $_POST['lng'] : null;
 
 if (!$agencia_id) {
     echo json_encode(['ok' => false, 'msg' => 'Selecciona una agencia de envío.']); exit;
 }
 
-// Verificar que la agencia existe y está activa; obtener nombre y modo de destino
-$ag_ok = $pdo->prepare("SELECT nombre, sede_modo FROM agencias_envio WHERE id = ? AND activo = 1");
+// Verificar que la agencia existe y está activa; obtener nombre, modo y si es domicilio
+$ag_ok = $pdo->prepare("SELECT nombre, sede_modo, es_domicilio FROM agencias_envio WHERE id = ? AND activo = 1");
 $ag_ok->execute([$agencia_id]);
 $ag_row = $ag_ok->fetch();
 if (!$ag_row) {
     echo json_encode(['ok' => false, 'msg' => 'Agencia no válida.']); exit;
 }
-$es_olva = stripos($ag_row['nombre'] ?? '', 'olva') !== false;
-// En integraciones (API) el destino es solo por sede → la dirección libre no aplica.
-if (($ag_row['sede_modo'] ?? 'manual') === 'api') {
-    $direccion = '';
+$es_olva      = stripos($ag_row['nombre'] ?? '', 'olva') !== false;
+$es_domicilio = (int) ($ag_row['es_domicilio'] ?? 0) === 1;
+
+if ($es_domicilio) {
+    // Domicilio (Lima): hace falta dirección + punto exacto en el mapa.
+    if ($direccion === '') { echo json_encode(['ok' => false, 'msg' => 'Escribe la dirección de entrega.']); exit; }
+    if ($lat === null || $lng === null) {
+        echo json_encode(['ok' => false, 'msg' => 'Marca el punto exacto de entrega en el mapa.']); exit;
+    }
+    $sede = ''; $tienda = '';   // no aplican en domicilio
+} else {
+    $lat = null; $lng = null; $referencia = '';   // solo domicilio usa el mapa
+    // En integraciones (API) el destino es solo por sede → la dirección libre no aplica.
+    if (($ag_row['sede_modo'] ?? 'manual') === 'api') {
+        $direccion = '';
+    }
+    // Olva: el punto de recojo (tienda) es obligatorio.
+    if ($es_olva && $tienda === '') {
+        echo json_encode(['ok' => false, 'msg' => 'Selecciona el punto de recojo de Olva.']); exit;
+    }
+    if (!$es_olva) { $tienda = ''; } // solo Olva usa tienda
 }
-// Olva: el punto de recojo (tienda) es obligatorio.
-if ($es_olva && $tienda === '') {
-    echo json_encode(['ok' => false, 'msg' => 'Selecciona el punto de recojo de Olva.']); exit;
-}
-if (!$es_olva) { $tienda = ''; } // solo Olva usa tienda
 
 if ($destinatario_dni && strlen($destinatario_dni) !== 8) {
     echo json_encode(['ok' => false, 'msg' => 'El DNI debe tener 8 dígitos.']); exit;
@@ -92,7 +107,10 @@ $upd = $pdo->prepare("
         tienda_destino    = ?,
         direccion_destino = ?,
         destinatario      = ?,
-        destinatario_dni  = ?
+        destinatario_dni  = ?,
+        lat               = ?,
+        lng               = ?,
+        referencia_direccion = ?
     WHERE id = ?
 ");
 $upd->execute([
@@ -102,6 +120,9 @@ $upd->execute([
     $direccion ?: null,
     $destinatario      ?: null,
     $destinatario_dni  ?: null,
+    $lat,
+    $lng,
+    $referencia ?: null,
     $envio_id,
 ]);
 

@@ -63,6 +63,9 @@ if ($cliente) {
     // Agencias activas para el formulario del portal (excluir Presencial)
     $agencias_portal = $pdo->query("SELECT id, nombre FROM agencias_envio WHERE activo=1 AND LOWER(nombre) NOT LIKE '%presencial%' ORDER BY nombre")->fetchAll();
 
+    // Id de la agencia "a domicilio" (Lima): el portal muestra el mapa para ella.
+    $agencia_domicilio_id = (int) ($pdo->query("SELECT id FROM agencias_envio WHERE es_domicilio=1 AND activo=1 LIMIT 1")->fetchColumn() ?: 0);
+
     $tiene_archivos = (bool) array_filter($certificados, fn($c) =>
         !empty($c['certificado_archivo']) || !empty($c['certificado_archivo_en'])
     );
@@ -165,6 +168,9 @@ if ($cliente) {
             'direccion'       => $e['direccion_destino'] ?? '',
             'destinatario'    => $e['destinatario'] ?? '',
             'destinatario_dni'=> $e['destinatario_dni'] ?? '',
+            'lat'             => $e['lat'] !== null ? (float) $e['lat'] : null,
+            'lng'             => $e['lng'] !== null ? (float) $e['lng'] : null,
+            'referencia'      => $e['referencia_direccion'] ?? '',
         ];
     }
 }
@@ -199,6 +205,7 @@ function initials($s) { return strtoupper(mb_substr(trim($s), 0, 2)); }
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="<?= APP_URL ?>/assets/leaflet/leaflet.css?v=<?= @filemtime(__DIR__ . '/../assets/leaflet/leaflet.css') ?>">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
@@ -1093,6 +1100,33 @@ footer a:hover{text-decoration:underline}
       <input type="text" id="cp-direccion" class="cp-input" autocomplete="off" placeholder="Dirección completa de entrega">
     </div>
 
+    <!-- Entrega a domicilio (Lima): dirección + referencia + punto exacto en el mapa -->
+    <div id="cp-domicilio" style="display:none">
+      <div class="cp-field">
+        <label>Dirección de entrega *</label>
+        <input type="text" id="cp-dom-direccion" class="cp-input" autocomplete="off"
+               placeholder="Calle, número, distrito (ej: Av. La Marina 123, San Miguel)">
+      </div>
+      <div class="cp-field">
+        <label>Referencia</label>
+        <input type="text" id="cp-dom-ref" class="cp-input" autocomplete="off"
+               placeholder="Ej: portón azul, 2do piso, al lado de la farmacia" maxlength="300">
+      </div>
+      <div class="cp-field">
+        <label>Marca el punto exacto en el mapa *</label>
+        <p style="margin:2px 0 8px;font-size:12.5px;color:#64748b">
+          Arrastra el pin (o toca el mapa) al lugar exacto de entrega. El motorizado irá ahí.</p>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button type="button" id="cp-dom-geo" class="cp-btn-sec" style="font-size:13px;padding:8px 12px">
+            📍 Usar mi ubicación actual</button>
+        </div>
+        <div id="cp-mapa" style="height:280px;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;background:#eef2f7"></div>
+        <div id="cp-dom-coords" style="margin-top:6px;font-size:12px;color:#64748b"></div>
+        <input type="hidden" id="cp-dom-lat" value="">
+        <input type="hidden" id="cp-dom-lng" value="">
+      </div>
+    </div>
+
     <div class="cp-field">
       <label>DNI del destinatario</label>
       <div style="position:relative">
@@ -1118,6 +1152,7 @@ footer a:hover{text-decoration:underline}
 </aside>
 
 <?php if ($cliente): ?>
+<script src="<?= APP_URL ?>/assets/leaflet/leaflet.js?v=<?= @filemtime(__DIR__ . '/../assets/leaflet/leaflet.js') ?>"></script>
 <script>
 (function(){
   const CERTS        = <?= json_encode($certs_js,   JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>;
@@ -1587,6 +1622,13 @@ footer a:hover{text-decoration:underline}
     document.getElementById('cp-destinatario').style.background = '#f9fafb';
     document.getElementById('cp-destinatario').style.color = '#6b7280';
     document.getElementById('cp-destinatario').style.cursor = 'not-allowed';
+    // Domicilio (Lima): pre-cargar dirección, referencia y el punto guardado
+    var esDomE = (CP_DOMICILIO_ID && e.agencia_id === CP_DOMICILIO_ID);
+    document.getElementById('cp-dom-direccion').value = esDomE ? (e.direccion || '') : '';
+    document.getElementById('cp-dom-ref').value       = esDomE ? (e.referencia || '') : '';
+    document.getElementById('cp-dom-lat').value       = (esDomE && e.lat != null) ? e.lat : '';
+    document.getElementById('cp-dom-lng').value       = (esDomE && e.lng != null) ? e.lng : '';
+    document.getElementById('cp-dom-coords').textContent = (esDomE && e.lat != null) ? '✓ Punto guardado' : '';
     // Si ya hay agencia pre-seleccionada, cargar sedes/dirección según su modo
     if (e.agencia_id) {
       cpCargarSedes(e.agencia_id, id, e.sede_registro, e.direccion);
@@ -1668,7 +1710,69 @@ footer a:hover{text-decoration:underline}
     }
   });
 
+  var CP_DOMICILIO_ID = <?= (int) ($agencia_domicilio_id ?? 0) ?>;
+
+  // ── Mapa de entrega a domicilio (Leaflet + OpenStreetMap) ──
+  var _cpMap = null, _cpMarker = null;
+  function cpSetPunto(lat, lng, centrar) {
+    document.getElementById('cp-dom-lat').value = lat.toFixed(7);
+    document.getElementById('cp-dom-lng').value = lng.toFixed(7);
+    document.getElementById('cp-dom-coords').textContent = '✓ Punto marcado (' + lat.toFixed(5) + ', ' + lng.toFixed(5) + ')';
+    if (_cpMarker) _cpMarker.setLatLng([lat, lng]);
+    if (centrar && _cpMap) _cpMap.setView([lat, lng], 16);
+  }
+  function cpInitMapa() {
+    if (typeof L === 'undefined') { return; }          // Leaflet aún no cargó
+    if (_cpMap) {
+      setTimeout(function(){ _cpMap.invalidateSize(); }, 150);
+      var la = parseFloat(document.getElementById('cp-dom-lat').value),
+          ln = parseFloat(document.getElementById('cp-dom-lng').value);
+      if (!isNaN(la) && !isNaN(ln)) { _cpMarker.setLatLng([la, ln]); _cpMap.setView([la, ln], 16); }
+      return;
+    }
+    var base = '<?= APP_URL ?>/assets/leaflet/images/';
+    var icon = L.icon({ iconUrl: base+'marker-icon.png', iconRetinaUrl: base+'marker-icon-2x.png',
+      shadowUrl: base+'marker-shadow.png', iconSize:[25,41], iconAnchor:[12,41], shadowSize:[41,41] });
+    var hayPunto = !!document.getElementById('cp-dom-lat').value;
+    var lat0 = parseFloat(document.getElementById('cp-dom-lat').value) || -12.0464;  // Lima
+    var lng0 = parseFloat(document.getElementById('cp-dom-lng').value) || -77.0428;
+    _cpMap = L.map('cp-mapa').setView([lat0, lng0], hayPunto ? 16 : 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(_cpMap);
+    _cpMarker = L.marker([lat0, lng0], { draggable: true, icon: icon }).addTo(_cpMap);
+    _cpMarker.on('dragend', function(){ var p = _cpMarker.getLatLng(); cpSetPunto(p.lat, p.lng, false); });
+    _cpMap.on('click', function(e){ cpSetPunto(e.latlng.lat, e.latlng.lng, false); });
+    if (hayPunto) cpSetPunto(lat0, lng0, false);
+    setTimeout(function(){ _cpMap.invalidateSize(); }, 200);
+  }
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('#cp-dom-geo')) return;
+    if (!navigator.geolocation) { alert('Tu navegador no permite la ubicación.'); return; }
+    var btn = e.target.closest('#cp-dom-geo'); btn.disabled = true; btn.textContent = 'Buscando ubicación…';
+    navigator.geolocation.getCurrentPosition(function(pos){
+      btn.disabled = false; btn.textContent = '📍 Usar mi ubicación actual';
+      cpSetPunto(pos.coords.latitude, pos.coords.longitude, true);
+    }, function(){
+      btn.disabled = false; btn.textContent = '📍 Usar mi ubicación actual';
+      alert('No se pudo obtener tu ubicación. Toca el mapa para marcar el punto.');
+    }, { enableHighAccuracy: true, timeout: 10000 });
+  });
+
   function cpCargarSedes(agId, envioId, preVal, preDir) {
+    const dom = document.getElementById('cp-domicilio');
+    // ── Entrega a domicilio (Lima): mostrar el mapa, ocultar todo lo de courier ──
+    if (dom && CP_DOMICILIO_ID && parseInt(agId, 10) === CP_DOMICILIO_ID) {
+      document.getElementById('cp-field-sede').style.display = 'none';
+      document.getElementById('cp-field-sede-manual').style.display = 'none';
+      document.getElementById('cp-field-direccion').style.display = 'none';
+      document.getElementById('cp-field-tienda').style.display = 'none';
+      _cpEsOlva = false; cpResetTienda();
+      dom.style.display = '';
+      cpInitMapa();
+      return;
+    }
+    if (dom) dom.style.display = 'none';
+
     const fieldSede   = document.getElementById('cp-field-sede');
     const fieldManual = document.getElementById('cp-field-sede-manual');
     const fieldDir    = document.getElementById('cp-field-direccion');
@@ -1785,11 +1889,23 @@ footer a:hover{text-decoration:underline}
     const sede      = manualOn
       ? document.getElementById('cp-sede-manual').value.trim()
       : document.getElementById('cp-sede-val').value.trim();
-    const direccion = manualOn ? document.getElementById('cp-direccion').value.trim() : '';
+    let direccion   = manualOn ? document.getElementById('cp-direccion').value.trim() : '';
     const dni       = document.getElementById('cp-dni').value.replace(/\D/g,'');
     const dest      = document.getElementById('cp-destinatario').value.trim();
     const msg       = document.getElementById('cp-msg');
     const btn       = document.getElementById('cp-btn-save');
+
+    // Entrega a domicilio (Lima): dirección + referencia + punto del mapa
+    const esDom = CP_DOMICILIO_ID && agenciaId === CP_DOMICILIO_ID;
+    let refDom = '', latDom = '', lngDom = '';
+    if (esDom) {
+      direccion = document.getElementById('cp-dom-direccion').value.trim();
+      refDom    = document.getElementById('cp-dom-ref').value.trim();
+      latDom    = document.getElementById('cp-dom-lat').value;
+      lngDom    = document.getElementById('cp-dom-lng').value;
+      if (!direccion) { showCpMsg('Escribe la dirección de entrega.', false); return; }
+      if (!latDom || !lngDom) { showCpMsg('Marca el punto exacto en el mapa.', false); return; }
+    }
 
     // Punto de recojo Olva (select o texto libre según cuál esté visible)
     let tienda = '';
@@ -1816,6 +1932,9 @@ footer a:hover{text-decoration:underline}
     fd.append('direccion_destino',direccion);
     fd.append('destinatario',     dest);
     fd.append('destinatario_dni', dni);
+    fd.append('referencia_direccion', refDom);
+    fd.append('lat',              latDom);
+    fd.append('lng',              lngDom);
 
     fetch(PORTAL_URL + '/ajax_actualizar_envio.php', { method:'POST', body: fd })
       .then(function(r){ return r.json(); })
