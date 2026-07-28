@@ -733,6 +733,11 @@ footer a:hover{text-decoration:underline}
 .cp-btn-save:hover{opacity:.85}
 .cp-btn-save:disabled{opacity:.5;cursor:not-allowed}
 .cp-btn-cancel{padding:11px 16px;font-size:14px;font-weight:500;color:var(--txt);background:var(--bg);border:1px solid var(--border);border-radius:10px;cursor:pointer}
+.cp-btn-sec{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 14px;font-size:13px;font-weight:600;color:var(--txt);background:#fff;border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:background .15s,border-color .15s;white-space:nowrap}
+.cp-btn-sec:hover{background:#f8fafc;border-color:#cbd5e1}
+.cp-btn-sec:disabled{opacity:.55;cursor:not-allowed}
+.cp-btn-sec svg{flex-shrink:0}
+.cp-geo-opt:hover{background:#f1f5f9}
 .cp-msg{margin-top:12px;padding:10px 14px;border-radius:8px;font-size:13px;display:none}
 .cp-msg.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
 .cp-msg.err{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
@@ -1107,8 +1112,10 @@ footer a:hover{text-decoration:underline}
         <div style="display:flex;gap:6px">
           <input type="text" id="cp-dom-direccion" class="cp-input" autocomplete="off" style="flex:1"
                  placeholder="Calle, número, distrito (ej: Av. La Marina 123, San Miguel)">
-          <button type="button" id="cp-dom-buscar" class="cp-btn-sec" style="font-size:13px;padding:0 14px;white-space:nowrap"
-                  title="Ubicar esta dirección en el mapa">🔍 Buscar</button>
+          <button type="button" id="cp-dom-buscar" class="cp-btn-sec" title="Ubicar esta dirección en el mapa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <span>Buscar</span>
+          </button>
         </div>
         <div id="cp-dom-geores" style="display:none;margin-top:6px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;max-height:190px;overflow-y:auto"></div>
       </div>
@@ -1119,11 +1126,13 @@ footer a:hover{text-decoration:underline}
       </div>
       <div class="cp-field">
         <label>Marca el punto exacto en el mapa *</label>
-        <p style="margin:2px 0 8px;font-size:12.5px;color:#64748b">
-          Arrastra el pin (o toca el mapa) al lugar exacto de entrega. El motorizado irá ahí.</p>
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          <button type="button" id="cp-dom-geo" class="cp-btn-sec" style="font-size:13px;padding:8px 12px">
-            📍 Usar mi ubicación actual</button>
+        <p style="margin:2px 0 10px;font-size:12.5px;color:#64748b">
+          Arrastra el pin o toca el mapa para ubicar el punto exacto de entrega.</p>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button type="button" id="cp-dom-geo" class="cp-btn-sec">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.7-6-10a6 6 0 0112 0c0 4.3-6 10-6 10z"/><circle cx="12" cy="11" r="2"/></svg>
+            <span>Usar mi ubicación actual</span>
+          </button>
         </div>
         <div id="cp-mapa" style="height:280px;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;background:#eef2f7"></div>
         <div id="cp-dom-coords" style="margin-top:6px;font-size:12px;color:#64748b"></div>
@@ -1753,12 +1762,13 @@ footer a:hover{text-decoration:underline}
   document.addEventListener('click', function(e){
     if (!e.target.closest('#cp-dom-geo')) return;
     if (!navigator.geolocation) { alert('Tu navegador no permite la ubicación.'); return; }
-    var btn = e.target.closest('#cp-dom-geo'); btn.disabled = true; btn.textContent = 'Buscando ubicación…';
+    var btn = e.target.closest('#cp-dom-geo'), lbl = btn.querySelector('span');
+    btn.disabled = true; if (lbl) lbl.textContent = 'Buscando ubicación…';
     navigator.geolocation.getCurrentPosition(function(pos){
-      btn.disabled = false; btn.textContent = '📍 Usar mi ubicación actual';
+      btn.disabled = false; if (lbl) lbl.textContent = 'Usar mi ubicación actual';
       cpSetPunto(pos.coords.latitude, pos.coords.longitude, true);
     }, function(){
-      btn.disabled = false; btn.textContent = '📍 Usar mi ubicación actual';
+      btn.disabled = false; if (lbl) lbl.textContent = 'Usar mi ubicación actual';
       alert('No se pudo obtener tu ubicación. Toca el mapa para marcar el punto.');
     }, { enableHighAccuracy: true, timeout: 10000 });
   });
@@ -1769,13 +1779,13 @@ footer a:hover{text-decoration:underline}
     var q = document.getElementById('cp-dom-direccion').value.trim();
     var box = document.getElementById('cp-dom-geores');
     if (q.length < 4) { alert('Escribe la dirección primero.'); return; }
-    var btn = document.getElementById('cp-dom-buscar');
-    btn.disabled = true; btn.textContent = 'Buscando…';
+    var btn = document.getElementById('cp-dom-buscar'), lbl = btn.querySelector('span');
+    btn.disabled = true; if (lbl) lbl.textContent = 'Buscando…';
     var url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=pe&limit=6&q=' + encodeURIComponent(q);
     fetch(url, { headers: { 'Accept-Language': 'es' } })
       .then(function(r){ return r.json(); })
       .then(function(items){
-        btn.disabled = false; btn.textContent = '🔍 Buscar';
+        btn.disabled = false; if (lbl) lbl.textContent = 'Buscar';
         if (!items || !items.length) {
           box.innerHTML = '<div style="padding:10px 12px;color:#64748b;font-size:13px">Sin resultados. Marca el punto tocando el mapa.</div>';
           box.style.display = 'block'; return;
@@ -1797,7 +1807,7 @@ footer a:hover{text-decoration:underline}
         });
       })
       .catch(function(){
-        btn.disabled = false; btn.textContent = '🔍 Buscar';
+        btn.disabled = false; if (lbl) lbl.textContent = 'Buscar';
         alert('No se pudo buscar la dirección. Marca el punto tocando el mapa.');
       });
   }
