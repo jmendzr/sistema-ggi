@@ -67,7 +67,7 @@ $certs_cliente = $certs_cliente_stmt->fetchAll();
 $errors  = [];
 $data    = $env;
 $user    = auth_user();
-$agencias = $pdo->query("SELECT id, nombre, sede_modo FROM agencias_envio WHERE activo=1 ORDER BY nombre")->fetchAll();
+$agencias = $pdo->query("SELECT id, nombre, sede_modo, es_domicilio FROM agencias_envio WHERE activo=1 ORDER BY nombre")->fetchAll();
 $estados  = $pdo->query("SELECT id, nombre, color_hex FROM estados_envio WHERE activo=1 ORDER BY orden")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -89,6 +89,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'direccion_destino' => $usa_dir_fiscal ? '' : trim($_POST['direccion_destino'] ?? ''),
         'destinatario'      => trim($_POST['destinatario'] ?? ''),
         'destinatario_dni'  => trim($_POST['destinatario_dni'] ?? ''),
+        'referencia_direccion' => trim($_POST['referencia_direccion'] ?? ''),
+        'lat'               => ($_POST['lat'] ?? '') !== '' ? (float) $_POST['lat'] : null,
+        'lng'               => ($_POST['lng'] ?? '') !== '' ? (float) $_POST['lng'] : null,
         'observaciones'     => trim($_POST['observaciones'] ?? ''),
         'sin_datos_envio'   => $sin_datos ? 1 : 0,
         'ejecutivo_id'      => ($user['rol'] === 'gestor_logistico' ? $env['ejecutivo_id'] : ($user['rol'] === 'ejecutivo_ventas' ? $env['ejecutivo_id'] : ((int)($_POST['ejecutivo_id'] ?? 0) ?: null))),
@@ -101,6 +104,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($_ag_row && ($_ag_row['sede_modo'] ?? 'manual') === 'api') {
         $data['direccion_destino'] = '';
         $usa_dir_fiscal = false;
+    }
+
+    // "Lima a domicilio": el destino es dirección + punto en el mapa (lat/lng).
+    $_ag_es_domicilio = $_ag_row && (int) ($_ag_row['es_domicilio'] ?? 0) === 1;
+    if ($_ag_es_domicilio) {
+        $data['sede_registro'] = ''; $data['tienda_destino'] = '';
+        $usa_dir_fiscal = false;
+    } else {
+        $data['lat'] = null; $data['lng'] = null; $data['referencia_direccion'] = '';
     }
 
     // "No compartió datos de envío": anular datos de destino/destinatario/seguimiento.
@@ -188,7 +200,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               numero_orden=?, codigo_recojo=?, fecha_envio=?, fecha_recibido=?,
               direccion_destino=?, destinatario=?, destinatario_dni=?, observaciones=?, sin_datos_envio=?,
               comprobante_archivo=?, ejecutivo_id=?, agente_id=?,
-              motivo_no_envio=?, motivo_no_envio_detalle=?
+              motivo_no_envio=?, motivo_no_envio_detalle=?,
+              lat=?, lng=?, referencia_direccion=?
             WHERE id=?
         ")->execute([
             $data['agencia_envio_id'],
@@ -210,6 +223,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $data['agente_id']         ?: null,
             $_es_no_enviado ? $_motivo_ne : null,
             ($_es_no_enviado && $_motivo_ne_det !== '') ? $_motivo_ne_det : null,
+            $data['lat'],
+            $data['lng'],
+            $data['referencia_direccion'] ?: null,
             $id
         ]);
 
@@ -640,6 +656,7 @@ $_saved_is_manual_sede = $_saved_cfg && ($_saved_cfg['sede_modo'] ?? 'manual') !
                     data-lbl-seg="<?= sanitize($acfg['label_codigo_seguimiento']) ?>"
                     data-tracking="<?= gg_courier_con_tracking($ag['nombre'])?1:0 ?>"
                     data-olva="<?= stripos($ag['nombre'],'olva')!==false?1:0 ?>"
+                    data-domicilio="<?= (int)($ag['es_domicilio'] ?? 0) ?>"
                     <?= ($data['agencia_envio_id']==$ag['id'])?'selected':'' ?>><?= sanitize($ag['nombre']) ?></option>
             <?php endforeach; ?>
           </select>
@@ -680,6 +697,25 @@ $_saved_is_manual_sede = $_saved_cfg && ($_saved_cfg['sede_modo'] ?? 'manual') !
       <div class="field" id="campo-direccion" style="display:<?= ($_saved_ag && !$_saved_is_api) ? 'flex' : 'none' ?>;">
         <label>Dirección de destino</label>
         <input type="text" name="direccion_destino" id="input-direccion" value="<?= sanitize($data['direccion_destino'] ?? '') ?>" placeholder="Dirección completa de entrega">
+      </div>
+
+      <!-- Lima a domicilio: referencia + punto exacto en el mapa -->
+      <?php $_saved_es_dom = $_saved_ag && (int)($_saved_ag['es_domicilio'] ?? 0) === 1; ?>
+      <div class="field span-2" id="campo-domicilio" style="display:<?= $_saved_es_dom ? 'flex' : 'none' ?>;flex-direction:column;">
+        <label>Referencia</label>
+        <input type="text" name="referencia_direccion" id="input-referencia" maxlength="300"
+               value="<?= sanitize($env['referencia_direccion'] ?? '') ?>" placeholder="Ej: portón azul, 2do piso">
+        <label style="margin-top:12px">Punto exacto en el mapa</label>
+        <div style="display:flex;gap:8px;margin:4px 0 8px">
+          <input type="text" id="dom-buscar-in" placeholder="Buscar dirección para ubicarla…" autocomplete="off"
+                 style="flex:1;padding:9px 11px;border:1px solid var(--gris-borde);border-radius:8px;font:inherit">
+          <button type="button" id="dom-geo" class="btn btn-outline" style="white-space:nowrap">Mi ubicación</button>
+        </div>
+        <div id="dom-geores" style="display:none;border:1px solid var(--gris-borde);border-radius:8px;max-height:170px;overflow:auto;margin-bottom:8px"></div>
+        <div id="dom-mapa" style="height:290px;border-radius:10px;border:1px solid var(--gris-borde);overflow:hidden;background:#eef2f7"></div>
+        <div id="dom-coords" style="margin-top:6px;font-size:12px;color:var(--gris-texto)"></div>
+        <input type="hidden" name="lat" id="dom-lat" value="<?= sanitize((string)($env['lat'] ?? '')) ?>">
+        <input type="hidden" name="lng" id="dom-lng" value="<?= sanitize((string)($env['lng'] ?? '')) ?>">
       </div>
       <div class="field" id="campo-estado">
         <label>Estado <span class="req">*</span></label>
@@ -906,6 +942,25 @@ async function actualizarCamposAgencia(agenciaId, isInit) {
     const notaEstado = document.getElementById('estado-tracking-nota');
     if (selEstado) selEstado.disabled = _tracking;
     if (notaEstado) notaEstado.style.display = _tracking ? 'block' : 'none';
+
+    // ── Lima a domicilio: dirección + referencia + mapa; se ocultan sede/tienda ──
+    var esDom = !!(_opt && _opt.dataset.domicilio === '1');
+    var campoDom = document.getElementById('campo-domicilio');
+    if (esDom) {
+      document.getElementById('campo-direccion').style.display = 'flex';
+      var _id = document.getElementById('input-direccion'); if (_id) _id.disabled = false;
+      if (campoDom) campoDom.style.display = 'flex';
+      ['campo-sede','campo-sede-manual','campo-tienda','campo-numero-orden','campo-codigo-recojo'].forEach(function(f){
+        var el = document.getElementById(f); if (el) el.style.display = 'none';
+      });
+      var _sv = document.getElementById('sede-val');    if (_sv) _sv.disabled = true;
+      var _sm = document.getElementById('sede-manual'); if (_sm) _sm.disabled = true;
+      _esOlva = false; resetTiendaOlva();
+      domInitMapa();
+      var _sd0 = document.getElementById('chk-sin-datos'); if (_sd0 && _sd0.checked) onSinDatosToggle(_sd0);
+      return;
+    }
+    if (campoDom) campoDom.style.display = 'none';
 
     // ¿Es Olva? → tras elegir el distrito se habilita el selector de punto de recojo (tienda)
     _esOlva = !!(_opt && _opt.dataset.olva === '1');
@@ -1303,6 +1358,78 @@ function resetSedeDropdown() {
   if (ag) actualizarCamposAgencia(ag, true);
   var _sdInit = document.getElementById('chk-sin-datos');
   if (_sdInit && _sdInit.checked) onSinDatosToggle(_sdInit);
+})();
+</script>
+
+<!-- Mapa de "Lima a domicilio" (Leaflet + OpenStreetMap / CartoDB) -->
+<link rel="stylesheet" href="<?= APP_URL ?>/assets/leaflet/leaflet.css?v=<?= @filemtime(__DIR__ . '/../../assets/leaflet/leaflet.css') ?>">
+<script src="<?= APP_URL ?>/assets/leaflet/leaflet.js?v=<?= @filemtime(__DIR__ . '/../../assets/leaflet/leaflet.js') ?>"></script>
+<script>
+(function(){
+  var _map = null, _mk = null, base = '<?= APP_URL ?>/assets/leaflet/images/';
+  function setPunto(lat, lng, centrar){
+    document.getElementById('dom-lat').value = lat.toFixed(7);
+    document.getElementById('dom-lng').value = lng.toFixed(7);
+    document.getElementById('dom-coords').textContent = 'Punto: ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
+    if (_mk) _mk.setLatLng([lat, lng]);
+    if (centrar && _map) _map.setView([lat, lng], 16);
+  }
+  window.domInitMapa = function(){
+    if (typeof L === 'undefined') return;
+    if (_map) {
+      setTimeout(function(){ _map.invalidateSize(); }, 150);
+      var la=parseFloat(document.getElementById('dom-lat').value), ln=parseFloat(document.getElementById('dom-lng').value);
+      if (!isNaN(la) && !isNaN(ln)) { _mk.setLatLng([la,ln]); _map.setView([la,ln],16); }
+      return;
+    }
+    var icon = L.icon({ iconUrl: base+'marker-icon.png', iconRetinaUrl: base+'marker-icon-2x.png',
+      shadowUrl: base+'marker-shadow.png', iconSize:[25,41], iconAnchor:[12,41], shadowSize:[41,41] });
+    var hay = !!document.getElementById('dom-lat').value;
+    var lat0 = parseFloat(document.getElementById('dom-lat').value) || -12.0464;
+    var lng0 = parseFloat(document.getElementById('dom-lng').value) || -77.0428;
+    _map = L.map('dom-mapa').setView([lat0,lng0], hay?16:12);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      { maxZoom:20, subdomains:'abcd', attribution:'© OpenStreetMap © CARTO' }).addTo(_map);
+    _mk = L.marker([lat0,lng0], { draggable:true, icon:icon }).addTo(_map);
+    _mk.on('dragend', function(){ var p=_mk.getLatLng(); setPunto(p.lat,p.lng,false); });
+    _map.on('click', function(e){ setPunto(e.latlng.lat, e.latlng.lng, false); });
+    if (hay) setPunto(lat0,lng0,false);
+    setTimeout(function(){ _map.invalidateSize(); }, 200);
+  };
+  // Geolocalización
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('#dom-geo')) return;
+    if (!navigator.geolocation) { alert('Sin geolocalización'); return; }
+    navigator.geolocation.getCurrentPosition(function(p){ domInitMapa(); setPunto(p.coords.latitude, p.coords.longitude, true); },
+      function(){ alert('No se pudo obtener la ubicación. Toca el mapa.'); }, { enableHighAccuracy:true, timeout:10000 });
+  });
+  // Buscar dirección (Nominatim). Solo al tocar Enter o tras pausa (respeta el límite).
+  function geocodificar(){
+    var q = document.getElementById('dom-buscar-in').value.trim();
+    var box = document.getElementById('dom-geores');
+    if (q.length < 4) { box.style.display='none'; return; }
+    fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=pe&limit=6&q=' + encodeURIComponent(q),
+      { headers: { 'Accept-Language':'es' } })
+      .then(function(r){ return r.json(); })
+      .then(function(items){
+        if (!items || !items.length) { box.innerHTML='<div style="padding:9px 12px;font-size:13px;color:#64748b">Sin resultados</div>'; box.style.display='block'; return; }
+        box.innerHTML = items.map(function(it){
+          return '<div class="dom-geo-opt" data-lat="'+it.lat+'" data-lng="'+it.lon+'" style="padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #f1f5f9">'+(it.display_name||'')+'</div>';
+        }).join('');
+        box.style.display='block';
+        box.querySelectorAll('.dom-geo-opt').forEach(function(o){
+          o.addEventListener('click', function(){ domInitMapa(); setPunto(parseFloat(this.dataset.lat), parseFloat(this.dataset.lng), true); box.style.display='none'; });
+        });
+      }).catch(function(){});
+  }
+  var _gt=null;
+  document.addEventListener('input', function(e){
+    if (!e.target || e.target.id !== 'dom-buscar-in') return;
+    clearTimeout(_gt); var q=e.target.value.trim();
+    if (q.length<5){ document.getElementById('dom-geores').style.display='none'; return; }
+    _gt = setTimeout(geocodificar, 700);
+  });
+  document.addEventListener('keydown', function(e){ if (e.key==='Enter' && e.target && e.target.id==='dom-buscar-in'){ e.preventDefault(); geocodificar(); } });
 })();
 </script>
 <?php require_once __DIR__ . '/../../templates/layout_end.php'; ?>
