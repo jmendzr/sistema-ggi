@@ -294,7 +294,10 @@ $_saved_ag  = array_values(array_filter($agencias, fn($a) => (int)$a['id'] === (
 $_saved_cfg = $_saved_ag ? ggi_agencia_envio_config($_saved_ag['nombre'], $_saved_ag['sede_modo'] ?? 'manual') : null;
 $_saved_is_api  = $_saved_cfg && ($_saved_cfg['sede_modo'] ?? 'manual') === 'api';
 $_saved_is_olva = $_saved_ag && stripos($_saved_ag['nombre'], 'olva') !== false;
-$_saved_is_manual_sede = $_saved_cfg && ($_saved_cfg['sede_modo'] ?? 'manual') !== 'api';
+$_saved_es_dom  = $_saved_ag && (int)($_saved_ag['es_domicilio'] ?? 0) === 1;
+// "Sede / punto de destino" (modo manual) no aplica en Lima a domicilio: ahí el destino
+// es una dirección + punto en el mapa, no una sede.
+$_saved_is_manual_sede = $_saved_cfg && ($_saved_cfg['sede_modo'] ?? 'manual') !== 'api' && !$_saved_es_dom;
 ?>
 <style>
   .form-card { background:var(--bg-surface); border-radius:12px; border:1px solid var(--gris-borde); overflow:hidden; max-width:860px; }
@@ -700,7 +703,6 @@ $_saved_is_manual_sede = $_saved_cfg && ($_saved_cfg['sede_modo'] ?? 'manual') !
       </div>
 
       <!-- Lima a domicilio: referencia + punto exacto en el mapa -->
-      <?php $_saved_es_dom = $_saved_ag && (int)($_saved_ag['es_domicilio'] ?? 0) === 1; ?>
       <div class="field span-2" id="campo-domicilio" style="display:<?= $_saved_es_dom ? 'flex' : 'none' ?>;flex-direction:column;">
         <label>Referencia</label>
         <input type="text" name="referencia_direccion" id="input-referencia" maxlength="300"
@@ -956,7 +958,7 @@ async function actualizarCamposAgencia(agenciaId, isInit) {
       var _sv = document.getElementById('sede-val');    if (_sv) _sv.disabled = true;
       var _sm = document.getElementById('sede-manual'); if (_sm) _sm.disabled = true;
       _esOlva = false; resetTiendaOlva();
-      domInitMapa();
+      if (window.domInitMapa) window.domInitMapa();
       var _sd0 = document.getElementById('chk-sin-datos'); if (_sd0 && _sd0.checked) onSinDatosToggle(_sd0);
       return;
     }
@@ -1353,12 +1355,6 @@ function resetSedeDropdown() {
 //    selector). Antes corría en el bloque anterior y lanzaba ReferenceError al
 //    llamar resetTiendaOlva/initSedeDropdown → abortaba y dejaba el selector muerto
 //    y los campos (sede/orden/recojo) ocultos al cargar. ──
-(function initEnvioForm() {
-  var ag = document.getElementById('sel-agencia')?.value;
-  if (ag) actualizarCamposAgencia(ag, true);
-  var _sdInit = document.getElementById('chk-sin-datos');
-  if (_sdInit && _sdInit.checked) onSinDatosToggle(_sdInit);
-})();
 </script>
 
 <!-- Mapa de "Lima a domicilio" (Leaflet + OpenStreetMap / CartoDB) -->
@@ -1430,6 +1426,17 @@ function resetSedeDropdown() {
     _gt = setTimeout(geocodificar, 700);
   });
   document.addEventListener('keydown', function(e){ if (e.key==='Enter' && e.target && e.target.id==='dom-buscar-in'){ e.preventDefault(); geocodificar(); } });
+})();
+</script>
+
+<!-- Init del formulario: se ejecuta al final, cuando Leaflet (L) y domInitMapa ya existen,
+     para que el mapa de "Lima a domicilio" cargue al editar un envío ya registrado. -->
+<script>
+(function initEnvioForm() {
+  var ag = document.getElementById('sel-agencia') ? document.getElementById('sel-agencia').value : '';
+  if (ag) actualizarCamposAgencia(ag, true);
+  var _sdInit = document.getElementById('chk-sin-datos');
+  if (_sdInit && _sdInit.checked) onSinDatosToggle(_sdInit);
 })();
 </script>
 <?php require_once __DIR__ . '/../../templates/layout_end.php'; ?>
