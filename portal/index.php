@@ -885,7 +885,14 @@ footer a:hover{text-decoration:underline}
       $norms    = $e['normas_enviadas'] ?: '';
       $entregado = !empty($e['fecha_recibido']);
     ?>
-    <?php $es_editable_card = ((int)$e['estado_envio_id'] === $estado_inicial_id); ?>
+    <?php
+      $es_editable_card = ((int)$e['estado_envio_id'] === $estado_inicial_id);
+      // ¿El cliente ya cargó sus datos? (aunque el envío siga en "Por preparar").
+      $tiene_datos = !empty($e['agencia_envio_id']) && (
+          !empty($e['destinatario']) || !empty($e['direccion_destino'])
+          || !empty($e['sede_registro']) || $e['lat'] !== null
+      );
+    ?>
     <div class="env-card <?= $es_editable_card ? 'env-card-pending' : '' ?>"
          data-env-id="<?= (int)$e['id'] ?>"
          <?= !$es_editable_card ? 'role="button" tabindex="0"' : '' ?>
@@ -904,12 +911,20 @@ footer a:hover{text-decoration:underline}
         </div>
       </div>
 
-      <?php if ($es_editable_card): ?>
+      <?php if ($es_editable_card && !$tiene_datos): ?>
       <div class="env-foot" style="flex-direction:column;align-items:flex-start;gap:0">
         <p class="env-pending-note">Tu certificado está listo. Completa los datos para coordinar el envío.</p>
         <button class="btn-completar" onclick="event.stopPropagation();openCompletarPanel(<?= (int)$e['id'] ?>)">
           <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           Completar datos de envío
+        </button>
+      </div>
+      <?php elseif ($es_editable_card && $tiene_datos): ?>
+      <div class="env-foot" style="flex-direction:column;align-items:flex-start;gap:8px">
+        <p class="env-pending-note" style="color:#059669">Datos de envío registrados. En cuanto se prepare, verás aquí el seguimiento.</p>
+        <button class="btn-completar" style="background:#fff;color:var(--txt);border:1px solid var(--border)" onclick="event.stopPropagation();openCompletarPanel(<?= (int)$e['id'] ?>)">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Editar datos de envío
         </button>
       </div>
       <?php else: ?>
@@ -1751,8 +1766,9 @@ footer a:hover{text-decoration:underline}
     var lat0 = parseFloat(document.getElementById('cp-dom-lat').value) || -12.0464;  // Lima
     var lng0 = parseFloat(document.getElementById('cp-dom-lng').value) || -77.0428;
     _cpMap = L.map('cp-mapa').setView([lat0, lng0], hayPunto ? 16 : 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(_cpMap);
+    // Tiles CartoDB Voyager: base moderna y limpia (gratis, atribución OSM+CARTO).
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      { maxZoom: 20, subdomains: 'abcd', attribution: '© OpenStreetMap © CARTO' }).addTo(_cpMap);
     _cpMarker = L.marker([lat0, lng0], { draggable: true, icon: icon }).addTo(_cpMap);
     _cpMarker.on('dragend', function(){ var p = _cpMarker.getLatLng(); cpSetPunto(p.lat, p.lng, false); });
     _cpMap.on('click', function(e){ cpSetPunto(e.latlng.lat, e.latlng.lng, false); });
@@ -2036,7 +2052,8 @@ footer a:hover{text-decoration:underline}
           // Refrescar el texto del courier en la tarjeta
           const card = document.querySelector('.env-card[data-env-id="'+envioId+'"] .env-agency-name');
           if (card && res.agencia) card.textContent = res.agencia;
-          setTimeout(function(){ closeAll(); }, 1400);
+          // Recargar para que la tarjeta pase de "Completar datos" a "Datos registrados"
+          setTimeout(function(){ location.reload(); }, 1300);
         } else {
           showCpMsg(res.msg || 'Error al guardar.', false);
         }
