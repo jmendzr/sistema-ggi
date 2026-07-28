@@ -1104,8 +1104,13 @@ footer a:hover{text-decoration:underline}
     <div id="cp-domicilio" style="display:none">
       <div class="cp-field">
         <label>Dirección de entrega *</label>
-        <input type="text" id="cp-dom-direccion" class="cp-input" autocomplete="off"
-               placeholder="Calle, número, distrito (ej: Av. La Marina 123, San Miguel)">
+        <div style="display:flex;gap:6px">
+          <input type="text" id="cp-dom-direccion" class="cp-input" autocomplete="off" style="flex:1"
+                 placeholder="Calle, número, distrito (ej: Av. La Marina 123, San Miguel)">
+          <button type="button" id="cp-dom-buscar" class="cp-btn-sec" style="font-size:13px;padding:0 14px;white-space:nowrap"
+                  title="Ubicar esta dirección en el mapa">🔍 Buscar</button>
+        </div>
+        <div id="cp-dom-geores" style="display:none;margin-top:6px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;max-height:190px;overflow-y:auto"></div>
       </div>
       <div class="cp-field">
         <label>Referencia</label>
@@ -1756,6 +1761,49 @@ footer a:hover{text-decoration:underline}
       btn.disabled = false; btn.textContent = '📍 Usar mi ubicación actual';
       alert('No se pudo obtener tu ubicación. Toca el mapa para marcar el punto.');
     }, { enableHighAccuracy: true, timeout: 10000 });
+  });
+
+  // Buscar la dirección escrita y ubicarla en el mapa (Nominatim de OpenStreetMap,
+  // gratis, sin API key). Solo al tocar "Buscar" (respeta el límite de la API).
+  function cpGeocodificar() {
+    var q = document.getElementById('cp-dom-direccion').value.trim();
+    var box = document.getElementById('cp-dom-geores');
+    if (q.length < 4) { alert('Escribe la dirección primero.'); return; }
+    var btn = document.getElementById('cp-dom-buscar');
+    btn.disabled = true; btn.textContent = 'Buscando…';
+    var url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=pe&limit=6&q=' + encodeURIComponent(q);
+    fetch(url, { headers: { 'Accept-Language': 'es' } })
+      .then(function(r){ return r.json(); })
+      .then(function(items){
+        btn.disabled = false; btn.textContent = '🔍 Buscar';
+        if (!items || !items.length) {
+          box.innerHTML = '<div style="padding:10px 12px;color:#64748b;font-size:13px">Sin resultados. Marca el punto tocando el mapa.</div>';
+          box.style.display = 'block'; return;
+        }
+        box.innerHTML = items.map(function(it){
+          return '<div class="cp-geo-opt" data-lat="'+it.lat+'" data-lng="'+it.lon+'" '
+               + 'style="padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #f1f5f9">'
+               + (it.display_name || '') + '</div>';
+        }).join('');
+        box.style.display = 'block';
+        box.querySelectorAll('.cp-geo-opt').forEach(function(o){
+          o.addEventListener('click', function(){
+            cpInitMapa();
+            cpSetPunto(parseFloat(this.dataset.lat), parseFloat(this.dataset.lng), true);
+            box.style.display = 'none';
+          });
+          o.addEventListener('mouseenter', function(){ this.style.background = '#f1f5f9'; });
+          o.addEventListener('mouseleave', function(){ this.style.background = ''; });
+        });
+      })
+      .catch(function(){
+        btn.disabled = false; btn.textContent = '🔍 Buscar';
+        alert('No se pudo buscar la dirección. Marca el punto tocando el mapa.');
+      });
+  }
+  document.addEventListener('click', function(e){ if (e.target.closest('#cp-dom-buscar')) cpGeocodificar(); });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' && e.target && e.target.id === 'cp-dom-direccion') { e.preventDefault(); cpGeocodificar(); }
   });
 
   function cpCargarSedes(agId, envioId, preVal, preDir) {
