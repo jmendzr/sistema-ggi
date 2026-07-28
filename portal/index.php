@@ -1816,6 +1816,29 @@ footer a:hover{text-decoration:underline}
     if (e.key === 'Enter' && e.target && e.target.id === 'cp-dom-direccion') { e.preventDefault(); cpGeocodificar(); }
   });
 
+  // Autocompletado mientras escribe: busca sola tras una pausa (debounce 700 ms)
+  // y con 5+ caracteres, para NO saturar la API gratuita (1 req/seg). El botón
+  // "Buscar" sigue disponible por si quiere forzar la búsqueda.
+  var _cpGeoTimer = null, _cpGeoLast = '';
+  document.addEventListener('input', function(e){
+    if (!e.target || e.target.id !== 'cp-dom-direccion') return;
+    var q = e.target.value.trim();
+    clearTimeout(_cpGeoTimer);
+    if (q.length < 5) { document.getElementById('cp-dom-geores').style.display = 'none'; return; }
+    _cpGeoTimer = setTimeout(function(){
+      if (q === _cpGeoLast) return;   // no repetir la misma búsqueda
+      _cpGeoLast = q;
+      cpGeocodificar();
+    }, 700);
+  });
+  // Cerrar los resultados al tocar fuera del bloque de dirección
+  document.addEventListener('click', function(e){
+    var box = document.getElementById('cp-dom-geores');
+    if (box && box.style.display !== 'none'
+        && !e.target.closest('#cp-dom-geores') && !e.target.closest('#cp-dom-direccion')
+        && !e.target.closest('#cp-dom-buscar')) { box.style.display = 'none'; }
+  });
+
   function cpCargarSedes(agId, envioId, preVal, preDir) {
     const dom = document.getElementById('cp-domicilio');
     // ── Entrega a domicilio (Lima): mostrar el mapa, ocultar todo lo de courier ──
