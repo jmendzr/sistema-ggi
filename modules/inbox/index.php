@@ -497,7 +497,10 @@ $ia_disponible = IaAgente::disponible();
   .ib-ctx { display: block; overflow-y: auto; overflow-x: hidden; }
   .ib-ctx-head { padding: 13px 17px; border-bottom: 1px solid var(--brd);
                  font-size: .88rem; font-weight: 700; color: var(--tx);
-                 position: sticky; top: 0; z-index: 2; background: var(--bg-surface); }
+                 position: sticky; top: 0; z-index: 2; background: var(--bg-surface);
+                 display: flex; align-items: center; justify-content: space-between; }
+  .ib-solo-movil { display: none; }   /* solo aparece en móvil (capa de contexto) */
+  .ib-ctx-cerrar { width: 34px; height: 34px; }
   .ib-ctx-s { padding: 15px 17px; border-bottom: 1px solid var(--brd); }
 
   /* Caja de estado, como en la referencia */
@@ -662,6 +665,7 @@ $ia_disponible = IaAgente::disponible();
   .ib-ia-btn.ib-ia-load { opacity: 1; }
   .ib-ia-btn.ib-ia-load svg { animation: ib-ia-spin .9s linear infinite; transform-origin: 50% 50%; }
   @keyframes ib-ia-spin { to { transform: rotate(360deg); } }
+  @keyframes ib-ctx-in { from { transform: translateX(12%); opacity: .4; } to { transform: none; opacity: 1; } }
   .ib-barra-sep { width: 1px; height: 18px; background: var(--brd); margin: 0 5px; }
 
   .ib-emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; }
@@ -752,7 +756,13 @@ $ia_disponible = IaAgente::disponible();
     .ib-chat-col { display: none; }              /* oculto hasta abrir un hilo */
     .ib.abierto .ib-lista-col { display: none; }
     .ib.abierto .ib-chat-col  { display: flex; }
-    .ib-ctx { display: none; }                    /* el contexto no va en móvil */
+    /* El panel de contexto se abre como capa deslizante sobre el chat (botón "i") */
+    .ib-ctx { display: none; }
+    .ib.ver-ctx.abierto .ib-ctx {
+      display: block; position: absolute; inset: 0; width: 100%; height: 100%;
+      z-index: 30; background: var(--bg-surface); animation: ib-ctx-in .18s ease;
+    }
+    .ib-solo-movil { display: inline-flex; }
     .ib-volver { display: inline-flex; }
     /* sin-lista es un toggle de escritorio; en móvil solo debe remostrar la lista
        cuando NO hay un hilo abierto. Si no, la lista y el chat (ambos absolute
@@ -1527,6 +1537,12 @@ $ia_disponible = IaAgente::disponible();
       +     'title="Mostrar u ocultar el panel de contexto" aria-label="Mostrar u ocultar el panel de contexto">'
       +     '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
       +     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>'
+      +   '</button>'
+      // Info del cliente en móvil: el panel de contexto se abre como capa deslizante
+      +   '<button type="button" class="ib-icon ib-solo-movil" id="ib-ctx-movil" '
+      +     'title="Información del cliente" aria-label="Información del cliente">'
+      +     '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+      +     '<circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 11v5M12 8h.01"/></svg>'
       +   '</button>'
       + '</div>'
       + '<div class="ib-scroll ib-msgs" id="ib-msgs">' + cuerpo + '</div>'
@@ -2901,7 +2917,10 @@ $ia_disponible = IaAgente::disponible();
       + '<button type="button" class="ib-resolver" id="ib-resolver" data-estado="' + esc(c.estado) + '">'
       +   (resuelta ? '↺ Reabrir conversación' : '✓ Resolver conversación') + '</button>');
 
-    $('#ib-ctx').innerHTML = '<div class="ib-ctx-head">Contexto</div>' + h;
+    $('#ib-ctx').innerHTML = '<div class="ib-ctx-head">Contexto'
+      + '<button type="button" class="ib-icon ib-solo-movil ib-ctx-cerrar" id="ib-ctx-cerrar" title="Cerrar" aria-label="Cerrar">'
+      + '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>'
+      + '</button></div>' + h;
   }
 
   // ── Menús emergentes ───────────────────────────────────────────────────────
@@ -3223,6 +3242,10 @@ $ia_disponible = IaAgente::disponible();
       $('#ib').classList.toggle('sin-' + cual);
       try { localStorage.setItem('ib_sin_' + cual, $('#ib').classList.contains('sin-' + cual) ? '1' : ''); } catch (_) {}
       return;
+    }
+    // Móvil: abrir/cerrar el panel de contexto como capa deslizante
+    if (e.target.closest('#ib-ctx-movil') || e.target.closest('#ib-ctx-cerrar')) {
+      $('#ib').classList.toggle('ver-ctx'); return;
     }
 
     // ── Menús emergentes ──
