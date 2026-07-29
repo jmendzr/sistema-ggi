@@ -110,3 +110,12 @@ define('META_WA_TOKEN',           env('META_WA_TOKEN',           ''));
 define('META_WA_WABA_ID',         env('META_WA_WABA_ID',         ''));
 define('META_APP_SECRET',         env('META_APP_SECRET',         '')); // firma de webhooks
 define('META_APP_ID',             env('META_APP_ID',             '1486329949910978')); // público; usado en el resumable upload del perfil
+
+// ── Agente IA (copiloto del inbox) ────────────────────────────────────────────
+//  Conmutable por IA_PROVIDER: 'claude' (Anthropic) u 'openai'. Las llaves viven
+//  en .env (fuera del repo), nunca aquí. Sin llave → el copiloto queda inactivo.
+define('IA_PROVIDER',       env('IA_PROVIDER',       'claude'));   // claude | openai
+define('IA_ANTHROPIC_KEY',  env('IA_ANTHROPIC_KEY',  ''));
+define('IA_ANTHROPIC_MODEL',env('IA_ANTHROPIC_MODEL','claude-sonnet-4-5-20250929'));
+define('IA_OPENAI_KEY',     env('IA_OPENAI_KEY',     ''));
+define('IA_OPENAI_MODEL',   env('IA_OPENAI_MODEL',   'gpt-4o'));

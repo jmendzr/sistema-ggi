@@ -947,6 +947,43 @@ if ($accion === 'enviar_interactivo') {
 }
 
 // ══ Enviar mensaje ═══════════════════════════════════════════════════════════
+// ── Copiloto IA: sugerir una respuesta (no envía nada, solo devuelve texto) ──
+if ($accion === 'ia_sugerir') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;
+    }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/IaAgente.php';
+
+    if (!IaAgente::disponible()) {
+        echo json_encode(['ok' => false, 'msg' => 'El copiloto de IA no está configurado.']); exit;
+    }
+
+    $id = (int) ($_POST['id'] ?? 0);
+    if (!$id) { echo json_encode(['ok' => false, 'msg' => 'Conversación inválida']); exit; }
+
+    $q = $pdo->prepare("SELECT c.telefono, c.cliente_id, COALESCE(cl.razon_social, CONCAT('+', c.telefono)) AS titulo
+                          FROM wa_conversaciones c LEFT JOIN clientes cl ON cl.id = c.cliente_id
+                         WHERE c.id = ?");
+    $q->execute([$id]);
+    $conv = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+
+    // Hilo reciente (solo lo necesario para redactar)
+    $mq = $pdo->prepare("SELECT direccion AS dir, tipo, texto FROM wa_mensajes
+                          WHERE conversacion_id = ? ORDER BY id DESC LIMIT 30");
+    $mq->execute([$id]);
+    $mensajes = array_reverse($mq->fetchAll(PDO::FETCH_ASSOC) ?: []);
+
+    $ctx = IaAgente::contextoCliente($pdo, $conv['cliente_id'] ? (int) $conv['cliente_id'] : null);
+    $r   = IaAgente::sugerir($mensajes, $ctx, (string) $conv['titulo']);
+
+    echo json_encode($r['ok']
+        ? ['ok' => true, 'texto' => $r['texto']]
+        : ['ok' => false, 'msg' => $r['error'] ?: 'No se pudo generar la sugerencia.']);
+    exit;
+}
+
 if ($accion === 'enviar') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;

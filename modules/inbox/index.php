@@ -14,6 +14,8 @@ require_once __DIR__ . '/../../core/helpers.php';
 session_init();
 require_login();
 require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
+require_once __DIR__ . '/../../core/IaAgente.php';
+$ia_disponible = IaAgente::disponible();
 ?>
 <?php include __DIR__ . '/../../templates/layout.php'; ?>
 
@@ -543,6 +545,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   }
   .ib-fmt:hover:not(:disabled) { background: var(--bg-hover); color: var(--tx); }
   .ib-fmt:disabled { opacity: .4; cursor: not-allowed; }
+  /* Copiloto IA: se distingue con el color de acento */
+  .ib-ia-btn { color: var(--ac); }
+  .ib-ia-btn:hover:not(:disabled) { background: var(--ac-soft, var(--bg-hover)); color: var(--ac); }
+  .ib-ia-btn.ib-ia-load { opacity: 1; }
+  .ib-ia-btn.ib-ia-load svg { animation: ib-ia-spin .9s linear infinite; transform-origin: 50% 50%; }
+  @keyframes ib-ia-spin { to { transform: rotate(360deg); } }
   .ib-barra-sep { width: 1px; height: 18px; background: var(--brd); margin: 0 5px; }
 
   .ib-emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; }
@@ -825,6 +833,7 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 (function () {
   var st = { f: 'todas', q: '', sel: null, etqs: [], etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null, abrirSeq: 0, listaSeq: 0 };
   var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)) ?>;
+  var IA_ON   = <?= json_encode((bool) $ia_disponible) ?>;
   var $ = function (s) { return document.querySelector(s); };
 
   // Iconos SVG (nunca emoji como icono de UI). Trazo, heredan currentColor.
@@ -1297,6 +1306,12 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
           + '<button type="button" class="ib-fmt" id="ib-interactivo" title="Mensaje interactivo (botones o lista)" aria-label="Mensaje interactivo">'
           + '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
           + '<rect x="3" y="5" width="18" height="4" rx="1"/><rect x="3" y="12" width="18" height="4" rx="1"/><path d="M7 19h10"/></svg></button>'
+          // Copiloto IA: sugiere una respuesta que el ejecutivo edita y envía.
+          + (IA_ON
+              ? '<button type="button" class="ib-fmt ib-ia-btn" id="ib-ia" title="Ayúdame a responder (IA)" aria-label="Ayúdame a responder con IA">'
+                + '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+                + '<path stroke-linecap="round" stroke-linejoin="round" d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3zM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14z"/></svg></button>'
+              : '')
           + '<input type="file" id="ib-file" hidden '
           + 'accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,audio/*,'
           + '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">'
@@ -1553,6 +1568,33 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
   function repintar_con(el, plano, pos) {
     el.innerHTML = formatoVivo(plano);
     _setCursor(el, Math.min(pos, plano.length));
+  }
+
+  // ── Copiloto IA: pide una sugerencia y la coloca en la caja (editable) ──────
+  function iaSugerir(btn) {
+    if (!st.sel || st.iaCargando) return;
+    st.iaCargando = true;
+    if (btn) { btn.disabled = true; btn.classList.add('ib-ia-load'); }
+    if (window.showToast) showToast('Generando sugerencia…', 'ok');
+    ggiPost('ajax.php', { accion: 'ia_sugerir', id: st.sel })
+      .then(function (j) {
+        if (j.ok && j.texto) {
+          var el = $('#ib-texto');
+          if (el) {
+            var actual = textoActual().trim();
+            var nuevo  = actual ? (actual + '\n\n' + j.texto) : j.texto;
+            el.focus();
+            repintar_con(el, nuevo, nuevo.length);
+          }
+        } else if (window.showToast) {
+          showToast(j.msg || 'No se pudo generar la sugerencia', 'error');
+        }
+      })
+      .catch(function () { if (window.showToast) showToast('No se pudo generar la sugerencia', 'error'); })
+      .then(function () {
+        st.iaCargando = false;
+        if (btn && document.body.contains(btn)) { btn.disabled = false; btn.classList.remove('ib-ia-load'); }
+      });
   }
 
   // Panel con pestañas Emojis / Stickers. Los emojis vienen categorizados de
@@ -2844,6 +2886,8 @@ require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
     if (e.target.closest('#ib-plantilla')) { popPlantillas(); return; }
     if (e.target.closest('#ib-interactivo')) { formInteractivo(); return; }
+    var iab = e.target.closest('#ib-ia');
+    if (iab) { iaSugerir(iab); return; }
     if (e.target.closest('#ib-voz'))        { toggleVoz(); return; }
 
     var rep = e.target.closest('[data-reply]');
