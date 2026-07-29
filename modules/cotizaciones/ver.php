@@ -260,26 +260,17 @@ ggi_breadcrumb(array_filter([
     <h1><?= sanitize($cot['numero']) ?></h1>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <a href="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&inline=1"
-       data-ggi-preview
-       data-src="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&inline=1"
-       data-download-url="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&dl=1"
-       data-title="Propuesta <?= sanitize($cot['numero']) ?>"
-       class="btn btn-outline btn-sm">
-      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      Ver propuesta
+    <?php $_tel_cli = preg_replace('/\D/', '', (string)($cot['contacto_telefono'] ?? '')); ?>
+    <!-- PRIMARIOS: enviar por WhatsApp + decisión (aceptar/rechazar) -->
+    <?php if (!empty($cot['cliente_id'])): ?>
+    <a href="<?= APP_URL ?>/modules/inbox/index.php<?= $_tel_cli ? '?tel=' . urlencode($_tel_cli) : '' ?>"
+       class="btn btn-sm" title="Abrir el chat del cliente para enviarle la propuesta (PDF con un clic)"
+       style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#25D366;color:#fff;border:none;border-radius:9px;font-size:12px;font-weight:600;">
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      Enviar por WhatsApp
     </a>
-    <a href="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&dl=1" download
-       onclick="event.preventDefault(); ggiDownloadBlob(this.href);"
-       class="btn btn-outline btn-sm">
-      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      Descargar PDF
-    </a>
+    <?php endif; ?>
     <?php if (in_array($cot['estado'], ['borrador','enviada'])): ?>
-    <button type="button" id="btn-editar" onclick="ggiAbrirPropuesta('edit', <?= (int)$id ?>)" class="btn btn-outline btn-sm">
-      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-      Editar
-    </button>
     <button id="btn-aceptar" onclick="confirmarAceptar()"
       style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:var(--gr);color:#fff;border:none;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:.15s;"
       onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
@@ -302,16 +293,43 @@ ggi_breadcrumb(array_filter([
     </button>
     <?php endif; ?>
 
-    <?php if (!empty($cot['cliente_id'])): ?>
-    <button type="button" onclick="ggiAbrirLlamada()" class="btn btn-outline btn-sm" title="Agendar llamada sobre esta propuesta (recordatorio push)">
-      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-      Llamada
-    </button>
-    <?php endif; ?>
-    <button type="button" onclick="ggiAbrirPropuesta('duplicate', <?= (int)$id ?>)" class="btn btn-outline btn-sm">
-      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      Duplicar
-    </button>
+    <!-- SECUNDARIOS: en un menú "…" para no saturar el encabezado -->
+    <div class="ggi-row-menu-wrap">
+      <button type="button" class="ggi-row-menu-btn btn btn-outline btn-sm" title="Más acciones" aria-label="Más acciones" aria-haspopup="true" aria-expanded="false" style="gap:5px;">
+        <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+        Más
+      </button>
+      <div class="ggi-row-menu">
+        <a class="ggi-row-menu-item" href="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&inline=1"
+           data-ggi-preview data-src="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&inline=1"
+           data-download-url="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&dl=1"
+           data-title="Propuesta <?= sanitize($cot['numero']) ?>">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          Ver propuesta
+        </a>
+        <a class="ggi-row-menu-item" href="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&dl=1" download
+           onclick="event.preventDefault(); ggiDownloadBlob(this.href);">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Descargar PDF
+        </a>
+        <?php if (in_array($cot['estado'], ['borrador','enviada'])): ?>
+        <button type="button" id="btn-editar" class="ggi-row-menu-item" onclick="ggiAbrirPropuesta('edit', <?= (int)$id ?>)">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Editar
+        </button>
+        <?php endif; ?>
+        <?php if (!empty($cot['cliente_id'])): ?>
+        <button type="button" class="ggi-row-menu-item" onclick="ggiAbrirLlamada()">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          Agendar llamada
+        </button>
+        <?php endif; ?>
+        <button type="button" class="ggi-row-menu-item" onclick="ggiAbrirPropuesta('duplicate', <?= (int)$id ?>)">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Duplicar
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 <?php include __DIR__ . '/_propuesta_modal.php'; ?>

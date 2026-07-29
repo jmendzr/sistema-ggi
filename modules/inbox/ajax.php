@@ -49,6 +49,17 @@ function gg_etapa_case(string $cidCol): string
 }
 const GG_ETAPAS = ['lead', 'negociacion', 'cliente', 'certificado', 'frio'];
 
+// ══ Buscar conversación por teléfono (deep-link desde otras páginas) ═════════
+if ($accion === 'por_tel') {
+    $tel = preg_replace('/\D/', '', $_REQUEST['tel'] ?? '');
+    if (strlen($tel) < 9) { echo json_encode(['ok' => false]); exit; }
+    $q = $pdo->prepare("SELECT id FROM wa_conversaciones WHERE telefono LIKE ? ORDER BY id DESC LIMIT 1");
+    $q->execute(['%' . substr($tel, -9)]);
+    $cid = $q->fetchColumn();
+    echo json_encode(['ok' => (bool) $cid, 'id' => $cid ? (int) $cid : null]);
+    exit;
+}
+
 // ══ Acciones de escritura ════════════════════════════════════════════════════
 if ($accion === 'asignar' || $accion === 'liberar') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

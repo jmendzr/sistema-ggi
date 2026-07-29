@@ -3462,6 +3462,19 @@ $ia_disponible = IaAgente::disponible();
 
   lista();
   cargarRapidas();
+  // Deep-link ?tel=... (ej. botón "Enviar por WhatsApp" desde una propuesta):
+  // abre directamente la conversación de ese número si existe.
+  try {
+    var _telDL = new URLSearchParams(location.search).get('tel');
+    if (_telDL) {
+      fetch('ajax.php?accion=por_tel&tel=' + encodeURIComponent(_telDL), { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.ok && j.id) abrir(j.id);
+          else if (window.showToast) showToast('Aún no hay una conversación de WhatsApp con ese número.', 'info');
+        }).catch(function () {});
+    }
+  } catch (_) {}
 })();
 </script>
 
