@@ -553,8 +553,8 @@ $ia_disponible = IaAgente::disponible();
   .ib-emb-badge { display: inline-flex; align-items: center; font-size: .64rem; font-weight: 700;
     padding: 2px 8px; border-radius: 999px; color: #fff; background: var(--emb, #64748B);
     white-space: nowrap; }
-  /* Fila esperando respuesta: acento rojo a la izquierda + chip */
-  .ib-item.esperando { box-shadow: inset 3px 0 0 var(--s-err, #dc2626); }
+  /* Fila esperando respuesta: sin acento (se saturaba con tantas filas rojas);
+     el estado se ve en el filtro/conteo "Sin responder". */
   .ib-esperando { display: inline-flex; align-items: center; justify-content: center;
     min-width: 20px; height: 17px; padding: 0 5px; border-radius: 9px; font-size: .64rem;
     font-weight: 800; color: #fff; background: var(--s-err, #dc2626); }
@@ -615,6 +615,16 @@ $ia_disponible = IaAgente::disponible();
     padding: 6px; border-radius: 7px; display: inline-flex; align-items: center; }
   .ib-doc-send:hover { background: var(--ac-soft, var(--bg-hover)); }
   .ib-doc-send:disabled { opacity: .5; cursor: default; }
+  /* "Ver N más" (colapsar propuestas/certificados) */
+  .ib-mas-btn { width: 100%; background: none; border: none; padding: 6px 0; margin-top: 2px; cursor: pointer;
+    font: inherit; font-size: .74rem; font-weight: 600; color: var(--ac); text-align: left; }
+  .ib-mas-btn:hover { text-decoration: underline; }
+  /* Llamadas agendadas en el panel */
+  .ib-agenda-item { border: 1px solid var(--brd); border-radius: 8px; padding: 7px 9px; margin-bottom: 6px;
+    background: var(--bg-hover); }
+  .ib-agenda-fh { font-size: .78rem; font-weight: 600; color: var(--tx); }
+  .ib-agenda-fh.venc { color: var(--s-err, #dc2626); }
+  .ib-agenda-meta { font-size: .7rem; color: var(--tx3); margin-top: 2px; }
 
   .ib-ctx-t { font-size: .64rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
               color: var(--tx3); margin-bottom: 9px; display: flex; align-items: center; gap: 6px; }
@@ -1492,6 +1502,10 @@ $ia_disponible = IaAgente::disponible();
       });
 
       if (soloAgregados) {
+        // ¿El usuario estaba viendo el final? Si está leyendo historial (scrolleado
+        // arriba), NO se debe forzar el scroll al fondo: agregar nodos abajo no
+        // mueve su posición, así que basta con no tocar scrollTop.
+        var estabaAbajo = msgsActuales.scrollHeight - msgsActuales.scrollTop - msgsActuales.clientHeight < 140;
         var firmaUltimoViejo = viejos.length ? viejos[viejos.length - 1].dataset.ibMsg : null;
         var agregar = !firmaUltimoViejo;
         Array.prototype.slice.call(temporal.childNodes).forEach(function (nodo) {
@@ -1499,8 +1513,10 @@ $ia_disponible = IaAgente::disponible();
           if (nodo.nodeType === 1 && nodo.dataset.ibMsg === firmaUltimoViejo) agregar = true;
         });
 
-        msgsActuales.scrollTop = msgsActuales.scrollHeight;
-        requestAnimationFrame(function () { msgsActuales.scrollTop = msgsActuales.scrollHeight; });
+        if (estabaAbajo) {
+          msgsActuales.scrollTop = msgsActuales.scrollHeight;
+          requestAnimationFrame(function () { msgsActuales.scrollTop = msgsActuales.scrollHeight; });
+        }
         return;
       }
     }
@@ -1985,7 +2001,7 @@ $ia_disponible = IaAgente::disponible();
       fetch('../clientes/ajax_llamada.php', { method: 'POST', body: fd, credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (j) {
-          if (j.ok) { if (window.ggiModalClose) ggiModalClose(); if (window.showToast) showToast(j.mensaje || 'Llamada agendada', 'ok'); }
+          if (j.ok) { if (window.ggiModalClose) ggiModalClose(); if (window.showToast) showToast(j.mensaje || 'Llamada agendada', 'ok'); if (st.sel) abrir(st.sel); }
           else { if (window.showToast) showToast(j.mensaje || 'No se pudo agendar', 'error'); ok.disabled = false; }
         })
         .catch(function () { if (window.showToast) showToast('No se pudo agendar', 'error'); ok.disabled = false; });
@@ -2824,8 +2840,21 @@ $ia_disponible = IaAgente::disponible();
     // Agendar llamada (reusa el sistema de llamadas programadas del CRM)
     if (c.cliente_id) {
       var iTel = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:-2px;margin-right:5px"><path stroke-linecap="round" stroke-linejoin="round" d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0122 16.92z"/></svg>';
+      var agendaList = (x.agenda || []).map(function (a) {
+        var d = new Date(String(a.fecha_hora).replace(' ', 'T'));
+        var fh = isNaN(d) ? esc(a.fecha_hora)
+          : d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit' }) + ' · '
+            + d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+        var venc = !isNaN(d) && d.getTime() < Date.now();
+        return '<div class="ib-agenda-item">'
+          + '<div class="ib-agenda-fh' + (venc ? ' venc' : '') + '">' + fh + (venc ? ' · vencida' : '') + '</div>'
+          + (a.asignado ? '<div class="ib-agenda-meta">→ ' + esc(a.asignado) + '</div>' : '')
+          + (a.nota ? '<div class="ib-agenda-meta">' + esc(a.nota) + '</div>' : '')
+          + '</div>';
+      }).join('');
       h += sec('Agenda', iReloj,
-          '<button type="button" class="btn btn-ghost ib-btn-sm" id="ib-agendar-llamada" style="width:100%">'
+          agendaList
+        + '<button type="button" class="btn btn-ghost ib-btn-sm" id="ib-agendar-llamada" style="width:100%">'
         + iTel + 'Agendar llamada</button>');
     }
 
@@ -2835,9 +2864,17 @@ $ia_disponible = IaAgente::disponible();
       return '<button type="button" class="ib-doc-send" data-docsend-tipo="' + tipo + '" data-docsend-id="' + id
            + '" title="Enviar el PDF al cliente por WhatsApp" aria-label="Enviar PDF por WhatsApp">' + iWa + '</button>';
     }
+    // Muestra los primeros `lim` items y esconde el resto tras un botón "Ver N más"
+    function colapsar(items, renderFn, key, lim) {
+      lim = lim || 2;
+      if (items.length <= lim) return items.map(renderFn).join('');
+      return items.slice(0, lim).map(renderFn).join('')
+        + '<div class="ib-mas" data-mas="' + key + '" hidden>' + items.slice(lim).map(renderFn).join('') + '</div>'
+        + '<button type="button" class="ib-mas-btn" data-mastoggle="' + key + '">Ver ' + (items.length - lim) + ' más</button>';
+    }
 
     if (x.propuestas.length) {
-      h += sec('Propuestas', '', x.propuestas.map(function (p) {
+      h += sec('Propuestas', '', colapsar(x.propuestas, function (p) {
         return '<div class="ib-ctx-row">'
              + '<button type="button" class="ib-ctx-a" data-ver="../cotizaciones/ver.php?id=' + p.id + '" '
              + 'data-titulo="Propuesta ' + esc(p.numero) + '">'
@@ -2845,7 +2882,7 @@ $ia_disponible = IaAgente::disponible();
              + '<span class="ib-ctx-est">' + esc(p.estado) + '</span>' + iAbrir + '</button>'
              + (Number(p.tiene_pdf) ? docSend('cotizacion', p.id) : '')
              + '</div>';
-      }).join(''));
+      }, 'prop'));
     }
     if (x.envios.length) {
       h += sec('Envíos', '', x.envios.map(function (e) {
@@ -2858,7 +2895,7 @@ $ia_disponible = IaAgente::disponible();
     // Certificados del cliente (mismo dato que ve la IA)
     var iCert = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.8 21a2 2 0 01-1.8-1.1l-1-2-2-1A2 2 0 013 15.2V8.8a2 2 0 011-1.7l2-1 1-2A2 2 0 018.8 3h6.4a2 2 0 011.8 1.1l1 2 2 1a2 2 0 011 1.7v6.4a2 2 0 01-1 1.7l-2 1-1 2a2 2 0 01-1.8 1.1z"/></svg>';
     if (x.certificados && x.certificados.length) {
-      h += sec('Certificados', iCert, x.certificados.map(function (ct) {
+      h += sec('Certificados', iCert, colapsar(x.certificados, function (ct) {
         var vig = ct.estado === 'vigente';
         return '<div class="ib-ctx-row">'
              + '<div class="ib-ctx-a" style="cursor:default">'
@@ -2867,7 +2904,7 @@ $ia_disponible = IaAgente::disponible();
              + (Number(ct.tiene_pdf) ? docSend('certificado', ct.id) : '')
              + '</div>'
              + (ct.fecha_vencimiento ? '<div class="ib-ctx-s2">Vence ' + esc(ct.fecha_vencimiento) + '</div>' : '');
-      }).join(''));
+      }, 'cert'));
     }
 
     // Situación: saldo pendiente + fecha requerida de certificados
@@ -3229,6 +3266,14 @@ $ia_disponible = IaAgente::disponible();
     // que el ícono de filtro funcione como toggle (abrir/cerrar).
     var _popPrev = document.getElementById('ib-pop');
     var _eraFiltro = !!(_popPrev && _popPrev.dataset.pop === 'filtro');
+    var _eraFiltros = !!(_popPrev && _popPrev.dataset.pop === 'filtros');
+
+    // Selector de filtros/etapas: toggle ANTES del cierre-por-clic-afuera,
+    // si no, este mismo clic lo cerraría y popFiltros lo reabriría (no togglea).
+    if (e.target.closest('#ib-filtro-btn')) {
+      if (_eraFiltros) { cerrarPop(); return; }
+      popFiltros(e.target.closest('#ib-filtro-btn')); return;
+    }
 
     // Empresa / propuesta / envío en modal: salir del inbox perdería el hilo
     var ver = e.target.closest('[data-ver]');
@@ -3332,6 +3377,14 @@ $ia_disponible = IaAgente::disponible();
     var ds = e.target.closest('[data-docsend-tipo]');
     if (ds) { enviarDocumento(ds.dataset.docsendTipo, ds.dataset.docsendId, ds); return; }
 
+    // "Ver N más" del panel de contexto (propuestas/certificados)
+    var mt = e.target.closest('[data-mastoggle]');
+    if (mt) {
+      var cont = document.querySelector('[data-mas="' + mt.dataset.mastoggle + '"]');
+      if (cont) { cont.hidden = false; mt.remove(); }
+      return;
+    }
+
     // Autocompletado de /atajos: clic en una sugerencia
     var atajoOp = e.target.closest('[data-atajo]');
     if (atajoOp) { insertarAtajo(atajoOp.dataset.atajo); return; }
@@ -3351,8 +3404,7 @@ $ia_disponible = IaAgente::disponible();
 
     if (!e.target.closest('.ib-pop')) cerrarPop();
 
-    // Selector compacto de filtros / etapas
-    if (e.target.closest('#ib-filtro-btn')) { popFiltros(e.target.closest('#ib-filtro-btn')); return; }
+    // Selector compacto de filtros / etapas (el botón se maneja arriba)
     if (e.target.closest('#ib-filtro-sr'))  { setFiltro('sin_responder'); return; }
     var fi = e.target.closest('[data-ffilter]');
     if (fi) { cerrarPop(); setFiltro(fi.dataset.ffilter); return; }

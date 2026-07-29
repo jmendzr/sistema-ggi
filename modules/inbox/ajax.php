@@ -1495,7 +1495,7 @@ if ($accion === 'hilo') {
         ];
     }
 
-    $ctx = ['propuestas' => [], 'envios' => [], 'certificados' => [], 'saldo' => null, 'fecha_requerida' => null];
+    $ctx = ['propuestas' => [], 'envios' => [], 'certificados' => [], 'saldo' => null, 'fecha_requerida' => null, 'agenda' => []];
     if ($conv['cliente_id']) {
         $cid = (int) $conv['cliente_id'];
 
@@ -1536,6 +1536,15 @@ if ($accion === 'hilo') {
                              ORDER BY id DESC LIMIT 1");
         $q->execute([$cid]);
         $ctx['fecha_requerida'] = $q->fetchColumn() ?: null;
+
+        // Llamadas agendadas pendientes (mismo sistema del CRM)
+        $q = $pdo->prepare("SELECT lp.id, lp.fecha_hora, lp.nota,
+                                   TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS asignado
+                              FROM llamadas_programadas lp LEFT JOIN usuarios u ON u.id = lp.usuario_id
+                             WHERE lp.cliente_id = ? AND lp.estado = 'pendiente'
+                             ORDER BY lp.fecha_hora ASC LIMIT 5");
+        $q->execute([$cid]);
+        $ctx['agenda'] = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     // Notas internas del equipo (privadas, NO se envían al cliente)
