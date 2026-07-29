@@ -317,6 +317,19 @@ $ia_disponible = IaAgente::disponible();
              background: rgba(127,127,127,.14); opacity: .85;
              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+  /* Tarjeta de anuncio (Click-to-WhatsApp Ads): el lead vino de publicidad */
+  .ib-ad { display: block; text-decoration: none; color: inherit; margin-bottom: 6px;
+           border: 1px solid rgba(127,127,127,.28); border-radius: 10px; overflow: hidden;
+           background: rgba(127,127,127,.10); }
+  .ib-b.out .ib-ad { border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.14); }
+  .ib-ad-tag { display: flex; align-items: center; gap: 5px; padding: 5px 9px; font-size: .64rem;
+               font-weight: 700; text-transform: uppercase; letter-spacing: .04em; opacity: .8; }
+  .ib-ad-img { display: block; width: 100%; max-height: 150px; object-fit: cover; }
+  .ib-ad-h { display: block; font-size: .78rem; font-weight: 700; padding: 6px 9px 0; line-height: 1.3; }
+  .ib-ad-b { display: block; font-size: .74rem; padding: 2px 9px 8px; line-height: 1.35; opacity: .9;
+             display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .ib-ad:hover { border-color: var(--ac); }
+
   /* Acciones al pasar sobre un mensaje: responder / reaccionar */
   .ib-msg-acts { display: flex; gap: 3px; opacity: 0; transition: opacity .12s; flex-shrink: 0; }
   .ib-b-wrap:hover .ib-msg-acts { opacity: 1; }
@@ -1393,6 +1406,20 @@ $ia_disponible = IaAgente::disponible();
         ? '<div class="ib-cita ' + (m.cita.dir === 'in' ? 'de-cliente' : 'de-nosotros') + '">'
           + esc(m.cita.texto) + '</div>' : '';
 
+      // Referral (Click-to-WhatsApp Ads): tarjeta del anuncio del que vino el
+      // cliente, arriba del mensaje — como la muestra WhatsApp nativamente.
+      var ref = '';
+      if (m.referral) {
+        var r = m.referral, thumb = r.thumbnail_url || r.image_url || '';
+        ref = '<a class="ib-ad" ' + (r.source_url ? 'href="' + esc(r.source_url) + '" target="_blank" rel="noopener"' : '') + '>'
+            + '<span class="ib-ad-tag"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 11v2a1 1 0 001 1h2l4 4V6L6 10H4a1 1 0 00-1 1zM14 8a4 4 0 010 8M18 5a8 8 0 010 14"/></svg>'
+            + (r.source_type === 'post' ? 'Publicación' : 'Anuncio') + '</span>'
+            + (thumb ? '<img class="ib-ad-img" src="' + esc(thumb) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '')
+            + (r.headline ? '<span class="ib-ad-h">' + esc(r.headline) + '</span>' : '')
+            + (r.body ? '<span class="ib-ad-b">' + esc(r.body) + '</span>' : '')
+            + '</a>';
+      }
+
       // Reacción del cliente sobre este mensaje (emoji flotante)
       var rx = m.reaccion
         ? '<span class="ib-rx">' + esc(m.reaccion) + '</span>' : '';
@@ -1413,7 +1440,7 @@ $ia_disponible = IaAgente::disponible();
       // ya estaban en pantalla. Así, enviar uno no hace parpadear el hilo.
       cuerpo += '<div class="ib-b-wrap ' + (m.dir === 'in' ? 'in' : 'out')
              +  '" data-ib-msg="' + m.id + ':' + (m.estado || '') + '">'
-             +  '<div class="ib-b ' + cls + '">' + fwd + cita + who + cuerpoMsg + err
+             +  '<div class="ib-b ' + cls + '">' + fwd + ref + cita + who + cuerpoMsg + err
              +  '<div class="ib-b-foot">' + hhmm(m.cuando)
              +  (m.dir === 'out' ? ' <span>' + ticks(m.estado) + '</span>' : '') + '</div>'
              +  rx + '</div>'

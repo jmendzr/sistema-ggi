@@ -1459,7 +1459,7 @@ if ($accion === 'hilo') {
     }
 
     $ms = $pdo->prepare(
-        "SELECT m.id, m.wa_message_id, m.direccion, m.tipo, m.reenviado, m.reaccion, m.responde_a, m.texto,
+        "SELECT m.id, m.wa_message_id, m.direccion, m.tipo, m.reenviado, m.reaccion, m.responde_a, m.texto, m.referral_json,
                 (SELECT LEFT(r.texto, 90) FROM wa_mensajes r WHERE r.wa_message_id = m.responde_a LIMIT 1) AS cita_texto,
                 (SELECT r.direccion FROM wa_mensajes r WHERE r.wa_message_id = m.responde_a LIMIT 1) AS cita_dir,
                 m.template_name, m.estado, m.error_msg,
@@ -1487,6 +1487,7 @@ if ($accion === 'hilo') {
             'media_nombre' => $m['media_nombre'],
             'dir'        => $m['direccion'],
             'texto'      => $m['texto'],
+            'referral'   => $m['referral_json'] ? json_decode($m['referral_json'], true) : null,
             'estado'     => $m['estado'],
             'estado_txt' => wa_estado_label($m['estado']),
             'error'      => $m['error_msg'],

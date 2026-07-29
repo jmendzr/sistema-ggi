@@ -227,6 +227,28 @@ try {
                 // reabre la ventana de 24h de Meta.
                 $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
                 WaInbox::registrarEntrante($pdo, $from, $wa_id, $tipo, $texto, $phoneNumberId, $media, $reenviado);
+
+                // Click-to-WhatsApp Ads: el primer mensaje trae 'referral' con el
+                // contexto del anuncio (titular, cuerpo, imagen, enlace). Se guarda
+                // para reconocer que el lead vino de publicidad y ver de cuál.
+                if (!empty($msg['referral']) && is_array($msg['referral'])) {
+                    $ref = $msg['referral'];
+                    $refData = array_filter([
+                        'source_type'   => $ref['source_type']   ?? null,
+                        'source_url'    => $ref['source_url']    ?? null,
+                        'source_id'     => $ref['source_id']     ?? null,
+                        'headline'      => $ref['headline']      ?? null,
+                        'body'          => $ref['body']          ?? null,
+                        'media_type'    => $ref['media_type']    ?? null,
+                        'image_url'     => $ref['image_url']     ?? null,
+                        'thumbnail_url' => $ref['thumbnail_url'] ?? null,
+                        'video_url'     => $ref['video_url']     ?? null,
+                    ], fn($v) => $v !== null && $v !== '');
+                    if ($refData) {
+                        $pdo->prepare("UPDATE wa_mensajes SET referral_json = ? WHERE wa_message_id = ?")
+                            ->execute([json_encode($refData, JSON_UNESCAPED_UNICODE), $wa_id]);
+                    }
+                }
             }
 
             // ── Eventos de LLAMADA (Calling API) ──────────────────────────
