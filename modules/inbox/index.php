@@ -556,6 +556,13 @@ $ia_disponible = IaAgente::disponible();
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ib-rrm-del { background: none; border: none; color: var(--tx3); cursor: pointer; font-size: 1.1rem; line-height: 1; }
   .ib-rrm-del:hover { color: var(--s-err, #dc2626); }
+  /* Fila de documento con botón de "enviar por WhatsApp" */
+  .ib-ctx-row { display: flex; align-items: center; gap: 4px; }
+  .ib-ctx-row .ib-ctx-a { flex: 1; min-width: 0; }
+  .ib-doc-send { flex-shrink: 0; background: none; border: none; cursor: pointer; color: var(--ac);
+    padding: 6px; border-radius: 7px; display: inline-flex; align-items: center; }
+  .ib-doc-send:hover { background: var(--ac-soft, var(--bg-hover)); }
+  .ib-doc-send:disabled { opacity: .5; cursor: default; }
 
   .ib-ctx-t { font-size: .64rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
               color: var(--tx3); margin-bottom: 9px; display: flex; align-items: center; gap: 6px; }
@@ -1763,6 +1770,26 @@ $ia_disponible = IaAgente::disponible();
       });
   }
 
+  // ── Enviar PDF del cliente por WhatsApp ─────────────────────────────────────
+  function enviarDocumento(tipo, id, btn) {
+    if (!st.sel) return;
+    var label = tipo === 'cotizacion' ? 'la propuesta' : 'el certificado';
+    var go = function () {
+      if (btn) btn.disabled = true;
+      if (window.showToast) showToast('Enviando documento…', 'ok');
+      ggiPost('ajax.php', { accion: 'enviar_documento', id: st.sel, doc_tipo: tipo, doc_id: id })
+        .then(function (j) {
+          if (j.ok) { if (window.showToast) showToast('Documento enviado', 'ok'); abrir(st.sel); }
+          else { if (window.showToast) showToast(j.msg || 'No se pudo enviar', 'error'); if (btn) btn.disabled = false; }
+        })
+        .catch(function () { if (window.showToast) showToast('No se pudo enviar', 'error'); if (btn) btn.disabled = false; });
+    };
+    if (window.GGIConfirm && GGIConfirm.show) {
+      GGIConfirm.show({ title: 'Enviar documento', message: '¿Enviar ' + label + ' en PDF al cliente por WhatsApp?',
+        confirmText: 'Enviar', onConfirm: go });
+    } else if (confirm('¿Enviar ' + label + ' en PDF al cliente por WhatsApp?')) { go(); }
+  }
+
   // ── Agendar llamada (reusa modules/clientes/ajax_llamada.php) ────────────────
   function modalAgendarLlamada() {
     if (!st.clienteId) { if (window.showToast) showToast('Esta conversación no está vinculada a una empresa.', 'error'); return; }
@@ -2640,12 +2667,22 @@ $ia_disponible = IaAgente::disponible();
         + iTel + 'Agendar llamada</button>');
     }
 
+    // Ícono "enviar por WhatsApp" (avión de papel) para mandar el PDF con un clic
+    var iWa = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="15" height="15"><path stroke-linecap="round" stroke-linejoin="round" d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>';
+    function docSend(tipo, id) {
+      return '<button type="button" class="ib-doc-send" data-docsend-tipo="' + tipo + '" data-docsend-id="' + id
+           + '" title="Enviar el PDF al cliente por WhatsApp" aria-label="Enviar PDF por WhatsApp">' + iWa + '</button>';
+    }
+
     if (x.propuestas.length) {
       h += sec('Propuestas', '', x.propuestas.map(function (p) {
-        return '<button type="button" class="ib-ctx-a" data-ver="../cotizaciones/ver.php?id=' + p.id + '" '
+        return '<div class="ib-ctx-row">'
+             + '<button type="button" class="ib-ctx-a" data-ver="../cotizaciones/ver.php?id=' + p.id + '" '
              + 'data-titulo="Propuesta ' + esc(p.numero) + '">'
              + '<span class="ib-ctx-nom">' + esc(p.numero) + '</span>'
-             + '<span class="ib-ctx-est">' + esc(p.estado) + '</span>' + iAbrir + '</button>';
+             + '<span class="ib-ctx-est">' + esc(p.estado) + '</span>' + iAbrir + '</button>'
+             + (Number(p.tiene_pdf) ? docSend('cotizacion', p.id) : '')
+             + '</div>';
       }).join(''));
     }
     if (x.envios.length) {
@@ -2661,9 +2698,12 @@ $ia_disponible = IaAgente::disponible();
     if (x.certificados && x.certificados.length) {
       h += sec('Certificados', iCert, x.certificados.map(function (ct) {
         var vig = ct.estado === 'vigente';
-        return '<div class="ib-ctx-a" style="cursor:default">'
+        return '<div class="ib-ctx-row">'
+             + '<div class="ib-ctx-a" style="cursor:default">'
              + '<span class="ib-ctx-nom">' + esc(ct.norma || '—') + '</span>'
              + '<span class="ib-ctx-est ' + (vig ? 'ok' : '') + '">' + (vig ? 'vigente' : 'en proceso') + '</span></div>'
+             + (Number(ct.tiene_pdf) ? docSend('certificado', ct.id) : '')
+             + '</div>'
              + (ct.fecha_vencimiento ? '<div class="ib-ctx-s2">Vence ' + esc(ct.fecha_vencimiento) + '</div>' : '');
       }).join(''));
     }
@@ -3115,6 +3155,10 @@ $ia_disponible = IaAgente::disponible();
 
     // Agendar llamada (mismo sistema del CRM)
     if (e.target.closest('#ib-agendar-llamada')) { modalAgendarLlamada(); return; }
+
+    // Enviar PDF del cliente (propuesta / certificado) por WhatsApp
+    var ds = e.target.closest('[data-docsend-tipo]');
+    if (ds) { enviarDocumento(ds.dataset.docsendTipo, ds.dataset.docsendId, ds); return; }
 
     // Respuestas rápidas (canned)
     if (e.target.closest('#ib-rapidas')) { popRapidas(e.target.closest('#ib-rapidas')); return; }

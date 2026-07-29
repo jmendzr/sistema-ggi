@@ -634,6 +634,76 @@ if ($accion === 'reaccionar') {
     exit;
 }
 
+// ══ Enviar un documento del cliente (propuesta / certificado) por WhatsApp ═══
+if ($accion === 'enviar_documento') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $id      = (int) ($_POST['id'] ?? 0);
+    $tipoDoc = $_POST['doc_tipo'] ?? '';
+    $docId   = (int) ($_POST['doc_id'] ?? 0);
+    if (!$id || !$docId || !in_array($tipoDoc, ['cotizacion', 'certificado'], true)) {
+        echo json_encode(['ok' => false, 'msg' => 'Datos inválidos']); exit;
+    }
+
+    $q = $pdo->prepare("SELECT telefono, asignado_a, ventana_expira_at, phone_number_id, cliente_id
+                          FROM wa_conversaciones WHERE id = ?");
+    $q->execute([$id]);
+    $conv = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$conv)                                    { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+    if (!$conv['cliente_id'])                      { echo json_encode(['ok' => false, 'msg' => 'La conversación no está vinculada a una empresa']); exit; }
+    if ((int) $conv['asignado_a'] !== $yo)         { echo json_encode(['ok' => false, 'msg' => 'Toma la conversación para poder enviar']); exit; }
+    if (!WaInbox::ventanaAbierta($conv['ventana_expira_at'])) {
+        echo json_encode(['ok' => false, 'msg' => 'La ventana de 24 h venció: solo se pueden enviar plantillas.']); exit;
+    }
+
+    // Resolver el archivo verificando que pertenece al cliente de la conversación
+    if ($tipoDoc === 'cotizacion') {
+        $d = $pdo->prepare("SELECT archivo_pdf AS arch, numero FROM cotizaciones
+                             WHERE id = ? AND cliente_id = ? AND deleted_at IS NULL");
+        $d->execute([$docId, $conv['cliente_id']]);
+        $doc = $d->fetch(PDO::FETCH_ASSOC);
+        $nombre = $doc ? ('Propuesta ' . $doc['numero'] . '.pdf') : 'Propuesta.pdf';
+    } else {
+        $d = $pdo->prepare("SELECT certificado_archivo AS arch, numero_certificado FROM certificados
+                             WHERE id = ? AND cliente_id = ? AND deleted_at IS NULL");
+        $d->execute([$docId, $conv['cliente_id']]);
+        $doc = $d->fetch(PDO::FETCH_ASSOC);
+        $nombre = ($doc && $doc['numero_certificado']) ? ('Certificado ' . $doc['numero_certificado'] . '.pdf') : 'Certificado.pdf';
+    }
+    if (!$doc || empty($doc['arch'])) { echo json_encode(['ok' => false, 'msg' => 'Ese documento no tiene un archivo PDF cargado.']); exit; }
+
+    // Ruta local segura (dentro de UPLOAD_PATH; evita path traversal)
+    $ruta = realpath(rtrim(UPLOAD_PATH, '/') . '/' . ltrim($doc['arch'], '/'));
+    $base = realpath(UPLOAD_PATH);
+    if (!$ruta || !$base || !str_starts_with($ruta, $base) || !is_readable($ruta)) {
+        echo json_encode(['ok' => false, 'msg' => 'No se encontró el archivo del documento.']); exit;
+    }
+
+    $mime = mime_content_type($ruta) ?: 'application/pdf';
+    $mediaId = WhatsAppService::uploadMedia($ruta, $mime);
+    if (!$mediaId) { echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo subir el archivo']); exit; }
+
+    $pie  = trim($_POST['texto'] ?? '') ?: null;
+    $waId = WhatsAppService::sendMedia($conv['telefono'], 'document', $mediaId, $pie, $nombre);
+
+    WaInbox::registrarSaliente(
+        $pdo, $conv['telefono'], $waId, 'document', $pie,
+        null, $yo, $waId ? 'sent' : 'failed',
+        $waId ? null : WhatsAppService::lastError(), $conv['phone_number_id']
+    );
+    if ($waId) {
+        $pdo->prepare("UPDATE wa_mensajes SET media_id = ?, media_mime = ?, media_nombre = ? WHERE wa_message_id = ?")
+            ->execute([$mediaId, $mime, $nombre, $waId]);
+    }
+
+    echo $waId
+        ? json_encode(['ok' => true, 'msg' => 'Documento enviado'])
+        : json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar']);
+    exit;
+}
+
 // ══ Marcar como no leída (manual) ════════════════════════════════════════════
 if ($accion === 'sin_leer') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
@@ -1199,9 +1269,12 @@ if ($accion === 'lista') {
     }
 
     if ($buscar !== '') {
-        $where[] = '(c.telefono LIKE ? OR cl.razon_social LIKE ? OR c.ultimo_mensaje_preview LIKE ?)';
+        // Búsqueda global: teléfono, empresa, último preview y — lo nuevo — el
+        // contenido de CUALQUIER mensaje del hilo (EXISTS sobre wa_mensajes).
+        $where[] = '(c.telefono LIKE ? OR cl.razon_social LIKE ? OR c.ultimo_mensaje_preview LIKE ?'
+                 . ' OR EXISTS (SELECT 1 FROM wa_mensajes m WHERE m.conversacion_id = c.id AND m.texto LIKE ?))';
         $like = '%' . $buscar . '%';
-        array_push($args, $like, $like, $like);
+        array_push($args, $like, $like, $like, $like);
     }
 
     $st = $pdo->prepare(
@@ -1377,7 +1450,9 @@ if ($accion === 'hilo') {
     if ($conv['cliente_id']) {
         $cid = (int) $conv['cliente_id'];
 
-        $q = $pdo->prepare("SELECT id, numero, estado FROM cotizaciones
+        $q = $pdo->prepare("SELECT id, numero, estado,
+                                   (archivo_pdf IS NOT NULL AND archivo_pdf <> '') AS tiene_pdf
+                              FROM cotizaciones
                              WHERE cliente_id = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 5");
         $q->execute([$cid]);
         $ctx['propuestas'] = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -1388,7 +1463,8 @@ if ($accion === 'hilo') {
         $ctx['envios'] = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         // Certificados del cliente (norma + estado + vencimiento)
-        $q = $pdo->prepare("SELECT n.codigo AS norma, c.estado, c.fecha_vencimiento
+        $q = $pdo->prepare("SELECT c.id, n.codigo AS norma, c.estado, c.fecha_vencimiento,
+                                   (c.certificado_archivo IS NOT NULL AND c.certificado_archivo <> '') AS tiene_pdf
                               FROM certificados c LEFT JOIN normas_iso n ON n.id = c.norma_iso_id
                              WHERE c.cliente_id = ? AND c.deleted_at IS NULL
                              ORDER BY c.id DESC LIMIT 6");
