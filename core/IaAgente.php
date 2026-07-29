@@ -19,20 +19,48 @@ class IaAgente
 
     public static function lastError(): ?string { return self::$lastError; }
 
-    /** ¿Hay un motor con llave lista? Sirve para mostrar/ocultar el botón. */
+    /** ¿Hay al menos un motor con llave listo? Sirve para mostrar/ocultar el botón. */
     public static function disponible(): bool
     {
-        switch (self::provider()) {
+        return count(self::chain()) > 0;
+    }
+
+    /**
+     * Orden de motores a intentar. IA_PROVIDER admite:
+     *   - 'auto' (o vacío): usa TODOS los configurados, orden por defecto gemini→claude→openai
+     *     (el gratis primero para ahorrar costo).
+     *   - una lista separada por comas ('claude,gemini') para fijar tu propio orden.
+     *   - un solo nombre ('gemini') para usar solo ese.
+     * Siempre se filtra a los que realmente tienen llave.
+     */
+    private static function chain(): array
+    {
+        $raw   = strtolower(trim((string) IA_PROVIDER));
+        $known = ['gemini', 'claude', 'openai'];
+
+        if ($raw === '' || $raw === 'auto' || $raw === 'all' || $raw === 'todos') {
+            $order = ['gemini', 'claude', 'openai'];
+        } elseif (str_contains($raw, ',')) {
+            $order = array_map('trim', explode(',', $raw));
+        } else {
+            $order = [$raw];
+        }
+
+        $out = [];
+        foreach ($order as $p) {
+            if (!in_array($p, $known, true)) $p = 'claude';
+            if (!in_array($p, $out, true) && self::configurado($p)) $out[] = $p;
+        }
+        return $out;
+    }
+
+    private static function configurado(string $p): bool
+    {
+        switch ($p) {
             case 'openai': return IA_OPENAI_KEY !== '';
             case 'gemini': return count(self::geminiKeys()) > 0;
             default:       return IA_ANTHROPIC_KEY !== '';
         }
-    }
-
-    private static function provider(): string
-    {
-        $p = strtolower(trim((string) IA_PROVIDER));
-        return in_array($p, ['openai', 'gemini'], true) ? $p : 'claude';
     }
 
     /** Llaves de Gemini configuradas, en orden (1ª preferida, 2ª de respaldo). */
@@ -170,17 +198,27 @@ class IaAgente
                 . "\n\n----\nRedacta ÚNICAMENTE el texto del próximo mensaje que nosotros (GGI) le enviaríamos al cliente. "
                 . "Sin saludos protocolarios largos, sin explicar tu razonamiento, solo el mensaje listo para enviar.";
 
-        switch (self::provider()) {
-            case 'openai': $texto = self::llamarOpenAI($system, $user); break;
-            case 'gemini': $texto = self::llamarGemini($system, $user); break;
-            default:       $texto = self::llamarClaude($system, $user); break;
+        // Cadena de respaldo: intenta cada motor configurado hasta que uno responda.
+        $chain = self::chain();
+        if (!$chain) {
+            return ['ok' => false, 'error' => 'El copiloto de IA no está configurado (falta la API key en .env).'];
         }
 
-        if ($texto === null) {
-            return ['ok' => false, 'error' => self::$lastError ?: 'No se pudo generar la sugerencia.'];
+        $errs = [];
+        foreach ($chain as $prov) {
+            switch ($prov) {
+                case 'openai': $texto = self::llamarOpenAI($system, $user); break;
+                case 'gemini': $texto = self::llamarGemini($system, $user); break;
+                default:       $texto = self::llamarClaude($system, $user); break;
+            }
+            if ($texto !== null && trim($texto) !== '') {
+                return ['ok' => true, 'texto' => trim($texto), 'error' => null, 'motor' => $prov];
+            }
+            if (self::$lastError) $errs[] = self::$lastError;
         }
 
-        return ['ok' => true, 'texto' => trim($texto), 'error' => null];
+        self::$lastError = $errs ? implode(' | ', $errs) : null;
+        return ['ok' => false, 'error' => self::$lastError ?: 'No se pudo generar la sugerencia.'];
     }
 
     private static function hiloTexto(array $mensajes): string

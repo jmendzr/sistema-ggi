@@ -114,7 +114,7 @@ define('META_APP_ID',             env('META_APP_ID',             '14863299499109
 // ── Agente IA (copiloto del inbox) ────────────────────────────────────────────
 //  Conmutable por IA_PROVIDER: 'claude' (Anthropic) u 'openai'. Las llaves viven
 //  en .env (fuera del repo), nunca aquí. Sin llave → el copiloto queda inactivo.
-define('IA_PROVIDER',       env('IA_PROVIDER',       'claude'));   // claude | openai | gemini
+define('IA_PROVIDER',       env('IA_PROVIDER',       'claude'));   // auto | gemini | claude | openai | lista "gemini,claude,openai"
 define('IA_ANTHROPIC_KEY',  env('IA_ANTHROPIC_KEY',  ''));
 define('IA_ANTHROPIC_MODEL',env('IA_ANTHROPIC_MODEL','claude-sonnet-4-5-20250929'));
 define('IA_OPENAI_KEY',     env('IA_OPENAI_KEY',     ''));
