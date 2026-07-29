@@ -1167,7 +1167,14 @@ $ia_disponible = IaAgente::disponible();
             +   (tag + etapa + etqs ? '<span class="ib-item-m">' + tag + etapa + etqs + '</span>' : '')
             + '</span></button>';
         }).join('');
-      }).catch(function () {});
+      }).catch(function (err) {
+        // Antes se tragaba el error → la lista quedaba en blanco sin aviso.
+        if (window.console) console.error('[inbox] lista:', err);
+        var c = $('#ib-lista');
+        if (c && !c.querySelector('.ib-item'))
+          c.innerHTML = '<div class="ib-empty">No se pudieron cargar las conversaciones. '
+                      + '<button type="button" class="btn btn-ghost ib-btn-sm" onclick="location.reload()">Reintentar</button></div>';
+      });
   }
 
   // Selector de bandeja: solo tiene sentido con mas de un numero
