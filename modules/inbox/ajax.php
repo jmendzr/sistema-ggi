@@ -35,6 +35,20 @@ function wa_estado_label(?string $e): string
     ][$e] ?? '';
 }
 
+// Etapa del embudo derivada AUTOMÁTICAMENTE del estado real del cliente.
+// La más avanzada gana. $cidCol es un nombre de columna (no entra input de usuario).
+function gg_etapa_case(string $cidCol): string
+{
+    return "CASE
+        WHEN EXISTS(SELECT 1 FROM certificados ce WHERE ce.cliente_id=$cidCol AND ce.deleted_at IS NULL AND ce.estado='vigente') THEN 'certificado'
+        WHEN EXISTS(SELECT 1 FROM cotizaciones co WHERE co.cliente_id=$cidCol AND co.deleted_at IS NULL AND co.estado='aceptada') THEN 'cliente'
+        WHEN EXISTS(SELECT 1 FROM cotizaciones co WHERE co.cliente_id=$cidCol AND co.deleted_at IS NULL AND co.estado='enviada') THEN 'negociacion'
+        WHEN EXISTS(SELECT 1 FROM cotizaciones co WHERE co.cliente_id=$cidCol AND co.deleted_at IS NULL) THEN 'frio'
+        WHEN $cidCol IS NOT NULL THEN 'lead'
+        ELSE NULL END";
+}
+const GG_ETAPAS = ['lead', 'negociacion', 'cliente', 'certificado', 'frio'];
+
 // ══ Acciones de escritura ════════════════════════════════════════════════════
 if ($accion === 'asignar' || $accion === 'liberar') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -1252,6 +1266,14 @@ if ($accion === 'lista') {
         $where[] = "c.estado = 'abierta' AND (SELECT m.direccion FROM wa_mensajes m
                      WHERE m.conversacion_id = c.id ORDER BY m.id DESC LIMIT 1) = 'in'";
     }
+    // Etapa del embudo: filtro "etapa:<code>"
+    elseif (str_starts_with($filtro, 'etapa:')) {
+        $et = substr($filtro, 6);
+        if (in_array($et, GG_ETAPAS, true)) {
+            $where[] = gg_etapa_case('c.cliente_id') . ' = ?';
+            $args[]  = $et;
+        }
+    }
 
     // Archivadas: viven fuera del listado principal. Solo la vista "archivadas"
     // las muestra; cualquier otro filtro las oculta.
@@ -1282,6 +1304,7 @@ if ($accion === 'lista') {
                 c.fijada, c.archivada, c.silenciada,
                 c.ventana_expira_at, c.ultimo_mensaje_at, c.ultimo_mensaje_preview, c.estado, cl.razon_social,
                 (SELECT m.direccion FROM wa_mensajes m WHERE m.conversacion_id = c.id ORDER BY m.id DESC LIMIT 1) AS ultima_dir,
+                " . gg_etapa_case('c.cliente_id') . " AS etapa,
                 TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS asignado_nombre
            FROM wa_conversaciones c
            LEFT JOIN clientes cl ON cl.id = c.cliente_id
@@ -1331,6 +1354,7 @@ if ($accion === 'lista') {
             'esperando'   => ($r['ultima_dir'] === 'in' && $r['estado'] === 'abierta'),
             'horas_espera'=> ($r['ultima_dir'] === 'in' && $r['ultimo_mensaje_at'])
                               ? (int) floor((time() - strtotime($r['ultimo_mensaje_at'])) / 3600) : null,
+            'etapa'       => $r['etapa'],
             'ventana_abierta' => WaInbox::ventanaAbierta($r['ventana_expira_at']),
             'etiquetas'       => $etqPorConv[$r['id']] ?? [],
         ];
@@ -1353,6 +1377,19 @@ if ($accion === 'lista') {
     );
     $c->execute($aCont);
     $cn = $c->fetch(PDO::FETCH_ASSOC) ?: [];
+
+    // Conteos por etapa del embudo (solo conversaciones activas, no archivadas)
+    $eq = $pdo->prepare(
+        "SELECT etapa, COUNT(*) n FROM (
+            SELECT " . gg_etapa_case('c.cliente_id') . " AS etapa
+              FROM wa_conversaciones c WHERE $wCont AND c.archivada = 0
+         ) t WHERE etapa IS NOT NULL GROUP BY etapa"
+    );
+    // $wCont usa el mismo binding de $aCont pero SIN el primer '?' (mias = $yo);
+    // aquí no hay '= ?' de mias, así que se quita el primer arg.
+    $eq->execute(array_slice($aCont, 1));
+    $embudo = [];
+    foreach ($eq as $r) $embudo[$r['etapa']] = (int) $r['n'];
 
     // Bandejas disponibles (números que el usuario puede ver), con su conteo.
     // Solo se ofrece el selector si hay más de una: con un número no aporta.
@@ -1381,7 +1418,7 @@ if ($accion === 'lista') {
         'sin_asignar' => (int) ($cn['sin_asignar'] ?? 0),
         'sin_persona' => (int) ($cn['sin_persona'] ?? 0),
         'sin_responder' => (int) ($cn['sin_responder'] ?? 0),
-    ]]);
+    ], 'embudo' => $embudo]);
     exit;
 }
 
@@ -1392,6 +1429,7 @@ if ($accion === 'hilo') {
 
     $st = $pdo->prepare(
         "SELECT c.*, cl.razon_social, cl.ruc, cl.contacto_nombre,
+                " . gg_etapa_case('c.cliente_id') . " AS etapa,
                 TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS asignado_nombre
            FROM wa_conversaciones c
            LEFT JOIN clientes cl ON cl.id = c.cliente_id
@@ -1521,6 +1559,7 @@ if ($accion === 'hilo') {
         'ventana_abierta' => WaInbox::ventanaAbierta($conv['ventana_expira_at']),
         'ventana_expira'  => $conv['ventana_expira_at'],
         'estado'          => $conv['estado'],
+        'etapa'           => $conv['etapa'],
     ], 'mensajes' => $mensajes, 'contexto' => $ctx, 'etiquetas' => $etiquetas]);
     exit;
 }

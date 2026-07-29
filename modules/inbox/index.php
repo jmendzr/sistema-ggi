@@ -513,6 +513,19 @@ $ia_disponible = IaAgente::disponible();
   /* ── Complementos: alerta sin responder, notas, respuestas rápidas ─────── */
   /* Pill "Sin responder" con acento de alerta cuando hay pendientes */
   .ib-pill-alerta b:not(:empty) { color: var(--s-err, #dc2626); }
+  /* Etapas del embudo: título + pills con punto de color y conteo */
+  .ib-embudo { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .ib-emb-tit { width: 100%; font-size: .6rem; font-weight: 700; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--tx3); margin-bottom: 1px; }
+  .ib-emb-pill { display: inline-flex; align-items: center; gap: 5px; }
+  .ib-emb-pill .ib-emb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--emb, #64748B); flex-shrink: 0; }
+  .ib-emb-pill.on { background: var(--emb, var(--ac)); color: #fff; border-color: var(--emb, var(--ac)); }
+  .ib-emb-pill.on .ib-emb-dot { background: #fff; }
+  .ib-emb-pill b { color: inherit; opacity: .8; }
+  /* Badge de etapa (fila del listado y panel de contexto) */
+  .ib-emb-badge { display: inline-flex; align-items: center; font-size: .64rem; font-weight: 700;
+    padding: 2px 8px; border-radius: 999px; color: #fff; background: var(--emb, #64748B);
+    white-space: nowrap; }
   /* Fila esperando respuesta: acento rojo a la izquierda + chip */
   .ib-item.esperando { box-shadow: inset 3px 0 0 var(--s-err, #dc2626); }
   .ib-esperando { display: inline-flex; align-items: center; justify-content: center;
@@ -854,6 +867,8 @@ $ia_disponible = IaAgente::disponible();
         <button type="button" class="ib-pill" data-f="archivadas">Archivados</button>
         <button type="button" class="ib-pill" id="ib-etq-activa" style="display:none"></button>
       </div>
+      <!-- Etapas del embudo (automáticas por estado del cliente); se rellenan por JS -->
+      <div class="ib-embudo" id="ib-embudo"></div>
     </div>
     <div class="ib-search">
       <span class="ib-search-in">
@@ -904,6 +919,15 @@ $ia_disponible = IaAgente::disponible();
   var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)) ?>;
   var IA_ON   = <?= json_encode((bool) $ia_disponible) ?>;
   var YO      = <?= (int) ($_SESSION['usuario']['id'] ?? 0) ?>;
+  // Etapas del embudo (código → etiqueta + color). Se calculan solas en el backend.
+  var EMBUDO = [
+    { k: 'lead',        n: 'Lead',           c: '#64748B' },
+    { k: 'negociacion', n: 'En negociación', c: '#0EA5E9' },
+    { k: 'cliente',     n: 'Cliente',        c: '#F59E0B' },
+    { k: 'certificado', n: 'Certificado',    c: '#10B981' },
+    { k: 'frio',        n: 'Frío',           c: '#EF4444' }
+  ];
+  var EMBUDO_MAP = {}; EMBUDO.forEach(function (e) { EMBUDO_MAP[e.k] = e; });
   var $ = function (s) { return document.querySelector(s); };
 
   // Iconos SVG (nunca emoji como icono de UI). Trazo, heredan currentColor.
@@ -1026,6 +1050,20 @@ $ia_disponible = IaAgente::disponible();
           if (e) e.textContent = j.conteos[k] ? ' ' + j.conteos[k] : '';
         });
 
+        // Etapas del embudo (pills con conteo, estilo del CRM de la referencia)
+        var emb = j.embudo || {};
+        var embEl = $('#ib-embudo');
+        if (embEl) {
+          embEl.innerHTML = '<div class="ib-emb-tit">Etapas del embudo</div>'
+            + EMBUDO.map(function (et) {
+                var n = emb[et.k] || 0;
+                var on = (st.f === 'etapa:' + et.k) ? ' on' : '';
+                return '<button type="button" class="ib-pill ib-emb-pill' + on + '" data-f="etapa:' + et.k + '" '
+                     + 'style="--emb:' + et.c + '"><span class="ib-emb-dot"></span>' + et.n
+                     + '<b>' + n + '</b></button>';
+              }).join('');
+        }
+
         pintarBandejas(j.bandejas || []);
 
         var c = $('#ib-lista');
@@ -1039,6 +1077,8 @@ $ia_disponible = IaAgente::disponible();
           var etqs = (it.etiquetas || []).map(function (e) {
             return '<span class="ib-etq ' + esc(e.color || 'neutral') + '">' + esc(e.nombre) + '</span>';
           }).join('');
+          var etapa = (it.etapa && EMBUDO_MAP[it.etapa])
+            ? '<span class="ib-emb-badge" style="--emb:' + EMBUDO_MAP[it.etapa].c + '">' + EMBUDO_MAP[it.etapa].n + '</span>' : '';
 
           // "No leída" manual O mensajes nuevos → punto azul en la fila
           var pendiente = it.no_leidos || it.sin_leer;
@@ -1072,7 +1112,7 @@ $ia_disponible = IaAgente::disponible();
                     : (it.sin_leer ? '<span class="ib-unread punto"></span>' : ''))
             +     '</span>'
             +   '</span>'
-            +   (tag + etqs ? '<span class="ib-item-m">' + tag + etqs + '</span>' : '')
+            +   (tag + etapa + etqs ? '<span class="ib-item-m">' + tag + etapa + etqs + '</span>' : '')
             + '</span></button>';
         }).join('');
       }).catch(function () {});
@@ -2657,6 +2697,9 @@ $ia_disponible = IaAgente::disponible();
         + 'data-titulo="' + esc(c.titulo) + '">'
         + '<span class="ib-ctx-nom">' + esc(c.titulo) + '</span>' + iAbrir + '</button>'
         + (c.ruc ? '<div class="ib-ctx-s2">RUC ' + esc(c.ruc) + '</div>' : '')
+        + (c.etapa && EMBUDO_MAP[c.etapa]
+            ? '<div style="margin-top:7px"><span class="ib-emb-badge" style="--emb:' + EMBUDO_MAP[c.etapa].c + '">'
+              + EMBUDO_MAP[c.etapa].n + '</span></div>' : '')
       : '<div class="ib-ctx-s2">Número no vinculado a ninguna empresa</div>');
 
     // Agendar llamada (reusa el sistema de llamadas programadas del CRM)
