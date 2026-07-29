@@ -261,9 +261,12 @@ $ia_disponible = IaAgente::disponible();
     border-bottom: 1px solid var(--brd); flex-shrink: 0;
   }
   .ib-chat-n { font-size: .92rem; font-weight: 700; color: var(--tx);
-               display: flex; align-items: center; gap: 6px; }
+               display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .ib-chat-n-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ib-chat-n .ib-linkico { flex-shrink: 0; }
   .ib-chat-n a { color: var(--ac); display: inline-flex; }
-  .ib-chat-ph { font-size: .74rem; color: var(--tx3); }
+  .ib-chat-ph { font-size: .74rem; color: var(--tx3);
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* Fondo de conversación: patrón propio de trazos sutiles (no es el arte de
      WhatsApp). Se adapta a claro/oscuro cambiando el color del trazo. */
@@ -654,12 +657,15 @@ $ia_disponible = IaAgente::disponible();
     .ib-pill { padding: 4px 10px; }
 
     /* Cabecera del hilo: los controles no deben apretujar el nombre */
-    .ib-chat-head { padding: 9px 10px; gap: 7px; flex-wrap: nowrap; }
+    .ib-chat-head { padding: 9px 10px; gap: 6px; flex-wrap: nowrap; }
     .ib-chat-n { font-size: .9rem; }
     .ib-chat-head .ib-icon { width: 36px; height: 36px; flex-shrink: 0; }
     /* El botón de acción (Tomar/Soltar) se compacta para no romper la fila */
-    .ib-chat-head .ib-btn-sm { padding: 6px 10px; font-size: .74rem; white-space: nowrap; flex-shrink: 0; }
+    .ib-chat-head .ib-btn-sm { padding: 6px 9px; font-size: .74rem; white-space: nowrap; flex-shrink: 0; }
     .ib-chat-head .ib-tag { flex-shrink: 0; }
+    /* Reasignar queda solo con ícono en móvil (secundario); su texto se oculta */
+    .ib-chat-head .ib-reasignar-btn .ib-lbl-desk { display: none; }
+    .ib-chat-head .ib-reasignar-btn svg { margin-right: 0 !important; }
 
     /* Mensajes */
     .ib-b-wrap { max-width: 86%; }
@@ -1257,7 +1263,7 @@ $ia_disponible = IaAgente::disponible();
               + '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="15" height="15" '
               + 'style="vertical-align:-3px;margin-right:4px">'
               + '<path stroke-linecap="round" stroke-linejoin="round" '
-              + 'd="M16 3l4 4-4 4M20 7H8M8 21l-4-4 4-4M4 17h12"/></svg>Reasignar</button>';
+              + 'd="M16 3l4 4-4 4M20 7H8M8 21l-4-4 4-4M4 17h12"/></svg><span class="ib-lbl-desk">Reasignar</span></button>';
     }
 
     // Meta solo admite texto libre dentro de las 24h desde el último entrante
@@ -1374,7 +1380,7 @@ $ia_disponible = IaAgente::disponible();
       +   '<span class="ib-av ' + colorDe(c.telefono) + (c.ventana_abierta ? ' viva' : '') + '">'
       +     esc(ini(c.titulo)) + '</span>'
       +   '<div style="flex:1;min-width:0">'
-      +     '<div class="ib-chat-n">' + esc(c.titulo)
+      +     '<div class="ib-chat-n"><span class="ib-chat-n-txt">' + esc(c.titulo) + '</span>'
       +       (c.cliente_id ? ' <button type="button" class="ib-linkico" data-ver="../clientes/ver.php?id=' + c.cliente_id + '" '
       +         'data-titulo="' + esc(c.titulo) + '" title="Abrir ficha de la empresa" aria-label="Abrir ficha de la empresa">'
       +         '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
