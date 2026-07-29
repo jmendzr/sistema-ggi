@@ -748,9 +748,17 @@ $ia_disponible = IaAgente::disponible();
   .ib.sin-lista.sin-ctx { grid-template-columns: minmax(0, 1fr); }
 
   @media (max-width: 1180px) {
-    .ib, .ib.sin-lista, .ib.sin-ctx { grid-template-columns: 300px minmax(0,1fr); }
+    .ib, .ib.sin-lista, .ib.sin-ctx { grid-template-columns: 300px minmax(0,1fr); position: relative; }
+    /* El contexto no cabe como 3ª columna aquí; se abre como capa con el botón "i". */
     .ib-ctx { display: none; }
     .ib-solo-desk { display: none; }
+    .ib-solo-movil { display: inline-flex; }
+    .ib.ver-ctx .ib-ctx {
+      display: block; position: absolute; top: 0; right: 0; bottom: 0;
+      width: min(340px, 92%); z-index: 30; background: var(--bg-surface);
+      border-left: 1px solid var(--brd); box-shadow: -8px 0 28px rgba(0,0,0,.14);
+      overflow-y: auto; animation: ib-ctx-in .18s ease;
+    }
   }
 
   @media (max-width: 768px) {
