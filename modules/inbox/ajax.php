@@ -985,6 +985,89 @@ if ($accion === 'ia_sugerir') {
     exit;
 }
 
+// ── Notas internas (privadas del equipo; NUNCA se envían al cliente) ─────────
+if ($accion === 'nota_crear') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    $id    = (int) ($_POST['id'] ?? 0);
+    $texto = trim($_POST['texto'] ?? '');
+    if (!$id)          { echo json_encode(['ok' => false, 'msg' => 'Conversación inválida']); exit; }
+    if ($texto === '') { echo json_encode(['ok' => false, 'msg' => 'Escribe la nota']); exit; }
+    $texto = mb_substr($texto, 0, 2000);
+    $ok = $pdo->query("SELECT id FROM wa_conversaciones WHERE id = " . $id)->fetchColumn();
+    if (!$ok) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+    $pdo->prepare("INSERT INTO wa_conversacion_notas (conversacion_id, usuario_id, nota) VALUES (?,?,?)")
+        ->execute([$id, $yo, $texto]);
+    $nid = (int) $pdo->lastInsertId();
+    $autor = trim(($_SESSION['usuario']['nombre'] ?? '') . ' ' . ($_SESSION['usuario']['apellido'] ?? ''));
+    echo json_encode(['ok' => true, 'nota' => [
+        'id' => $nid, 'nota' => $texto, 'autor' => $autor,
+        'usuario_id' => $yo, 'created_at' => date('Y-m-d H:i:s'),
+    ]]);
+    exit;
+}
+
+if ($accion === 'nota_borrar') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    $nid = (int) ($_POST['nota_id'] ?? 0);
+    if (!$nid) { echo json_encode(['ok' => false, 'msg' => 'Nota inválida']); exit; }
+    // Solo el autor o gerencia pueden borrar
+    $q = $pdo->prepare("SELECT usuario_id FROM wa_conversacion_notas WHERE id = ?");
+    $q->execute([$nid]);
+    $row = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$row) { echo json_encode(['ok' => false, 'msg' => 'Nota no encontrada']); exit; }
+    if ((int) $row['usuario_id'] !== $yo && !$esJefe) {
+        echo json_encode(['ok' => false, 'msg' => 'Solo el autor o gerencia pueden borrar la nota']); exit;
+    }
+    $pdo->prepare("DELETE FROM wa_conversacion_notas WHERE id = ?")->execute([$nid]);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+// ── Respuestas rápidas (canned) compartidas por el equipo ────────────────────
+if ($accion === 'respuestas') {
+    $q = $pdo->query("SELECT id, atajo, texto FROM wa_respuestas_rapidas WHERE activo = 1 ORDER BY atajo");
+    echo json_encode(['ok' => true, 'items' => $q->fetchAll(PDO::FETCH_ASSOC) ?: []]);
+    exit;
+}
+
+if ($accion === 'respuesta_guardar') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    $rid   = (int) ($_POST['rr_id'] ?? 0);
+    $atajo = trim($_POST['atajo'] ?? '');
+    $texto = trim($_POST['texto'] ?? '');
+    $atajo = preg_replace('/[^a-z0-9_\-]/', '', mb_strtolower($atajo));
+    if ($atajo === '' || $texto === '') { echo json_encode(['ok' => false, 'msg' => 'Atajo y texto son obligatorios']); exit; }
+    $atajo = mb_substr($atajo, 0, 40);
+    $texto = mb_substr($texto, 0, 2000);
+    try {
+        if ($rid) {
+            $pdo->prepare("UPDATE wa_respuestas_rapidas SET atajo = ?, texto = ? WHERE id = ?")
+                ->execute([$atajo, $texto, $rid]);
+        } else {
+            $pdo->prepare("INSERT INTO wa_respuestas_rapidas (atajo, texto, creado_por) VALUES (?,?,?)")
+                ->execute([$atajo, $texto, $yo]);
+            $rid = (int) $pdo->lastInsertId();
+        }
+    } catch (\Throwable $e) {
+        echo json_encode(['ok' => false, 'msg' => 'Ese atajo ya existe. Usa otro nombre.']); exit;
+    }
+    echo json_encode(['ok' => true, 'id' => $rid, 'atajo' => $atajo, 'texto' => $texto]);
+    exit;
+}
+
+if ($accion === 'respuesta_borrar') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    $rid = (int) ($_POST['rr_id'] ?? 0);
+    if (!$rid) { echo json_encode(['ok' => false, 'msg' => 'Respuesta inválida']); exit; }
+    $pdo->prepare("UPDATE wa_respuestas_rapidas SET activo = 0 WHERE id = ?")->execute([$rid]);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
 if ($accion === 'enviar') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;
@@ -1089,6 +1172,11 @@ if ($accion === 'lista') {
     elseif ($filtro === 'sin_asignar') { $where[] = 'c.asignado_a IS NULL'; }
     // "Sin persona": el número no está vinculado a ninguna empresa del sistema
     elseif ($filtro === 'sin_persona') { $where[] = 'c.cliente_id IS NULL'; }
+    // "Sin responder": el último mensaje es del cliente y la conversación sigue abierta
+    elseif ($filtro === 'sin_responder') {
+        $where[] = "c.estado = 'abierta' AND (SELECT m.direccion FROM wa_mensajes m
+                     WHERE m.conversacion_id = c.id ORDER BY m.id DESC LIMIT 1) = 'in'";
+    }
 
     // Archivadas: viven fuera del listado principal. Solo la vista "archivadas"
     // las muestra; cualquier otro filtro las oculta.
@@ -1114,7 +1202,8 @@ if ($accion === 'lista') {
     $st = $pdo->prepare(
         "SELECT c.id, c.telefono, c.cliente_id, c.asignado_a, c.asignado_at, c.no_leidos, c.sin_leer_manual,
                 c.fijada, c.archivada, c.silenciada,
-                c.ventana_expira_at, c.ultimo_mensaje_at, c.ultimo_mensaje_preview, cl.razon_social,
+                c.ventana_expira_at, c.ultimo_mensaje_at, c.ultimo_mensaje_preview, c.estado, cl.razon_social,
+                (SELECT m.direccion FROM wa_mensajes m WHERE m.conversacion_id = c.id ORDER BY m.id DESC LIMIT 1) AS ultima_dir,
                 TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS asignado_nombre
            FROM wa_conversaciones c
            LEFT JOIN clientes cl ON cl.id = c.cliente_id
@@ -1159,6 +1248,11 @@ if ($accion === 'lista') {
             'es_mia'          => ((int) $r['asignado_a']) === $yo,
             // Sin liberación automática, una conversación estancada debe notarse
             'dias_asignada'   => $r['asignado_at'] ? (int) floor((time() - strtotime($r['asignado_at'])) / 86400) : null,
+            // "Esperando respuesta": el cliente escribió último y sigue abierta.
+            // horas_espera alimenta el resaltado (rojo si lleva mucho sin respuesta).
+            'esperando'   => ($r['ultima_dir'] === 'in' && $r['estado'] === 'abierta'),
+            'horas_espera'=> ($r['ultima_dir'] === 'in' && $r['ultimo_mensaje_at'])
+                              ? (int) floor((time() - strtotime($r['ultimo_mensaje_at'])) / 3600) : null,
             'ventana_abierta' => WaInbox::ventanaAbierta($r['ventana_expira_at']),
             'etiquetas'       => $etqPorConv[$r['id']] ?? [],
         ];
@@ -1172,7 +1266,11 @@ if ($accion === 'lista') {
     }
     $c = $pdo->prepare(
         "SELECT COUNT(*) todas, SUM(asignado_a = ?) mias,
-                SUM(asignado_a IS NULL) sin_asignar, SUM(cliente_id IS NULL) sin_persona
+                SUM(asignado_a IS NULL) sin_asignar, SUM(cliente_id IS NULL) sin_persona,
+                SUM(estado = 'abierta' AND archivada = 0 AND
+                    (SELECT m.direccion FROM wa_mensajes m
+                      WHERE m.conversacion_id = wa_conversaciones.id ORDER BY m.id DESC LIMIT 1) = 'in'
+                   ) sin_responder
            FROM wa_conversaciones WHERE $wCont"
     );
     $c->execute($aCont);
@@ -1204,6 +1302,7 @@ if ($accion === 'lista') {
         'mias'        => (int) ($cn['mias'] ?? 0),
         'sin_asignar' => (int) ($cn['sin_asignar'] ?? 0),
         'sin_persona' => (int) ($cn['sin_persona'] ?? 0),
+        'sin_responder' => (int) ($cn['sin_responder'] ?? 0),
     ]]);
     exit;
 }
@@ -1269,18 +1368,54 @@ if ($accion === 'hilo') {
         ];
     }
 
-    $ctx = ['propuestas' => [], 'envios' => []];
+    $ctx = ['propuestas' => [], 'envios' => [], 'certificados' => [], 'saldo' => null, 'fecha_requerida' => null];
     if ($conv['cliente_id']) {
+        $cid = (int) $conv['cliente_id'];
+
         $q = $pdo->prepare("SELECT id, numero, estado FROM cotizaciones
                              WHERE cliente_id = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 5");
-        $q->execute([$conv['cliente_id']]);
+        $q->execute([$cid]);
         $ctx['propuestas'] = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         $q = $pdo->prepare("SELECT id, codigo_envio FROM envios
                              WHERE cliente_id = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 3");
-        $q->execute([$conv['cliente_id']]);
+        $q->execute([$cid]);
         $ctx['envios'] = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        // Certificados del cliente (norma + estado + vencimiento)
+        $q = $pdo->prepare("SELECT n.codigo AS norma, c.estado, c.fecha_vencimiento
+                              FROM certificados c LEFT JOIN normas_iso n ON n.id = c.norma_iso_id
+                             WHERE c.cliente_id = ? AND c.deleted_at IS NULL
+                             ORDER BY c.id DESC LIMIT 6");
+        $q->execute([$cid]);
+        $ctx['certificados'] = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        // Saldo pendiente: pagos aún NO validados
+        $q = $pdo->prepare("SELECT COUNT(*) n, COALESCE(SUM(monto),0) monto, MAX(moneda) moneda
+                              FROM pagos_cliente
+                             WHERE cliente_id = ? AND deleted_at IS NULL AND estado = 'pendiente'");
+        $q->execute([$cid]);
+        $sal = $q->fetch(PDO::FETCH_ASSOC);
+        if ($sal && (int) $sal['n'] > 0) {
+            $ctx['saldo'] = ['n' => (int) $sal['n'], 'monto' => (float) $sal['monto'], 'moneda' => $sal['moneda'] ?: 'S/'];
+        }
+
+        // Fecha requerida de certificados (de la propuesta aceptada más reciente)
+        $q = $pdo->prepare("SELECT fecha_requerida_certificados FROM cotizaciones
+                             WHERE cliente_id = ? AND deleted_at IS NULL AND fecha_requerida_certificados IS NOT NULL
+                             ORDER BY id DESC LIMIT 1");
+        $q->execute([$cid]);
+        $ctx['fecha_requerida'] = $q->fetchColumn() ?: null;
     }
+
+    // Notas internas del equipo (privadas, NO se envían al cliente)
+    $qn = $pdo->prepare("SELECT nt.id, nt.nota, nt.created_at,
+                                TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS autor,
+                                nt.usuario_id
+                           FROM wa_conversacion_notas nt LEFT JOIN usuarios u ON u.id = nt.usuario_id
+                          WHERE nt.conversacion_id = ? ORDER BY nt.id DESC LIMIT 50");
+    $qn->execute([$id]);
+    $ctx['notas'] = $qn->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
     $qe = $pdo->prepare("SELECT e.id, e.nombre, e.color
                            FROM wa_conversacion_etiquetas x
