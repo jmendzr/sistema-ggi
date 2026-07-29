@@ -295,9 +295,8 @@ ggi_breadcrumb(array_filter([
 
     <!-- SECUNDARIOS: en un menú "…" para no saturar el encabezado -->
     <div class="ggi-row-menu-wrap">
-      <button type="button" class="ggi-row-menu-btn btn btn-outline btn-sm" title="Más acciones" aria-label="Más acciones" aria-haspopup="true" aria-expanded="false" style="gap:5px;">
-        <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
-        Más
+      <button type="button" class="ggi-row-menu-btn" title="Más acciones" aria-label="Más acciones" aria-haspopup="true" aria-expanded="false" style="width:38px;height:38px;border:1px solid var(--brd);">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
       </button>
       <div class="ggi-row-menu">
         <a class="ggi-row-menu-item" href="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&inline=1"
