@@ -454,14 +454,16 @@
     flex-direction: column;
   }
 
-  /* Header: barra nativa — sin overflow */
+  /* Header: barra nativa — sin overflow. Baja bajo el notch (safe-area) en PWA. */
   .mant-modal-header {
-    padding:     0 4px 0 0 !important;
-    min-height:  54px !important;
-    height:      54px;
+    padding:     var(--safe-top, 0px) 4px 0 0 !important;
+    min-height:  calc(54px + var(--safe-top, 0px)) !important;
+    height:      calc(54px + var(--safe-top, 0px));
+    box-sizing:  border-box;
     flex-shrink: 0;
     overflow:    hidden;
   }
+  .mant-modal-close { height: 54px !important; }
 
   /* Body de modales pequeños (mantOpen — sin iframe) */
   .mant-modal-box:not(.mant-modal-lg) .mant-modal-body {

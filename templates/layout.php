@@ -1691,6 +1691,14 @@ session_write_close();
 <?php if (!empty($_ggi_embed)): ?>
 <!-- EMBED MODE: sin sidebar ni navegación -->
 <style>
+/* Dentro de un preview (modal iframe) no se navega a otros módulos: el
+   breadcrumb y cualquier enlace a listados serían una "fuga" de salida.
+   Se ocultan las migas; queda el botón ← Volver del modal para cerrar. */
+.ggi-bc { display: none !important; }
+/* Enlaces a los listados de módulos (índices) quedan inertes dentro del embed */
+.ggi-embed-wrap a[href*="/index.php"]:not(.btn):not([data-ggi-preview]) {
+  pointer-events: none; color: inherit; text-decoration: none; cursor: default;
+}
 /* ── Barra de acciones sticky (solo en embed mobile — dentro del iframe) ── */
 @media (max-width: 767px) {
   .ggi-embed-wrap {
