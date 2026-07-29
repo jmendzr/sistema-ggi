@@ -975,8 +975,9 @@ if ($accion === 'ia_sugerir') {
     $mq->execute([$id]);
     $mensajes = array_reverse($mq->fetchAll(PDO::FETCH_ASSOC) ?: []);
 
-    $ctx = IaAgente::contextoCliente($pdo, $conv['cliente_id'] ? (int) $conv['cliente_id'] : null);
-    $r   = IaAgente::sugerir($mensajes, $ctx, (string) $conv['titulo']);
+    $ctx      = IaAgente::contextoCliente($pdo, $conv['cliente_id'] ? (int) $conv['cliente_id'] : null);
+    $catalogo = IaAgente::catalogoNormas($pdo);
+    $r        = IaAgente::sugerir($mensajes, $ctx, (string) $conv['titulo'], $catalogo);
 
     echo json_encode($r['ok']
         ? ['ok' => true, 'texto' => $r['texto']]

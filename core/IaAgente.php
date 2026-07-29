@@ -158,6 +158,23 @@ class IaAgente
         return implode("\n", $L);
     }
 
+    /** Catálogo de normas que GGI certifica, para que la IA recomiende solo de aquí. */
+    public static function catalogoNormas(\PDO $pdo): string
+    {
+        try {
+            $rows = $pdo->query(
+                "SELECT codigo, nombre FROM normas_iso WHERE activo = 1 ORDER BY orden, codigo"
+            )->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable $e) {
+            return '';
+        }
+        $out = [];
+        foreach ($rows as $r) {
+            $out[] = '- ' . trim($r['codigo']) . ' — ' . trim($r['nombre']);
+        }
+        return implode("\n", $out);
+    }
+
     private static function estadoPropuestaLabel(string $e): string
     {
         return [
@@ -176,7 +193,7 @@ class IaAgente
      * @param string $empresaTitulo Nombre visible del contacto/empresa.
      * @return array ['ok'=>bool, 'texto'=>string, 'error'=>?string]
      */
-    public static function sugerir(array $mensajes, string $ctxCliente, string $empresaTitulo = ''): array
+    public static function sugerir(array $mensajes, string $ctxCliente, string $empresaTitulo = '', string $catalogo = ''): array
     {
         self::$lastError = null;
 
@@ -190,7 +207,12 @@ class IaAgente
         }
 
         $system = self::promptSistema();
-        $user   = "DATOS INTERNOS DEL CLIENTE (para responder con información real; no los repitas textualmente si no vienen al caso):\n"
+        $user   = '';
+        if ($catalogo !== '') {
+            $user .= "NORMAS QUE GGI CERTIFICA (catálogo oficial; si el cliente pide recomendación, "
+                   . "sugiere SOLO normas de esta lista que apliquen a su rubro):\n" . $catalogo . "\n\n----\n";
+        }
+        $user  .= "SITUACIÓN INTERNA DEL CLIENTE (para responder con información real; no la repitas textualmente si no viene al caso):\n"
                 . ($ctxCliente !== '' ? $ctxCliente : '(sin datos internos vinculados a este número)')
                 . "\n\n----\nCONVERSACIÓN DE WHATSAPP (in = cliente, out = nosotros)"
                 . ($empresaTitulo !== '' ? " con {$empresaTitulo}" : '') . ":\n"
@@ -249,6 +271,9 @@ class IaAgente
              . "- Sé breve y directo, apto para WhatsApp. Sin firmas ni encabezados de correo.\n"
              . "- Usa SOLO la información de la conversación y de los datos internos provistos. "
              . "NUNCA inventes precios, fechas, números de certificado ni estados que no estén ahí.\n"
+             . "- Si el cliente pide qué norma ISO le conviene, recomiéndale SOLO normas del catálogo "
+             . "de GGI que apliquen a su rubro, cada una con una línea breve de por qué. Si aún no sabes "
+             . "su rubro, pregúntaselo antes de recomendar.\n"
              . "- Si falta un dato para responder bien, redacta un mensaje que pida ese dato de forma amable, "
              . "en vez de inventarlo.\n"
              . "- No prometas descuentos ni plazos que no aparezcan en los datos.\n"
@@ -262,7 +287,7 @@ class IaAgente
     {
         $payload = [
             'model'      => IA_ANTHROPIC_MODEL,
-            'max_tokens' => 700,
+            'max_tokens' => 1024,
             'system'     => $system,
             'messages'   => [['role' => 'user', 'content' => $user]],
         ];
@@ -285,7 +310,7 @@ class IaAgente
                 ['role' => 'system', 'content' => $system],
                 ['role' => 'user',   'content' => $user],
             ],
-            'max_tokens'  => 700,
+            'max_tokens'  => 1024,
             'temperature' => 0.5,
         ];
         $res = self::http('https://api.openai.com/v1/chat/completions', $payload, [
@@ -306,7 +331,9 @@ class IaAgente
         $payload = [
             'system_instruction' => ['parts' => [['text' => $system]]],
             'contents'           => [['role' => 'user', 'parts' => [['text' => $user]]]],
-            'generationConfig'   => ['maxOutputTokens' => 700, 'temperature' => 0.5],
+            // Los modelos Gemini "flash" gastan tokens en razonamiento interno
+            // (thoughts) antes de la salida; con poco margen la respuesta se corta.
+            'generationConfig'   => ['maxOutputTokens' => 1500, 'temperature' => 0.5],
         ];
 
         $ultimoErr = null;
