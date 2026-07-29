@@ -1541,7 +1541,7 @@ if ($accion === 'hilo') {
         $q = $pdo->prepare("SELECT lp.id, lp.fecha_hora, lp.nota,
                                    TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS asignado
                               FROM llamadas_programadas lp LEFT JOIN usuarios u ON u.id = lp.usuario_id
-                             WHERE lp.cliente_id = ? AND lp.estado = 'pendiente'
+                             WHERE lp.cliente_id = ? AND lp.estado IN ('pendiente','notificada')
                              ORDER BY lp.fecha_hora ASC LIMIT 5");
         $q->execute([$cid]);
         $ctx['agenda'] = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
