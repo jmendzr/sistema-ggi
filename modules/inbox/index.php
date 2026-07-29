@@ -502,6 +502,54 @@ $ia_disponible = IaAgente::disponible();
   .ib-resolver { width: 100%; background: none; border: none; padding: 6px 0; cursor: pointer;
                  font: inherit; font-size: .8rem; font-weight: 600; color: var(--ac); text-align: left; }
   .ib-resolver:hover { text-decoration: underline; }
+
+  /* ── Complementos: alerta sin responder, notas, respuestas rápidas ─────── */
+  /* Pill "Sin responder" con acento de alerta cuando hay pendientes */
+  .ib-pill-alerta b:not(:empty) { color: var(--s-err, #dc2626); }
+  /* Fila esperando respuesta: acento rojo a la izquierda + chip */
+  .ib-item.esperando { box-shadow: inset 3px 0 0 var(--s-err, #dc2626); }
+  .ib-esperando { display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 17px; padding: 0 5px; border-radius: 9px; font-size: .64rem;
+    font-weight: 800; color: #fff; background: var(--s-err, #dc2626); }
+  /* Chips de "Situación" (saldo / fecha requerida) */
+  .ib-alerta { font-size: .76rem; padding: 7px 10px; border-radius: 8px; margin-bottom: 6px;
+    line-height: 1.35; border: 1px solid transparent; }
+  .ib-alerta.warn { background: var(--s-warn-bg, #fef3c7); color: var(--s-warn-tx, #92400e);
+    border-color: var(--s-warn-brd, #fde68a); }
+  .ib-alerta.info { background: var(--s-info-bg, #eff6ff); color: var(--s-info-tx, #1e40af);
+    border-color: var(--s-info-brd, #bfdbfe); }
+  /* Notas internas */
+  .ib-notas { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .ib-nota { background: var(--bg-hover); border: 1px solid var(--brd); border-radius: 8px; padding: 7px 9px; }
+  .ib-nota-txt { font-size: .78rem; color: var(--tx); white-space: pre-wrap; word-break: break-word; }
+  .ib-nota-meta { display: flex; justify-content: space-between; align-items: center;
+    font-size: .66rem; color: var(--tx3); margin-top: 4px; }
+  .ib-nota-del { background: none; border: none; color: var(--tx3); cursor: pointer;
+    font-size: 1rem; line-height: 1; padding: 0 2px; }
+  .ib-nota-del:hover { color: var(--s-err, #dc2626); }
+  .ib-nota-input { width: 100%; font: inherit; font-size: .8rem; padding: 7px 9px;
+    border: 1px solid var(--brd); border-radius: 8px; resize: vertical; background: var(--bg-surface); color: var(--tx); }
+  /* Respuestas rápidas: pop del compositor */
+  .ib-rr-lista { max-height: 260px; overflow: auto; }
+  .ib-rr-op { display: block; width: 100%; text-align: left; background: none; border: none;
+    border-bottom: 1px solid var(--brd); padding: 8px 11px; cursor: pointer; }
+  .ib-rr-op:hover { background: var(--bg-hover); }
+  .ib-rr-op b { display: block; font-size: .72rem; color: var(--ac); }
+  .ib-rr-op span { display: block; font-size: .78rem; color: var(--tx2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+  .ib-rr-gestion { width: 100%; background: var(--bg-hover); border: none; border-top: 1px solid var(--brd);
+    padding: 8px; cursor: pointer; font: inherit; font-size: .74rem; font-weight: 600; color: var(--tx2); }
+  .ib-rr-gestion:hover { color: var(--ac); }
+  /* Respuestas rápidas: modal de gestión */
+  .ib-rrm-lista { max-height: 240px; overflow: auto; margin-bottom: 12px; }
+  .ib-rrm-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--brd); }
+  .ib-rrm-info { flex: 1; min-width: 0; }
+  .ib-rrm-info b { font-size: .74rem; color: var(--ac); }
+  .ib-rrm-info span { display: block; font-size: .78rem; color: var(--tx2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ib-rrm-del { background: none; border: none; color: var(--tx3); cursor: pointer; font-size: 1.1rem; line-height: 1; }
+  .ib-rrm-del:hover { color: var(--s-err, #dc2626); }
+
   .ib-ctx-t { font-size: .64rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
               color: var(--tx3); margin-bottom: 9px; display: flex; align-items: center; gap: 6px; }
   .ib-ctx-t svg { width: 13px; height: 13px; }
@@ -786,6 +834,7 @@ $ia_disponible = IaAgente::disponible();
       <div class="ib-pills">
         <button type="button" class="ib-pill on" data-f="todas">Todas<b data-c="todas"></b></button>
         <button type="button" class="ib-pill" data-f="mias">A mi cargo<b data-c="mias"></b></button>
+        <button type="button" class="ib-pill ib-pill-alerta" data-f="sin_responder">Sin responder<b data-c="sin_responder"></b></button>
         <button type="button" class="ib-pill" data-f="sin_asignar">Sin asignar<b data-c="sin_asignar"></b></button>
         <button type="button" class="ib-pill" data-f="sin_persona">Sin persona<b data-c="sin_persona"></b></button>
         <button type="button" class="ib-pill" data-f="archivadas">Archivados</button>
@@ -840,6 +889,7 @@ $ia_disponible = IaAgente::disponible();
   var st = { f: 'todas', q: '', sel: null, etqs: [], etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null, abrirSeq: 0, listaSeq: 0 };
   var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)) ?>;
   var IA_ON   = <?= json_encode((bool) $ia_disponible) ?>;
+  var YO      = <?= (int) ($_SESSION['usuario']['id'] ?? 0) ?>;
   var $ = function (s) { return document.querySelector(s); };
 
   // Iconos SVG (nunca emoji como icono de UI). Trazo, heredan currentColor.
@@ -957,7 +1007,7 @@ $ia_disponible = IaAgente::disponible();
       .then(function (j) {
         if (token !== st.listaSeq) return;   // respuesta vieja → descartar
         if (!j.ok) return;
-        ['todas','mias','sin_asignar'].forEach(function (k) {
+        ['todas','mias','sin_asignar','sin_responder'].forEach(function (k) {
           var e = document.querySelector('[data-c="' + k + '"]');
           if (e) e.textContent = j.conteos[k] ? ' ' + j.conteos[k] : '';
         });
@@ -985,7 +1035,7 @@ $ia_disponible = IaAgente::disponible();
           var mute = it.silenciada ? '<span class="ib-item-mute" title="Silenciada">' + svg('bell_off', 13) + '</span>' : '';
 
           return '<button type="button" class="ib-item' + (st.sel === it.id ? ' sel' : '')
-            +     (pendiente ? ' nuevo' : '') + '" data-id="' + it.id + '">'
+            +     (pendiente ? ' nuevo' : '') + (it.esperando ? ' esperando' : '') + '" data-id="' + it.id + '">'
             + '<span class="ib-av ' + colorDe(it.telefono) + (it.ventana_abierta ? ' viva' : '') + '">'
             +   esc(ini(it.titulo)) + '</span>'
             + '<span class="ib-item-body">'
@@ -1004,7 +1054,10 @@ $ia_disponible = IaAgente::disponible();
             // formato(), no esc(): en la lista se guardaba el texto crudo y se
             // veían los marcadores (*hola*) en vez del texto en negrita.
             +     '<span class="ib-item-p">' + formato(it.preview) + '</span>'
-            +     '<span class="ib-item-ind">' + mute + pin
+            +     '<span class="ib-item-ind">'
+            +       (it.esperando ? '<span class="ib-esperando" title="El cliente escribió y espera respuesta">'
+                      + (it.horas_espera != null && it.horas_espera > 0 ? it.horas_espera + 'h' : '↩') + '</span>' : '')
+            +       mute + pin
             +       (it.no_leidos ? '<span class="ib-unread">' + it.no_leidos + '</span>'
                     : (it.sin_leer ? '<span class="ib-unread punto"></span>' : ''))
             +     '</span>'
@@ -1312,6 +1365,10 @@ $ia_disponible = IaAgente::disponible();
           + '<button type="button" class="ib-fmt" id="ib-interactivo" title="Mensaje interactivo (botones o lista)" aria-label="Mensaje interactivo">'
           + '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
           + '<rect x="3" y="5" width="18" height="4" rx="1"/><rect x="3" y="12" width="18" height="4" rx="1"/><path d="M7 19h10"/></svg></button>'
+          // Respuestas rápidas (canned): frases frecuentes con un clic.
+          + '<button type="button" class="ib-fmt" id="ib-rapidas" title="Respuestas rápidas" aria-label="Respuestas rápidas">'
+          + '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+          + '<path stroke-linecap="round" stroke-linejoin="round" d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg></button>'
           // Copiloto IA: sugiere una respuesta que el ejecutivo edita y envía.
           + (IA_ON
               ? '<button type="button" class="ib-fmt ib-ia-btn" id="ib-ia" title="Ayúdame a responder (IA)" aria-label="Ayúdame a responder con IA">'
@@ -1601,6 +1658,128 @@ $ia_disponible = IaAgente::disponible();
         st.iaCargando = false;
         if (btn && document.body.contains(btn)) { btn.disabled = false; btn.classList.remove('ib-ia-load'); }
       });
+  }
+
+  // ── Notas internas ──────────────────────────────────────────────────────────
+  function agregarNota() {
+    var ta = $('#ib-nota-in');
+    if (!ta || !st.sel) return;
+    var txt = ta.value.trim();
+    if (!txt) { ta.focus(); return; }
+    var btn = $('#ib-nota-add');
+    if (btn) btn.disabled = true;
+    ggiPost('ajax.php', { accion: 'nota_crear', id: st.sel, texto: txt })
+      .then(function (j) {
+        if (j.ok) { ta.value = ''; abrir(st.sel); }
+        else if (window.showToast) showToast(j.msg || 'No se pudo guardar la nota', 'error');
+      })
+      .catch(function () { if (window.showToast) showToast('No se pudo guardar la nota', 'error'); })
+      .then(function () { if (btn) btn.disabled = false; });
+  }
+
+  // ── Respuestas rápidas (canned) ─────────────────────────────────────────────
+  var _rrCache = {};
+  function popRapidas(ancla) {
+    var ex = document.getElementById('ib-pop');
+    if (ex && ex.dataset.pop === 'rapidas') { cerrarPop(); return; }
+    fetch('ajax.php?accion=respuestas', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        _rrCache = {};
+        var items = (j.items || []).map(function (r) {
+          _rrCache[r.id] = r.texto;
+          return '<button type="button" class="ib-rr-op" data-rr="' + r.id + '">'
+               + '<b>/' + esc(r.atajo) + '</b><span>' + esc(r.texto) + '</span></button>';
+        }).join('') || '<div class="ib-ctx-s2" style="padding:8px 10px">Aún no hay respuestas rápidas.</div>';
+        var d = abrirPop(ancla, '<div class="ib-rr-lista">' + items + '</div>'
+          + '<button type="button" class="ib-rr-gestion" id="ib-rapidas-gestion">⚙ Gestionar respuestas</button>',
+          { arriba: true });
+        d.dataset.pop = 'rapidas';
+      });
+  }
+
+  function modalRapidas() {
+    fetch('ajax.php?accion=respuestas', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var filas = (j.items || []).map(function (r) {
+          return '<div class="ib-rrm-row" data-rrm="' + r.id + '">'
+               + '<div class="ib-rrm-info"><b>/' + esc(r.atajo) + '</b><span>' + esc(r.texto) + '</span></div>'
+               + '<button type="button" class="ib-rrm-del" data-rrm-del="' + r.id + '" title="Borrar">&times;</button></div>';
+        }).join('') || '<div class="ib-ctx-s2">Sin respuestas todavía.</div>';
+        mantOpen('Respuestas rápidas',
+            '<div class="ib-rrm-lista" id="ib-rrm-lista">' + filas + '</div>'
+          + '<div class="ib-rrm-nueva">'
+          + '<label class="ib-plt-f"><span>Atajo</span><input type="text" id="rrm-atajo" maxlength="40" placeholder="ej.: horario"></label>'
+          + '<label class="ib-plt-f"><span>Texto</span><textarea id="rrm-texto" rows="3" maxlength="2000" placeholder="Mensaje que se insertará…"></textarea></label>'
+          + '</div>'
+          + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'
+          + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cerrar</button>'
+          + '<button type="button" class="ggi-btn-confirm-action" id="rrm-add">Agregar</button></div>');
+
+        var cont = document.getElementById('ib-rrm-lista');
+        if (cont) cont.addEventListener('click', function (e) {
+          var d = e.target.closest('[data-rrm-del]');
+          if (!d) return;
+          ggiPost('ajax.php', { accion: 'respuesta_borrar', rr_id: d.dataset.rrmDel })
+            .then(function (r) { if (r.ok) { var row = cont.querySelector('[data-rrm="' + d.dataset.rrmDel + '"]'); if (row) row.remove(); } });
+        });
+        var add = document.getElementById('rrm-add');
+        if (add) add.addEventListener('click', function () {
+          var a = document.getElementById('rrm-atajo').value.trim();
+          var t = document.getElementById('rrm-texto').value.trim();
+          if (!a || !t) return;
+          add.disabled = true;
+          ggiPost('ajax.php', { accion: 'respuesta_guardar', atajo: a, texto: t })
+            .then(function (r) {
+              if (r.ok) modalRapidas();
+              else { if (window.showToast) showToast(r.msg || 'No se pudo guardar', 'error'); add.disabled = false; }
+            });
+        });
+      });
+  }
+
+  // ── Agendar llamada (reusa modules/clientes/ajax_llamada.php) ────────────────
+  function modalAgendarLlamada() {
+    if (!st.clienteId) { if (window.showToast) showToast('Esta conversación no está vinculada a una empresa.', 'error'); return; }
+    // Hora local (no UTC): datetime-local trabaja en la zona del navegador.
+    var _d = new Date(Date.now() + 5 * 60000);
+    _d.setMinutes(_d.getMinutes() - _d.getTimezoneOffset());
+    var min = _d.toISOString().slice(0, 16);
+    mantOpen('Agendar llamada',
+        '<label class="ib-plt-f"><span>Fecha y hora</span>'
+      + '<input type="datetime-local" id="al-fh" min="' + min + '" value="' + min + '"></label>'
+      + '<label class="ib-plt-f"><span>Avisarme</span>'
+      + '<select id="al-aviso"><option value="5">5 min antes</option><option value="10">10 min antes</option>'
+      + '<option value="15" selected>15 min antes</option><option value="30">30 min antes</option>'
+      + '<option value="60">1 hora antes</option></select></label>'
+      + '<label class="ib-plt-f"><span>Nota (opcional)</span>'
+      + '<input type="text" id="al-nota" maxlength="500" placeholder="Ej.: confirmar datos de pago"></label>'
+      + '<p class="ib-hist-nota">Recibirás un aviso por notificación. Queda en la agenda de llamadas del cliente.</p>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'
+      + '<button type="button" class="ggi-btn-confirm-cancel" onclick="ggiModalClose()">Cancelar</button>'
+      + '<button type="button" class="ggi-btn-confirm-action" id="al-ok">Agendar</button></div>');
+
+    var ok = document.getElementById('al-ok');
+    if (ok) ok.addEventListener('click', function () {
+      var fh = document.getElementById('al-fh').value;
+      if (!fh) return;
+      ok.disabled = true;
+      var fd = new FormData();
+      fd.append('accion', 'crear');
+      fd.append('cliente_id', st.clienteId);
+      fd.append('fecha_hora', fh.replace('T', ' ') + ':00');
+      fd.append('aviso_min', document.getElementById('al-aviso').value);
+      fd.append('nota', document.getElementById('al-nota').value);
+      fd.append('csrf_token', (window.CSRF_TOKEN || document.querySelector('meta[name=csrf-token]') && document.querySelector('meta[name=csrf-token]').content) || '');
+      fetch('../clientes/ajax_llamada.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.ok) { if (window.ggiModalClose) ggiModalClose(); if (window.showToast) showToast(j.mensaje || 'Llamada agendada', 'ok'); }
+          else { if (window.showToast) showToast(j.mensaje || 'No se pudo agendar', 'error'); ok.disabled = false; }
+        })
+        .catch(function () { if (window.showToast) showToast('No se pudo agendar', 'error'); ok.disabled = false; });
+    });
   }
 
   // Panel con pestañas Emojis / Stickers. Los emojis vienen categorizados de
@@ -2402,6 +2581,7 @@ $ia_disponible = IaAgente::disponible();
 
   function ctx(j) {
     var c = j.conv, x = j.contexto;
+    st.clienteId = c.cliente_id || null;
     function sec(t, icono, cuerpo) {
       return '<div class="ib-ctx-s"><div class="ib-ctx-t">' + icono + t + '</div>' + cuerpo + '</div>';
     }
@@ -2428,6 +2608,14 @@ $ia_disponible = IaAgente::disponible();
         + (c.ruc ? '<div class="ib-ctx-s2">RUC ' + esc(c.ruc) + '</div>' : '')
       : '<div class="ib-ctx-s2">Número no vinculado a ninguna empresa</div>');
 
+    // Agendar llamada (reusa el sistema de llamadas programadas del CRM)
+    if (c.cliente_id) {
+      var iTel = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:-2px;margin-right:5px"><path stroke-linecap="round" stroke-linejoin="round" d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0122 16.92z"/></svg>';
+      h += sec('Agenda', iReloj,
+          '<button type="button" class="btn btn-ghost ib-btn-sm" id="ib-agendar-llamada" style="width:100%">'
+        + iTel + 'Agendar llamada</button>');
+    }
+
     if (x.propuestas.length) {
       h += sec('Propuestas', '', x.propuestas.map(function (p) {
         return '<button type="button" class="ib-ctx-a" data-ver="../cotizaciones/ver.php?id=' + p.id + '" '
@@ -2443,6 +2631,45 @@ $ia_disponible = IaAgente::disponible();
              + '<span class="ib-ctx-nom">' + esc(e.codigo_envio || '—') + '</span>' + iAbrir + '</button>';
       }).join(''));
     }
+
+    // Certificados del cliente (mismo dato que ve la IA)
+    var iCert = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.8 21a2 2 0 01-1.8-1.1l-1-2-2-1A2 2 0 013 15.2V8.8a2 2 0 011-1.7l2-1 1-2A2 2 0 018.8 3h6.4a2 2 0 011.8 1.1l1 2 2 1a2 2 0 011 1.7v6.4a2 2 0 01-1 1.7l-2 1-1 2a2 2 0 01-1.8 1.1z"/></svg>';
+    if (x.certificados && x.certificados.length) {
+      h += sec('Certificados', iCert, x.certificados.map(function (ct) {
+        var vig = ct.estado === 'vigente';
+        return '<div class="ib-ctx-a" style="cursor:default">'
+             + '<span class="ib-ctx-nom">' + esc(ct.norma || '—') + '</span>'
+             + '<span class="ib-ctx-est ' + (vig ? 'ok' : '') + '">' + (vig ? 'vigente' : 'en proceso') + '</span></div>'
+             + (ct.fecha_vencimiento ? '<div class="ib-ctx-s2">Vence ' + esc(ct.fecha_vencimiento) + '</div>' : '');
+      }).join(''));
+    }
+
+    // Situación: saldo pendiente + fecha requerida de certificados
+    if (x.saldo || x.fecha_requerida) {
+      var sit = '';
+      if (x.saldo) {
+        sit += '<div class="ib-alerta warn">Saldo por validar: ' + x.saldo.n + ' pago(s) · '
+             + esc(x.saldo.moneda) + ' ' + Number(x.saldo.monto).toLocaleString('es-PE', {minimumFractionDigits:2}) + '</div>';
+      }
+      if (x.fecha_requerida) {
+        sit += '<div class="ib-alerta info">Certificados requeridos para ' + esc(x.fecha_requerida) + '</div>';
+      }
+      h += sec('Situación', iReloj, sit);
+    }
+
+    // Notas internas: privadas del equipo, NUNCA se envían al cliente
+    var iNota = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4z"/></svg>';
+    var notasHtml = (x.notas || []).map(function (n) {
+      var puedeBorrar = (parseInt(n.usuario_id, 10) === YO) || ES_JEFE;
+      return '<div class="ib-nota"><div class="ib-nota-txt">' + esc(n.nota) + '</div>'
+           + '<div class="ib-nota-meta"><span>' + esc(n.autor || '—') + ' · ' + relativo(n.created_at) + '</span>'
+           + (puedeBorrar ? '<button type="button" class="ib-nota-del" data-nota-del="' + n.id + '" title="Borrar nota" aria-label="Borrar nota">&times;</button>' : '')
+           + '</div></div>';
+    }).join('');
+    h += sec('Notas internas', iNota,
+        '<div class="ib-notas" id="ib-notas">' + (notasHtml || '<div class="ib-ctx-s2">Sin notas. Son privadas del equipo.</div>') + '</div>'
+      + '<textarea id="ib-nota-in" class="ib-nota-input" rows="2" maxlength="2000" placeholder="Nota privada (no se envía al cliente)…"></textarea>'
+      + '<button type="button" class="btn btn-ghost ib-btn-sm" id="ib-nota-add" style="margin-top:6px">+ Agregar nota</button>');
 
     var iEtq = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M3 6l0 5.2a2 2 0 00.6 1.4l7.8 7.8a2 2 0 002.8 0l5.2-5.2a2 2 0 000-2.8l-7.8-7.8A2 2 0 0010.2 4L5 4a2 2 0 00-2 2z"/></svg>';
     var puestas = (j.etiquetas || []).map(function (e) {
@@ -2852,6 +3079,24 @@ $ia_disponible = IaAgente::disponible();
         .then(function (j) { if (j.ok) { abrir(st.sel); lista(); } });
       return;
     }
+
+    // Notas internas
+    var notaDel = e.target.closest('[data-nota-del]');
+    if (notaDel) {
+      ggiPost('ajax.php', { accion: 'nota_borrar', nota_id: notaDel.dataset.notaDel })
+        .then(function (j) { if (j.ok) abrir(st.sel); else if (window.showToast) showToast(j.msg || 'No se pudo borrar', 'error'); });
+      return;
+    }
+    if (e.target.closest('#ib-nota-add')) { agregarNota(); return; }
+
+    // Agendar llamada (mismo sistema del CRM)
+    if (e.target.closest('#ib-agendar-llamada')) { modalAgendarLlamada(); return; }
+
+    // Respuestas rápidas (canned)
+    if (e.target.closest('#ib-rapidas')) { popRapidas(e.target.closest('#ib-rapidas')); return; }
+    var rr = e.target.closest('[data-rr]');
+    if (rr) { cerrarPop(); insertar(_rrCache[rr.dataset.rr] || ''); return; }
+    if (e.target.closest('#ib-rapidas-gestion')) { cerrarPop(); modalRapidas(); return; }
 
     // Quitar el filtro de etiquetas desde su propio chip
     if (e.target.closest('#ib-etq-activa')) {
