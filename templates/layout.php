@@ -711,6 +711,9 @@ session_write_close();
     .btn-success:hover { background: var(--gr-h); }
     .btn-outline { background: var(--bg-surface); color: var(--tx); border: 1.5px solid var(--brd); }
     .btn-outline:hover { border-color: var(--ac); color: var(--ac); background: var(--ac-soft); }
+    /* Ghost: botón sutil (fondo transparente). Estandarizado con efecto hover. */
+    .btn-ghost { background: transparent; color: var(--tx2); border: 1px solid var(--brd); transition: background .15s, color .15s, border-color .15s; }
+    .btn-ghost:hover { background: var(--bg-hover); color: var(--tx); border-color: var(--ac); }
     .btn-danger { background: var(--s-err); color: #fff; }
     .btn-sm { padding: 6px 12px; font-size: 12px; }
     .btn:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }

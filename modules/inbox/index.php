@@ -1268,6 +1268,16 @@ $ia_disponible = IaAgente::disponible();
   }
 
   function chat(j, previo) {
+    // El scroll pudo moverse durante el fetch (el usuario scrolleó rápido). Se
+    // re-lee la posición REAL ahora, no la capturada antes de la petición: así
+    // no se le devuelve al fondo si ya está leyendo historial arriba.
+    if (previo) {
+      var _mNow = $('#ib-msgs');
+      if (_mNow) {
+        previo.scroll = _mNow.scrollTop;
+        previo.abajo  = (_mNow.scrollHeight - _mNow.scrollTop - _mNow.clientHeight) < 60;
+      }
+    }
     var c = j.conv, ultDia = '', cuerpo = '';
 
     // Reaccionar y responder solo si es mía y la ventana está abierta
@@ -2868,9 +2878,10 @@ $ia_disponible = IaAgente::disponible();
     function colapsar(items, renderFn, key, lim) {
       lim = lim || 2;
       if (items.length <= lim) return items.map(renderFn).join('');
+      var n = items.length - lim;
       return items.slice(0, lim).map(renderFn).join('')
-        + '<div class="ib-mas" data-mas="' + key + '" hidden>' + items.slice(lim).map(renderFn).join('') + '</div>'
-        + '<button type="button" class="ib-mas-btn" data-mastoggle="' + key + '">Ver ' + (items.length - lim) + ' más</button>';
+        + '<div class="ib-mas" data-mas="' + key + '" data-n="' + n + '" hidden>' + items.slice(lim).map(renderFn).join('') + '</div>'
+        + '<button type="button" class="ib-mas-btn" data-mastoggle="' + key + '">Ver ' + n + ' más</button>';
     }
 
     if (x.propuestas.length) {
@@ -3132,6 +3143,7 @@ $ia_disponible = IaAgente::disponible();
     var d = abrirPop(ancla,
         '<input type="search" id="ib-nq" placeholder="Empresa, RUC o teléfono…" aria-label="Buscar contacto o teléfono">'
       + '<div id="ib-nres"><div class="ib-pop-item" style="color:var(--tx3)">Escribe una empresa o un número…</div></div>');
+    d.dataset.pop = 'nueva';
 
     var inp = d.querySelector('#ib-nq'); inp.focus();
     var t;
@@ -3304,7 +3316,10 @@ $ia_disponible = IaAgente::disponible();
     }
 
     // ── Menús emergentes ──
-    if (e.target.closest('#ib-nueva'))     { popNueva(e.target.closest('#ib-nueva')); return; }
+    if (e.target.closest('#ib-nueva'))     {
+      if (_popPrev && _popPrev.dataset.pop === 'nueva') { cerrarPop(); return; }   // toggle
+      popNueva(e.target.closest('#ib-nueva')); return;
+    }
     if (e.target.closest('#ib-filtro-etq')){
       if (_eraFiltro) { cerrarPop(); return; }   // ya estaba abierto → cerrar (toggle)
       popFiltroEtiquetas(e.target.closest('#ib-filtro-etq')); return;
@@ -3377,11 +3392,14 @@ $ia_disponible = IaAgente::disponible();
     var ds = e.target.closest('[data-docsend-tipo]');
     if (ds) { enviarDocumento(ds.dataset.docsendTipo, ds.dataset.docsendId, ds); return; }
 
-    // "Ver N más" del panel de contexto (propuestas/certificados)
+    // "Ver N más" / "Ver menos" del panel de contexto (propuestas/certificados)
     var mt = e.target.closest('[data-mastoggle]');
     if (mt) {
       var cont = document.querySelector('[data-mas="' + mt.dataset.mastoggle + '"]');
-      if (cont) { cont.hidden = false; mt.remove(); }
+      if (cont) {
+        cont.hidden = !cont.hidden;
+        mt.textContent = cont.hidden ? ('Ver ' + (cont.getAttribute('data-n') || '') + ' más') : 'Ver menos';
+      }
       return;
     }
 
