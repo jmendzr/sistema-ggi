@@ -235,7 +235,7 @@ $ia_disponible = IaAgente::disponible();
                  margin-bottom: 14px; white-space: pre-wrap; }
   .ib-plt-f { display: block; margin-bottom: 10px; }
   .ib-plt-f span { display: block; font-size: .74rem; font-weight: 600; color: var(--tx2);
-                   margin-bottom: 4px; text-transform: capitalize; }
+                   margin-bottom: 4px; }
   .ib-plt-f input,
   .ib-plt-f textarea,
   .ib-plt-f select { width: 100%; padding: 9px 12px; font: inherit; font-size: .85rem;
@@ -478,7 +478,7 @@ $ia_disponible = IaAgente::disponible();
     flex: 1; min-width: 0; padding: 10px 13px; font: inherit; font-size: .85rem;
     line-height: 1.45; border: 1px solid var(--brd); border-radius: 10px;
     background: var(--bg-input); color: var(--tx);
-    max-height: 132px; overflow-y: auto; outline: none;
+    max-height: 104px; overflow-y: auto; outline: none;
     white-space: pre-wrap; word-break: break-word;
   }
   .ib-editable:focus { border-color: var(--ac); box-shadow: 0 0 0 3px var(--ac-soft); }
@@ -509,9 +509,12 @@ $ia_disponible = IaAgente::disponible();
   .ib-punto { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
               background: var(--tx3); margin-right: 7px; vertical-align: middle; }
   .ib-punto.viva { background: var(--gr, #2DB140); }
-  .ib-resolver { width: 100%; background: none; border: none; padding: 6px 0; cursor: pointer;
-                 font: inherit; font-size: .8rem; font-weight: 600; color: var(--ac); text-align: left; }
-  .ib-resolver:hover { text-decoration: underline; }
+  .ib-resolver { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+                 background: var(--bg-surface); border: 1px solid var(--brd); border-radius: 9px; padding: 9px 12px;
+                 cursor: pointer; font: inherit; font-size: .82rem; font-weight: 600; color: var(--ac); transition: .15s; }
+  .ib-resolver:hover { background: var(--ac-soft); border-color: var(--ac); }
+  .ib-resolver.reabrir { color: var(--tx2); }
+  .ib-resolver.reabrir:hover { color: var(--tx); background: var(--bg-hover); border-color: var(--brd); }
 
   /* ── Complementos: alerta sin responder, notas, respuestas rápidas ─────── */
   /* Pill "Sin responder" con acento de alerta cuando hay pendientes */
@@ -1809,7 +1812,11 @@ $ia_disponible = IaAgente::disponible();
     var sr  = $('#ib-filtro-sr');
     if (sr) { sr.classList.toggle('on', st.f === 'sin_responder'); sr.classList.toggle('has', !!st.conteos.sin_responder); }
   }
-  function setFiltro(k) { st.f = k; actualizarFiltroUI(); lista(); }
+  function setFiltro(k) {
+    // Clic sobre el filtro ya activo → volver a "Todas" (toggle)
+    st.f = (st.f === k && k !== 'todas') ? 'todas' : k;
+    actualizarFiltroUI(); lista();
+  }
   function popFiltros(ancla) {
     var ex = document.getElementById('ib-pop');
     if (ex && ex.dataset.pop === 'filtros') { cerrarPop(); return; }
@@ -2914,8 +2921,11 @@ $ia_disponible = IaAgente::disponible();
       +     (resuelta ? 'Resuelta' : 'Abierta') + '</div>'
       +   '<div class="ib-ctx-s2">' + (resuelta ? 'Cerrada para atención.' : 'Activa para atención.') + '</div>'
       + '</div>'
-      + '<button type="button" class="ib-resolver" id="ib-resolver" data-estado="' + esc(c.estado) + '">'
-      +   (resuelta ? '↺ Reabrir conversación' : '✓ Resolver conversación') + '</button>');
+      + '<button type="button" class="ib-resolver' + (resuelta ? ' reabrir' : '') + '" id="ib-resolver" data-estado="' + esc(c.estado) + '">'
+      +   (resuelta
+            ? '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="15" height="15"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M20 20a8 8 0 00-14.5-6.4L4 10"/></svg>Reabrir conversación'
+            : '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="15" height="15"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Resolver conversación')
+      + '</button>');
 
     $('#ib-ctx').innerHTML = '<div class="ib-ctx-head">Contexto'
       + '<button type="button" class="ib-icon ib-solo-movil ib-ctx-cerrar" id="ib-ctx-cerrar" title="Cerrar" aria-label="Cerrar">'
@@ -3155,7 +3165,7 @@ $ia_disponible = IaAgente::disponible();
           : '';
 
         mantOpen('Reasignar conversación',
-            '<div class="ib-plt-f"><span>Pasar a</span>' + opts + '</div>'
+            '<div class="ib-plt-f"><span>Asignar a</span>' + opts + '</div>'
           + '<label class="ib-plt-f"><span>Motivo (opcional)</span>'
           + '<input type="text" id="ra-m" maxlength="200" placeholder="Ej.: de vacaciones, carga de trabajo"></label>'
           + '<p class="ib-hist-nota">Queda registrado quién hizo el cambio. Si el ejecutivo estaba '
@@ -3448,7 +3458,14 @@ $ia_disponible = IaAgente::disponible();
   function refrescar() {
     if (document.hidden) return;
     lista(true);
-    if (st.sel) abrir(st.sel, true);
+    // No re-renderizar el hilo si el usuario está leyendo historial (scrolleado
+    // hacia arriba): el refresco le devolvía el scroll y se sentía un "salto".
+    // Solo se refresca si está cerca del final (viendo lo último).
+    if (st.sel) {
+      var m = document.getElementById('ib-msgs');
+      var cerca = !m || (m.scrollHeight - m.scrollTop - m.clientHeight < 140);
+      if (cerca) abrir(st.sel, true);
+    }
   }
   setInterval(refrescar, 8000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) refrescar(); });
