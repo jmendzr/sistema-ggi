@@ -123,4 +123,4 @@ define('IA_OPENAI_MODEL',   env('IA_OPENAI_MODEL',   'gpt-4o'));
 // (429), el copiloto reintenta solo con la 2ª (dos cuentas Google distintas).
 define('IA_GEMINI_KEY',     env('IA_GEMINI_KEY',     ''));
 define('IA_GEMINI_KEY_2',   env('IA_GEMINI_KEY_2',   ''));
-define('IA_GEMINI_MODEL',   env('IA_GEMINI_MODEL',   'gemini-2.0-flash'));
+define('IA_GEMINI_MODEL',   env('IA_GEMINI_MODEL',   'gemini-1.5-flash'));
