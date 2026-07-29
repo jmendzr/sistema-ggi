@@ -513,15 +513,36 @@ $ia_disponible = IaAgente::disponible();
   /* ── Complementos: alerta sin responder, notas, respuestas rápidas ─────── */
   /* Pill "Sin responder" con acento de alerta cuando hay pendientes */
   .ib-pill-alerta b:not(:empty) { color: var(--s-err, #dc2626); }
-  /* Etapas del embudo: título + pills con punto de color y conteo */
-  .ib-embudo { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-  .ib-emb-tit { width: 100%; font-size: .6rem; font-weight: 700; letter-spacing: .09em;
-    text-transform: uppercase; color: var(--tx3); margin-bottom: 1px; }
-  .ib-emb-pill { display: inline-flex; align-items: center; gap: 5px; }
-  .ib-emb-pill .ib-emb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--emb, #64748B); flex-shrink: 0; }
-  .ib-emb-pill.on { background: var(--emb, var(--ac)); color: #fff; border-color: var(--emb, var(--ac)); }
-  .ib-emb-pill.on .ib-emb-dot { background: #fff; }
-  .ib-emb-pill b { color: inherit; opacity: .8; }
+  /* Selector compacto de filtros + etapas (reemplaza ~11 pills) */
+  .ib-filtros { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .ib-filtro-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px;
+    border: 1px solid var(--brd); border-radius: 9px; background: var(--bg-surface); color: var(--tx);
+    font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
+  .ib-filtro-btn:hover { background: var(--bg-hover); }
+  .ib-filtro-n { color: var(--tx3); font-weight: 700; }
+  .ib-filtro-n:empty { display: none; }
+  .ib-filtro-chev { color: var(--tx3); flex-shrink: 0; }
+  .ib-filtro-sr { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px;
+    border: 1px solid var(--brd); border-radius: 9px; background: var(--bg-surface); color: var(--tx2);
+    font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
+  .ib-filtro-sr:hover { background: var(--bg-hover); }
+  .ib-filtro-sr.has { color: var(--s-err, #dc2626); border-color: var(--s-err, #dc2626); }
+  .ib-filtro-sr.has b { color: var(--s-err, #dc2626); }
+  .ib-filtro-sr.on { background: var(--s-err, #dc2626); color: #fff; border-color: var(--s-err, #dc2626); }
+  .ib-filtro-sr.on b { color: #fff; }
+  .ib-filtro-sr b:empty { display: none; }
+  /* Dropdown de filtros */
+  .ib-fi-lista { min-width: 210px; max-height: 70vh; overflow: auto; }
+  .ib-fi-sec { font-size: .6rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--tx3); padding: 9px 12px 4px; }
+  .ib-fi-op { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    background: none; border: none; padding: 8px 12px; cursor: pointer; font: inherit; font-size: .82rem; color: var(--tx); }
+  .ib-fi-op:hover { background: var(--bg-hover); }
+  .ib-fi-op.on { background: var(--ac-soft); color: var(--ac); font-weight: 700; }
+  .ib-fi-op .ib-fi-n { flex: 1; }
+  .ib-fi-op b { color: var(--tx3); font-weight: 700; }
+  .ib-fi-op.on b { color: var(--ac); }
+  .ib-emb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--emb, #64748B); flex-shrink: 0; }
   /* Badge de etapa (fila del listado y panel de contexto) */
   .ib-emb-badge { display: inline-flex; align-items: center; font-size: .64rem; font-weight: 700;
     padding: 2px 8px; border-radius: 999px; color: #fff; background: var(--emb, #64748B);
@@ -549,6 +570,18 @@ $ia_disponible = IaAgente::disponible();
   .ib-nota-del:hover { color: var(--s-err, #dc2626); }
   .ib-nota-input { width: 100%; font: inherit; font-size: .8rem; padding: 7px 9px;
     border: 1px solid var(--brd); border-radius: 8px; resize: vertical; background: var(--bg-surface); color: var(--tx); }
+  /* Autocompletado de /atajos: panel flotante sobre el compositor */
+  .ib-atajo-sug { position: absolute; left: 12px; right: 12px; bottom: calc(100% + 6px);
+    background: var(--bg-surface); border: 1px solid var(--brd); border-radius: 11px;
+    box-shadow: 0 -6px 24px rgba(0,0,0,.12); z-index: 40; overflow: hidden; max-height: 260px; overflow-y: auto; }
+  .ib-atajo-tit { font-size: .6rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--tx3); padding: 8px 12px 3px; }
+  .ib-atajo-op { display: block; width: 100%; text-align: left; background: none; border: none;
+    padding: 7px 12px; cursor: pointer; }
+  .ib-atajo-op.sel, .ib-atajo-op:hover { background: var(--ac-soft); }
+  .ib-atajo-op b { display: block; font-size: .74rem; color: var(--ac); }
+  .ib-atajo-op span { display: block; font-size: .78rem; color: var(--tx2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Respuestas rápidas: pop del compositor */
   .ib-rr-lista { max-height: 260px; overflow: auto; }
   .ib-rr-op { display: block; width: 100%; text-align: left; background: none; border: none;
@@ -858,17 +891,19 @@ $ia_disponible = IaAgente::disponible();
       <div class="ib-bandeja" id="ib-bandeja" style="display:none">
         <div class="ib-bandeja-tabs" id="ib-bandeja-sel" role="tablist" aria-label="Bandejas por número"></div>
       </div>
-      <div class="ib-pills">
-        <button type="button" class="ib-pill on" data-f="todas">Todas<b data-c="todas"></b></button>
-        <button type="button" class="ib-pill" data-f="mias">A mi cargo<b data-c="mias"></b></button>
-        <button type="button" class="ib-pill ib-pill-alerta" data-f="sin_responder">Sin responder<b data-c="sin_responder"></b></button>
-        <button type="button" class="ib-pill" data-f="sin_asignar">Sin asignar<b data-c="sin_asignar"></b></button>
-        <button type="button" class="ib-pill" data-f="sin_persona">Sin persona<b data-c="sin_persona"></b></button>
-        <button type="button" class="ib-pill" data-f="archivadas">Archivados</button>
+      <!-- Filtros y etapas en un solo selector compacto (antes eran ~11 pills) -->
+      <div class="ib-filtros">
+        <button type="button" class="ib-filtro-btn" id="ib-filtro-btn" aria-haspopup="true">
+          <span class="ib-filtro-lbl" id="ib-filtro-lbl">Todas</span>
+          <b class="ib-filtro-n" id="ib-filtro-n"></b>
+          <svg class="ib-filtro-chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <!-- Acceso rápido a "Sin responder" (lo más urgente); se resalta si hay -->
+        <button type="button" class="ib-filtro-sr" id="ib-filtro-sr" data-f="sin_responder" title="Sin responder">
+          Sin responder<b data-c="sin_responder"></b>
+        </button>
         <button type="button" class="ib-pill" id="ib-etq-activa" style="display:none"></button>
       </div>
-      <!-- Etapas del embudo (automáticas por estado del cliente); se rellenan por JS -->
-      <div class="ib-embudo" id="ib-embudo"></div>
     </div>
     <div class="ib-search">
       <span class="ib-search-in">
@@ -1045,24 +1080,10 @@ $ia_disponible = IaAgente::disponible();
       .then(function (j) {
         if (token !== st.listaSeq) return;   // respuesta vieja → descartar
         if (!j.ok) return;
-        ['todas','mias','sin_asignar','sin_responder'].forEach(function (k) {
-          var e = document.querySelector('[data-c="' + k + '"]');
-          if (e) e.textContent = j.conteos[k] ? ' ' + j.conteos[k] : '';
-        });
-
-        // Etapas del embudo (pills con conteo, estilo del CRM de la referencia)
-        var emb = j.embudo || {};
-        var embEl = $('#ib-embudo');
-        if (embEl) {
-          embEl.innerHTML = '<div class="ib-emb-tit">Etapas del embudo</div>'
-            + EMBUDO.map(function (et) {
-                var n = emb[et.k] || 0;
-                var on = (st.f === 'etapa:' + et.k) ? ' on' : '';
-                return '<button type="button" class="ib-pill ib-emb-pill' + on + '" data-f="etapa:' + et.k + '" '
-                     + 'style="--emb:' + et.c + '"><span class="ib-emb-dot"></span>' + et.n
-                     + '<b>' + n + '</b></button>';
-              }).join('');
-        }
+        // Alimentar el selector compacto de filtros/etapas
+        st.conteos = j.conteos || {};
+        st.embudo  = j.embudo  || {};
+        actualizarFiltroUI();
 
         pintarBandejas(j.bandejas || []);
 
@@ -1546,22 +1567,31 @@ $ia_disponible = IaAgente::disponible();
       }
 
       t.addEventListener('keydown', function (e) {
-        // Expandir /atajo (respuesta rápida) con Enter, Tab o Espacio
-        if (e.key === 'Enter' || e.key === 'Tab' || e.key === ' ') {
-          var m = textoActual().trim().match(/^\/([a-z0-9_\-]+)$/i);
-          if (m && _rrByAtajo[m[1].toLowerCase()]) {
+        // Navegación del autocompletado de /atajos, si está visible
+        var box = document.getElementById('ib-atajo-sug');
+        if (box) {
+          var ops = Array.prototype.slice.call(box.querySelectorAll('.ib-atajo-op'));
+          var sel = box.querySelector('.ib-atajo-op.sel');
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
-            var el = $('#ib-texto'); el.focus();
-            var txt = _rrByAtajo[m[1].toLowerCase()];
-            repintar_con(el, txt, txt.length);
+            var i = ops.indexOf(sel) + (e.key === 'ArrowDown' ? 1 : -1);
+            if (i < 0) i = ops.length - 1; if (i >= ops.length) i = 0;
+            ops.forEach(function (o) { o.classList.remove('sel'); }); ops[i].classList.add('sel');
             return;
           }
+          if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); insertarAtajo((sel || ops[0]).dataset.atajo); return; }
+          if (e.key === 'Escape') { box.remove(); return; }
+        }
+        // Expandir /atajo exacto con Espacio
+        if (e.key === ' ') {
+          var m = textoActual().trim().match(/^\/([a-z0-9_\-]+)$/i);
+          if (m && _rrByAtajo[m[1].toLowerCase()]) { e.preventDefault(); insertarAtajo(m[1].toLowerCase()); return; }
         }
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
       });
 
-      // Repintar con formato en cada cambio
-      t.addEventListener('input', function () { repintar(t); });
+      // Repintar con formato + sugerir /atajos en cada cambio
+      t.addEventListener('input', function () { repintar(t); sugerirAtajos(); });
 
       // Adjuntar: primero vista previa, como WhatsApp. Enviar de golpe no da
       // oportunidad de revisar el archivo ni de acompañarlo con un mensaje.
@@ -1738,6 +1768,48 @@ $ia_disponible = IaAgente::disponible();
       .then(function () { if (btn) btn.disabled = false; });
   }
 
+  // ── Selector compacto de filtros + etapas ──────────────────────────────────
+  var FILTROS = [
+    { k: 'todas',         n: 'Todas' },
+    { k: 'mias',          n: 'A mi cargo' },
+    { k: 'sin_responder', n: 'Sin responder', alerta: true },
+    { k: 'sin_asignar',   n: 'Sin asignar' },
+    { k: 'sin_persona',   n: 'Sin persona' },
+    { k: 'archivadas',    n: 'Archivados' }
+  ];
+  function nombreFiltro(f) {
+    if (f && f.indexOf('etapa:') === 0) { var e = EMBUDO_MAP[f.slice(6)]; return e ? e.n : 'Etapa'; }
+    var m = FILTROS.filter(function (x) { return x.k === f; })[0];
+    return m ? m.n : 'Todas';
+  }
+  function conteoFiltro(f) {
+    if (f && f.indexOf('etapa:') === 0) return st.embudo[f.slice(6)] || 0;
+    return st.conteos[f] || 0;
+  }
+  function actualizarFiltroUI() {
+    var lbl = $('#ib-filtro-lbl'); if (lbl) lbl.textContent = nombreFiltro(st.f);
+    var nn  = $('#ib-filtro-n');   if (nn)  { var n = conteoFiltro(st.f); nn.textContent = n ? n : ''; }
+    var srB = document.querySelector('#ib-filtro-sr b'); if (srB) srB.textContent = st.conteos.sin_responder || '';
+    var sr  = $('#ib-filtro-sr');
+    if (sr) { sr.classList.toggle('on', st.f === 'sin_responder'); sr.classList.toggle('has', !!st.conteos.sin_responder); }
+  }
+  function setFiltro(k) { st.f = k; actualizarFiltroUI(); lista(); }
+  function popFiltros(ancla) {
+    var ex = document.getElementById('ib-pop');
+    if (ex && ex.dataset.pop === 'filtros') { cerrarPop(); return; }
+    function item(k, n, cnt, dot) {
+      return '<button type="button" class="ib-fi-op' + (st.f === k ? ' on' : '') + '" data-ffilter="' + k + '">'
+           + (dot ? '<span class="ib-emb-dot" style="--emb:' + dot + '"></span>' : '')
+           + '<span class="ib-fi-n">' + n + '</span>' + (cnt ? '<b>' + cnt + '</b>' : '') + '</button>';
+    }
+    var html = '<div class="ib-fi-sec">Bandeja</div>'
+      + FILTROS.map(function (f) { return item(f.k, f.n, st.conteos[f.k] || '', null); }).join('')
+      + '<div class="ib-fi-sec">Etapas del embudo</div>'
+      + EMBUDO.map(function (e) { return item('etapa:' + e.k, e.n, st.embudo[e.k] || '', e.c); }).join('');
+    var d = abrirPop(ancla, '<div class="ib-fi-lista">' + html + '</div>');
+    d.dataset.pop = 'filtros';
+  }
+
   // ── Respuestas rápidas (canned) ─────────────────────────────────────────────
   var _rrCache = {};      // por id → texto (para el pop)
   var _rrByAtajo = {};    // por atajo → texto (para el trigger "/atajo")
@@ -1749,6 +1821,30 @@ $ia_disponible = IaAgente::disponible();
         (j.items || []).forEach(function (r) { _rrByAtajo[String(r.atajo).toLowerCase()] = r.texto; });
       }).catch(function () {});
   }
+  // Autocompletado: al escribir "/algo" muestra los atajos que coinciden
+  function sugerirAtajos() {
+    var box = document.getElementById('ib-atajo-sug');
+    var m = textoActual().match(/^\/([a-z0-9_\-]*)$/i);
+    if (!m) { if (box) box.remove(); return; }
+    var pref = m[1].toLowerCase();
+    var matches = Object.keys(_rrByAtajo).filter(function (a) { return a.indexOf(pref) === 0; }).sort().slice(0, 6);
+    if (!matches.length) { if (box) box.remove(); return; }
+    if (!box) {
+      var foot = document.querySelector('.ib-foot'); if (!foot) return;
+      box = document.createElement('div'); box.id = 'ib-atajo-sug'; box.className = 'ib-atajo-sug';
+      foot.style.position = 'relative'; foot.appendChild(box);
+    }
+    box.innerHTML = '<div class="ib-atajo-tit">Respuestas rápidas</div>' + matches.map(function (a, i) {
+      return '<button type="button" class="ib-atajo-op' + (i === 0 ? ' sel' : '') + '" data-atajo="' + a + '">'
+           + '<b>/' + esc(a) + '</b><span>' + esc(_rrByAtajo[a]) + '</span></button>';
+    }).join('');
+  }
+  function insertarAtajo(a) {
+    var txt = _rrByAtajo[a]; if (txt == null) return;
+    var el = $('#ib-texto'); if (el) { el.focus(); repintar_con(el, txt, txt.length); }
+    var box = document.getElementById('ib-atajo-sug'); if (box) box.remove();
+  }
+
   function popRapidas(ancla) {
     var ex = document.getElementById('ib-pop');
     if (ex && ex.dataset.pop === 'rapidas') { cerrarPop(); return; }
@@ -3203,6 +3299,10 @@ $ia_disponible = IaAgente::disponible();
     var ds = e.target.closest('[data-docsend-tipo]');
     if (ds) { enviarDocumento(ds.dataset.docsendTipo, ds.dataset.docsendId, ds); return; }
 
+    // Autocompletado de /atajos: clic en una sugerencia
+    var atajoOp = e.target.closest('[data-atajo]');
+    if (atajoOp) { insertarAtajo(atajoOp.dataset.atajo); return; }
+
     // Respuestas rápidas (canned)
     if (e.target.closest('#ib-rapidas')) { popRapidas(e.target.closest('#ib-rapidas')); return; }
     var rr = e.target.closest('[data-rr]');
@@ -3218,8 +3318,14 @@ $ia_disponible = IaAgente::disponible();
 
     if (!e.target.closest('.ib-pop')) cerrarPop();
 
+    // Selector compacto de filtros / etapas
+    if (e.target.closest('#ib-filtro-btn')) { popFiltros(e.target.closest('#ib-filtro-btn')); return; }
+    if (e.target.closest('#ib-filtro-sr'))  { setFiltro('sin_responder'); return; }
+    var fi = e.target.closest('[data-ffilter]');
+    if (fi) { cerrarPop(); setFiltro(fi.dataset.ffilter); return; }
+
     var p = e.target.closest('.ib-pill');
-    if (p) {
+    if (p && p.dataset.f) {
       document.querySelectorAll('.ib-pill').forEach(function (b) { b.classList.remove('on'); });
       p.classList.add('on'); st.f = p.dataset.f; lista(); return;
     }
