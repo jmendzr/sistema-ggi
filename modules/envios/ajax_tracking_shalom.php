@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../core/ShalomTrackingService.php';
 require_once __DIR__ . '/../../core/envio_notificar.php';
 session_init();
 require_login();
+session_write_close();  // solo lee $_SESSION → no serializar (auditoría 2026-07)
 
 header('Content-Type: application/json; charset=utf-8');
 

@@ -3,6 +3,9 @@ require_once __DIR__ . '/../../core/helpers.php';
 require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
+// Libera el lock de sesión: solo LEE $_SESSION. Sin esto, las pestañas del
+// cliente (que se cargan en paralelo) se encolan una tras otra. (Auditoría 2026-07)
+session_write_close();
 
 header('Content-Type: application/json; charset=utf-8');
 // El contenido de pestaña cambia con cada deploy de UI → no cachear nunca,
