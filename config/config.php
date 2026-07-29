@@ -114,8 +114,13 @@ define('META_APP_ID',             env('META_APP_ID',             '14863299499109
 // ── Agente IA (copiloto del inbox) ────────────────────────────────────────────
 //  Conmutable por IA_PROVIDER: 'claude' (Anthropic) u 'openai'. Las llaves viven
 //  en .env (fuera del repo), nunca aquí. Sin llave → el copiloto queda inactivo.
-define('IA_PROVIDER',       env('IA_PROVIDER',       'claude'));   // claude | openai
+define('IA_PROVIDER',       env('IA_PROVIDER',       'claude'));   // claude | openai | gemini
 define('IA_ANTHROPIC_KEY',  env('IA_ANTHROPIC_KEY',  ''));
 define('IA_ANTHROPIC_MODEL',env('IA_ANTHROPIC_MODEL','claude-sonnet-4-5-20250929'));
 define('IA_OPENAI_KEY',     env('IA_OPENAI_KEY',     ''));
 define('IA_OPENAI_MODEL',   env('IA_OPENAI_MODEL',   'gpt-4o'));
+// Gemini (Google AI Studio, tier gratuito). Dos llaves: si la 1ª agota su cuota
+// (429), el copiloto reintenta solo con la 2ª (dos cuentas Google distintas).
+define('IA_GEMINI_KEY',     env('IA_GEMINI_KEY',     ''));
+define('IA_GEMINI_KEY_2',   env('IA_GEMINI_KEY_2',   ''));
+define('IA_GEMINI_MODEL',   env('IA_GEMINI_MODEL',   'gemini-2.0-flash'));

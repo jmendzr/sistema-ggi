@@ -22,15 +22,26 @@ class IaAgente
     /** ¿Hay un motor con llave lista? Sirve para mostrar/ocultar el botón. */
     public static function disponible(): bool
     {
-        return self::provider() === 'openai'
-            ? IA_OPENAI_KEY !== ''
-            : IA_ANTHROPIC_KEY !== '';
+        switch (self::provider()) {
+            case 'openai': return IA_OPENAI_KEY !== '';
+            case 'gemini': return count(self::geminiKeys()) > 0;
+            default:       return IA_ANTHROPIC_KEY !== '';
+        }
     }
 
     private static function provider(): string
     {
         $p = strtolower(trim((string) IA_PROVIDER));
-        return $p === 'openai' ? 'openai' : 'claude';
+        return in_array($p, ['openai', 'gemini'], true) ? $p : 'claude';
+    }
+
+    /** Llaves de Gemini configuradas, en orden (1ª preferida, 2ª de respaldo). */
+    private static function geminiKeys(): array
+    {
+        return array_values(array_filter(
+            [IA_GEMINI_KEY, IA_GEMINI_KEY_2],
+            fn($k) => trim((string) $k) !== ''
+        ));
     }
 
     // ── Contexto interno del cliente (solo lectura) ──────────────────────────
@@ -159,9 +170,11 @@ class IaAgente
                 . "\n\n----\nRedacta ÚNICAMENTE el texto del próximo mensaje que nosotros (GGI) le enviaríamos al cliente. "
                 . "Sin saludos protocolarios largos, sin explicar tu razonamiento, solo el mensaje listo para enviar.";
 
-        $texto = self::provider() === 'openai'
-            ? self::llamarOpenAI($system, $user)
-            : self::llamarClaude($system, $user);
+        switch (self::provider()) {
+            case 'openai': $texto = self::llamarOpenAI($system, $user); break;
+            case 'gemini': $texto = self::llamarGemini($system, $user); break;
+            default:       $texto = self::llamarClaude($system, $user); break;
+        }
 
         if ($texto === null) {
             return ['ok' => false, 'error' => self::$lastError ?: 'No se pudo generar la sugerencia.'];
@@ -247,8 +260,68 @@ class IaAgente
         return $t;
     }
 
+    private static function llamarGemini(string $system, string $user): ?string
+    {
+        $keys = self::geminiKeys();
+        if (!$keys) { self::$lastError = 'Falta IA_GEMINI_KEY en .env'; return null; }
+
+        $payload = [
+            'system_instruction' => ['parts' => [['text' => $system]]],
+            'contents'           => [['role' => 'user', 'parts' => [['text' => $user]]]],
+            'generationConfig'   => ['maxOutputTokens' => 700, 'temperature' => 0.5],
+        ];
+
+        $ultimoErr = null;
+        foreach ($keys as $i => $key) {
+            $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+                 . IA_GEMINI_MODEL . ':generateContent?key=' . urlencode($key);
+            $r = self::postJson($url, $payload, ['Content-Type: application/json']);
+
+            if ($r['code'] >= 200 && $r['code'] < 300) {
+                $t = $r['body']['candidates'][0]['content']['parts'][0]['text'] ?? null;
+                if ($t !== null && trim($t) !== '') return $t;
+                // Bloqueado por filtros de seguridad u otra razón sin texto
+                $ultimoErr = 'Gemini (cuenta ' . ($i + 1) . ') no devolvió texto'
+                           . (!empty($r['body']['promptFeedback']['blockReason'])
+                               ? ' (bloqueado: ' . $r['body']['promptFeedback']['blockReason'] . ')' : '');
+                break; // otra cuenta daría lo mismo con el mismo contenido
+            }
+
+            $msg = $r['body']['error']['message'] ?? $r['err'] ?? ('HTTP ' . $r['code']);
+            $ultimoErr = 'Gemini (cuenta ' . ($i + 1) . '): ' . $msg;
+            error_log('[IaAgente] Gemini cuenta ' . ($i + 1) . ' HTTP ' . $r['code'] . ': ' . $msg);
+
+            // Cuota agotada (429) o servicio saturado (503) → probar la siguiente cuenta.
+            // Cualquier otro error (llave inválida, request malo) no se arregla cambiando de cuenta.
+            if (!in_array($r['code'], [429, 503], true)) break;
+        }
+
+        self::$lastError = mb_substr($ultimoErr ?? 'No se pudo generar con Gemini.', 0, 400);
+        return null;
+    }
+
     /** POST JSON genérico; devuelve el array decodificado o null (con lastError). */
     private static function http(string $url, array $payload, array $headers): ?array
+    {
+        $r = self::postJson($url, $payload, $headers);
+        if ($r['err'] !== null) {
+            self::$lastError = 'Error de red con el motor de IA: ' . $r['err'];
+            error_log('[IaAgente] cURL: ' . $r['err']);
+            return null;
+        }
+        if ($r['code'] >= 200 && $r['code'] < 300) return $r['body'];
+
+        $msg = $r['body']['error']['message'] ?? ('HTTP ' . $r['code']);
+        self::$lastError = mb_substr('IA HTTP ' . $r['code'] . ': ' . $msg, 0, 400);
+        error_log('[IaAgente] API error HTTP ' . $r['code'] . ': ' . $msg);
+        return null;
+    }
+
+    /**
+     * cURL POST JSON de bajo nivel.
+     * @return array ['code'=>int, 'body'=>array, 'err'=>?string]
+     */
+    private static function postJson(string $url, array $payload, array $headers): array
     {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
@@ -259,21 +332,12 @@ class IaAgente
             CURLOPT_HTTPHEADER     => $headers,
         ]);
         $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr  = curl_error($ch);
         curl_close($ch);
 
-        if ($curlErr) {
-            self::$lastError = 'Error de red con el motor de IA: ' . $curlErr;
-            error_log('[IaAgente] cURL: ' . $curlErr);
-            return null;
-        }
+        if ($curlErr) return ['code' => 0, 'body' => [], 'err' => $curlErr];
         $data = $response ? json_decode($response, true) : [];
-        if ($httpCode >= 200 && $httpCode < 300) return is_array($data) ? $data : [];
-
-        $msg = $data['error']['message'] ?? (string) $response;
-        self::$lastError = mb_substr('IA HTTP ' . $httpCode . ': ' . $msg, 0, 400);
-        error_log('[IaAgente] API error HTTP ' . $httpCode . ': ' . $msg);
-        return null;
+        return ['code' => $httpCode, 'body' => is_array($data) ? $data : [], 'err' => null];
     }
 }
