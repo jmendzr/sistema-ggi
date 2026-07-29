@@ -9,8 +9,8 @@
  *   - cotización → estado 'desistida' (motivo_desistimiento, desistida_at/by)
  *   - certificados 'en_proceso' de la cotización → soft-delete
  *   - pagos NO validados de la cotización → soft-delete (los validados se conservan)
- *   - cliente → 'inactivo' si no le queda negocio activo (otras propuestas
- *     aceptadas o certificados vivos); inactivo también bloquea su portal
+ *   - cliente → 'prospecto' si no le queda negocio activo (otras propuestas
+ *     aceptadas o certificados vivos); vuelve a prospecto para re-cotizar
  */
 require_once __DIR__ . '/../../core/helpers.php';
 require_once __DIR__ . '/../../core/Database.php';
@@ -83,7 +83,7 @@ if ($preview) {
     if ($n_certs_anular)    $acciones[] = "$n_certs_anular certificado(s) en proceso se anularán";
     if ($n_pagos_anular)    $acciones[] = "$n_pagos_anular pago(s) pendiente(s) se anularán";
     if ($n_pagos_validados) $acciones[] = "$n_pagos_validados pago(s) validado(s) se conservan (dinero ya recibido)";
-    if ($cliente_desactivar) $acciones[] = "La empresa pasará a estado Inactivo (su portal quedará bloqueado)";
+    if ($cliente_desactivar) $acciones[] = "La empresa volverá a estado Prospecto (queda libre para cotizarle de nuevo)";
     echo json_encode([
         'ok'       => true,
         'preview'  => true,
@@ -120,7 +120,9 @@ try {
     ")->execute([$user['id'], $cot_id]);
 
     if ($cliente_desactivar) {
-        $pdo->prepare("UPDATE clientes SET estado = 'inactivo' WHERE id = ?")->execute([$cliente_id]);
+        // Vuelve a Prospecto: queda libre para cotizarle de nuevo (no 'inactivo',
+        // que además bloqueaba su portal). Es un lead que no cerró, no un baneo.
+        $pdo->prepare("UPDATE clientes SET estado = 'prospecto' WHERE id = ?")->execute([$cliente_id]);
     }
 
     $pdo->commit();
@@ -134,7 +136,7 @@ try {
 log_actividad('propuestas', 'desistir',
     "Propuesta {$cot['numero']} → desistida — Motivo: $motivo" .
     " (certs anulados: $n_certs_anular, pagos anulados: $n_pagos_anular, validados conservados: $n_pagos_validados" .
-    ($cliente_desactivar ? ", cliente #$cliente_id → inactivo" : "") . ")");
+    ($cliente_desactivar ? ", cliente #$cliente_id → prospecto" : "") . ")");
 
 // ── Notificación interna + push (gerentes + ejecutivo de la propuesta) ──
 try {

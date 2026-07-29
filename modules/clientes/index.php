@@ -11,6 +11,8 @@ $buscar         = trim($_GET['q'] ?? '');
 // Multi-selección de ejecutivos y de estado de revisión (filtros ms-drop)
 $ejec_sel       = array_values(array_filter(array_map('intval', (array)($_GET['ejecutivo'] ?? [])), fn($v) => $v > 0));
 $revision_sel   = array_values(array_filter((array)($_GET['revision'] ?? []), fn($v) => in_array($v, ['pendiente','revisado'], true)));
+$factura_pend   = !empty($_GET['factura_pend']);  // solo empresas con factura por emitir
+require_once __DIR__ . '/../../core/pendientes.php';
 $estado_explicit = array_key_exists('estado', $_GET); // ¿se envió el param explícitamente?
 // Multi-selección de estados: default=['activo'] si no se especifica nada
 if ($estado_explicit) {
@@ -59,6 +61,11 @@ if ($revision_sel && $user['rol'] === 'gerente_general') {
     $ph = implode(',', array_fill(0, count($revision_sel), '?'));
     $where[]  = "c.revision_gerente IN ($ph)";
     $params   = array_merge($params, $revision_sel);
+}
+// Filtro "con factura pendiente": empresas con propuesta aceptada+pagada sin factura.
+// Útil para clientes antiguos que quedan lejos en el listado.
+if ($factura_pend) {
+    $where[] = gg_sql_factura_pendiente('c.id');
 }
 
 $sql_where = implode(' AND ', $where);
@@ -191,6 +198,7 @@ $_nfiltros = 0;
 if ($estado_explicit && $estados_sel !== ['activo']) $_nfiltros++;
 if (!empty($ejec_sel))     $_nfiltros++;
 if (!empty($revision_sel)) $_nfiltros++;
+if ($factura_pend)         $_nfiltros++;
 ?>
 <div class="toolbar">
   <form method="GET" class="<?= $_nfiltros ? 'filtros-open' : '' ?>" style="display:flex;gap:10px;flex:1;flex-wrap:wrap;">
@@ -204,6 +212,11 @@ if (!empty($revision_sel)) $_nfiltros++;
       Filtros<?php if ($_nfiltros): ?> <span class="ggi-filtros-badge"><?= $_nfiltros ?></span><?php endif; ?>
     </button>
     <div class="ggi-filtros">
+    <label class="ggi-chip-check<?= $factura_pend ? ' on' : '' ?>" title="Empresas con propuesta aceptada y pagada que aún no tienen factura emitida">
+      <input type="checkbox" name="factura_pend" value="1" <?= $factura_pend ? 'checked' : '' ?> onchange="this.form.submit()" style="display:none">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+      Con factura pendiente
+    </label>
     <?php
     $_cli_estados = [
       'activo'    => ['label'=>'Activo',    'cls'=>'is-ok'],

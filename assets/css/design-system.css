@@ -1232,6 +1232,15 @@ input.error, select.error, textarea.error,
    botón se oculta (experiencia desktop intacta). */
 .ggi-filtros { display: contents; }
 .ggi-filtros-toggle { display: none; }
+/* Chip-checkbox reutilizable para filtros booleanos (ej. "Con factura pendiente") */
+.ggi-chip-check {
+  display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px;
+  border: 1px solid var(--brd, #E2E8F0); border-radius: 9px; background: var(--bg-surface, #fff);
+  color: var(--tx2, #475569); font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.ggi-chip-check:hover { background: var(--bg-hover, #F1F5F9); border-color: var(--ac, #1D4ED8); }
+.ggi-chip-check.on { background: var(--ac-soft, #EFF6FF); border-color: var(--ac, #1D4ED8); color: var(--ac, #1D4ED8); }
 /* Grupo de botones de acción de la barra (Buscar/Limpiar): juntos en una fila. */
 .ggi-filtros-actions { display: flex; gap: 8px; }
 @media (max-width: 768px) {

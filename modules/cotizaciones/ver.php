@@ -1145,7 +1145,7 @@ async function submitDesistir() {
       var msg = 'Propuesta marcada como desistida.';
       if (data.certs_anulados)     msg += ' ' + data.certs_anulados + ' certificado(s) anulado(s).';
       if (data.pagos_anulados)     msg += ' ' + data.pagos_anulados + ' pago(s) pendiente(s) anulado(s).';
-      if (data.cliente_inactivado) msg += ' La empresa pasó a Inactivo.';
+      if (data.cliente_inactivado) msg += ' La empresa volvió a Prospecto.';
       location.href = '<?= APP_URL ?>/modules/cotizaciones/ver.php?id=<?= $id ?>&m=' + encodeURIComponent(msg);
       return;
     }

@@ -146,6 +146,26 @@ if (!function_exists('gg_pendiente_tipos')) {
         return $out;
     }
 
+    /**
+     * Cláusula SQL EXISTS: ¿la empresa tiene alguna factura pendiente de emitir?
+     * (propuesta aceptada con IGV, sin factura cargada, y ambos pagos validados).
+     * Reutilizable para filtrar listados sin duplicar la lógica de conteo.
+     * $cidCol es un nombre de columna (no entra input de usuario).
+     */
+    function gg_sql_factura_pendiente(string $cidCol): string
+    {
+        return "EXISTS (
+            SELECT 1 FROM cotizaciones cot
+             WHERE cot.cliente_id = $cidCol AND cot.estado='aceptada' AND cot.deleted_at IS NULL
+               AND cot.incluye_igv = 1
+               AND NOT EXISTS (SELECT 1 FROM facturas_cliente f WHERE f.cotizacion_id = cot.id)
+               AND EXISTS (SELECT 1 FROM pagos_cliente pi WHERE pi.cotizacion_id = cot.id
+                             AND pi.deleted_at IS NULL AND pi.tipo='inicial' AND pi.estado='validado')
+               AND EXISTS (SELECT 1 FROM pagos_cliente pf WHERE pf.cotizacion_id = cot.id
+                             AND pf.deleted_at IS NULL AND pf.tipo='final'   AND pf.estado='validado')
+        )";
+    }
+
     /** Conteos para UN cliente. */
     function gg_empresa_pendientes_counts(PDO $pdo, int $cliente_id): array
     {
