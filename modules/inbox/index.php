@@ -236,9 +236,12 @@ $ia_disponible = IaAgente::disponible();
   .ib-plt-f { display: block; margin-bottom: 10px; }
   .ib-plt-f span { display: block; font-size: .74rem; font-weight: 600; color: var(--tx2);
                    margin-bottom: 4px; text-transform: capitalize; }
-  .ib-plt-f input { width: 100%; padding: 9px 12px; font: inherit; font-size: .85rem;
+  .ib-plt-f input,
+  .ib-plt-f textarea,
+  .ib-plt-f select { width: 100%; padding: 9px 12px; font: inherit; font-size: .85rem;
                     border: 1px solid var(--brd); border-radius: 9px;
                     background: var(--bg-input); color: var(--tx); }
+  .ib-plt-f textarea { resize: vertical; min-height: 64px; line-height: 1.45; }
 
   .ib-pop input { width: 100%; padding: 7px 10px; font: inherit; font-size: .8rem; margin-bottom: 4px;
                   border: 1px solid var(--brd); border-radius: 8px; background: var(--bg-input); color: var(--tx); }
@@ -489,8 +492,12 @@ $ia_disponible = IaAgente::disponible();
   .ib-editable .ib-mk { opacity: .38; font-weight: 400; }
 
   /* ── Columna 3: contexto ── */
+  /* El panel debe hacer scroll propio: con muchas secciones (certificados,
+     notas, agenda…) el contenido excedía la altura y quedaba cortado. */
+  .ib-ctx { display: block; overflow-y: auto; overflow-x: hidden; }
   .ib-ctx-head { padding: 13px 17px; border-bottom: 1px solid var(--brd);
-                 font-size: .88rem; font-weight: 700; color: var(--tx); }
+                 font-size: .88rem; font-weight: 700; color: var(--tx);
+                 position: sticky; top: 0; z-index: 2; background: var(--bg-surface); }
   .ib-ctx-s { padding: 15px 17px; border-bottom: 1px solid var(--brd); }
 
   /* Caja de estado, como en la referencia */
@@ -1022,8 +1029,6 @@ $ia_disponible = IaAgente::disponible();
             ? (it.es_mia ? '<span class="ib-tag mia">A mi cargo</span>'
                          : '<span class="ib-tag otro">' + esc(it.asignado_nombre || 'Asignada') + '</span>')
             : '<span class="ib-tag libre">Libre</span>';
-          var viejo = (it.dias_asignada !== null && it.dias_asignada >= 3)
-            ? '<span class="ib-tag viejo">' + it.dias_asignada + ' d sin mover</span>' : '';
           var etqs = (it.etiquetas || []).map(function (e) {
             return '<span class="ib-etq ' + esc(e.color || 'neutral') + '">' + esc(e.nombre) + '</span>';
           }).join('');
@@ -1055,14 +1060,12 @@ $ia_disponible = IaAgente::disponible();
             // veían los marcadores (*hola*) en vez del texto en negrita.
             +     '<span class="ib-item-p">' + formato(it.preview) + '</span>'
             +     '<span class="ib-item-ind">'
-            +       (it.esperando ? '<span class="ib-esperando" title="El cliente escribió y espera respuesta">'
-                      + (it.horas_espera != null && it.horas_espera > 0 ? it.horas_espera + 'h' : '↩') + '</span>' : '')
             +       mute + pin
             +       (it.no_leidos ? '<span class="ib-unread">' + it.no_leidos + '</span>'
                     : (it.sin_leer ? '<span class="ib-unread punto"></span>' : ''))
             +     '</span>'
             +   '</span>'
-            +   (tag + viejo + etqs ? '<span class="ib-item-m">' + tag + viejo + etqs + '</span>' : '')
+            +   (tag + etqs ? '<span class="ib-item-m">' + tag + etqs + '</span>' : '')
             + '</span></button>';
         }).join('');
       }).catch(function () {});
@@ -1496,6 +1499,17 @@ $ia_disponible = IaAgente::disponible();
       }
 
       t.addEventListener('keydown', function (e) {
+        // Expandir /atajo (respuesta rápida) con Enter, Tab o Espacio
+        if (e.key === 'Enter' || e.key === 'Tab' || e.key === ' ') {
+          var m = textoActual().trim().match(/^\/([a-z0-9_\-]+)$/i);
+          if (m && _rrByAtajo[m[1].toLowerCase()]) {
+            e.preventDefault();
+            var el = $('#ib-texto'); el.focus();
+            var txt = _rrByAtajo[m[1].toLowerCase()];
+            repintar_con(el, txt, txt.length);
+            return;
+          }
+        }
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
       });
 
@@ -1678,16 +1692,26 @@ $ia_disponible = IaAgente::disponible();
   }
 
   // ── Respuestas rápidas (canned) ─────────────────────────────────────────────
-  var _rrCache = {};
+  var _rrCache = {};      // por id → texto (para el pop)
+  var _rrByAtajo = {};    // por atajo → texto (para el trigger "/atajo")
+  function cargarRapidas() {
+    fetch('ajax.php?accion=respuestas', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        _rrByAtajo = {};
+        (j.items || []).forEach(function (r) { _rrByAtajo[String(r.atajo).toLowerCase()] = r.texto; });
+      }).catch(function () {});
+  }
   function popRapidas(ancla) {
     var ex = document.getElementById('ib-pop');
     if (ex && ex.dataset.pop === 'rapidas') { cerrarPop(); return; }
     fetch('ajax.php?accion=respuestas', { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        _rrCache = {};
+        _rrCache = {}; _rrByAtajo = {};
         var items = (j.items || []).map(function (r) {
           _rrCache[r.id] = r.texto;
+          _rrByAtajo[String(r.atajo).toLowerCase()] = r.texto;
           return '<button type="button" class="ib-rr-op" data-rr="' + r.id + '">'
                + '<b>/' + esc(r.atajo) + '</b><span>' + esc(r.texto) + '</span></button>';
         }).join('') || '<div class="ib-ctx-s2" style="padding:8px 10px">Aún no hay respuestas rápidas.</div>';
@@ -1722,7 +1746,7 @@ $ia_disponible = IaAgente::disponible();
           var d = e.target.closest('[data-rrm-del]');
           if (!d) return;
           ggiPost('ajax.php', { accion: 'respuesta_borrar', rr_id: d.dataset.rrmDel })
-            .then(function (r) { if (r.ok) { var row = cont.querySelector('[data-rrm="' + d.dataset.rrmDel + '"]'); if (row) row.remove(); } });
+            .then(function (r) { if (r.ok) { var row = cont.querySelector('[data-rrm="' + d.dataset.rrmDel + '"]'); if (row) row.remove(); cargarRapidas(); } });
         });
         var add = document.getElementById('rrm-add');
         if (add) add.addEventListener('click', function () {
@@ -1732,7 +1756,7 @@ $ia_disponible = IaAgente::disponible();
           add.disabled = true;
           ggiPost('ajax.php', { accion: 'respuesta_guardar', atajo: a, texto: t })
             .then(function (r) {
-              if (r.ok) modalRapidas();
+              if (r.ok) { cargarRapidas(); modalRapidas(); }
               else { if (window.showToast) showToast(r.msg || 'No se pudo guardar', 'error'); add.disabled = false; }
             });
         });
@@ -3221,6 +3245,7 @@ $ia_disponible = IaAgente::disponible();
   } catch (_) {}
 
   lista();
+  cargarRapidas();
 })();
 </script>
 

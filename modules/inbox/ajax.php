@@ -14,6 +14,11 @@ require_once __DIR__ . '/../../core/WaInbox.php';
 session_init();
 require_login();
 require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
+// Liberar el lock de sesión de inmediato: este endpoint solo LEE $_SESSION
+// (id/rol del usuario), nunca escribe. Sin esto, PHP serializa las peticiones
+// AJAX concurrentes (lista + hilo + media + refrescar) y el inbox se siente
+// lento. csrf_verify() sigue funcionando: $_SESSION queda legible en memoria.
+session_write_close();
 header('Content-Type: application/json; charset=utf-8');
 
 $pdo    = Database::get();
