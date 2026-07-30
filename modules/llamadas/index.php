@@ -69,7 +69,8 @@ $dias  = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 
 require_once __DIR__ . '/../../templates/layout.php';
 ?>
-<div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
+<!-- data-spa-nocache: el calendario cambia al marcar llamadas en otras páginas → siempre fresco -->
+<div class="page-header" data-spa-nocache style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
   <div>
     <h1>Calendario de llamadas</h1>
     <p style="color:var(--tx3);font-size:13px;margin-top:2px;"><?= $total ?> llamada<?= $total !== 1 ? 's' : '' ?> en <?= $meses[$mes] ?> <?= $anio ?></p>

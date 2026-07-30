@@ -51,7 +51,14 @@
     if (!forceRefresh && cache[href] && typeof cache[href].then === 'function') return cache[href];
     var p = fetch(href, { signal: signal, credentials: 'same-origin', cache: 'no-cache' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
-      .then(function (html) { cache[href] = html; return html; })
+      .then(function (html) {
+        // Opt-out de caché SPA: páginas con datos que cambian por acciones en
+        // OTRAS páginas (p. ej. el calendario de llamadas) se marcan con
+        // data-spa-nocache para servirse siempre frescas.
+        if (html.indexOf('data-spa-nocache') !== -1) { delete cache[href]; }
+        else { cache[href] = html; }
+        return html;
+      })
       .catch(function (err) { cache[href] = null; throw err; });
     if (!forceRefresh) cache[href] = p;
     return p;
@@ -328,7 +335,11 @@
       if (cache[url.href] != null) return;
       cache[url.href] = fetch(url.href, { credentials: 'same-origin', cache: 'no-cache' })
         .then(function (r) { return r.text(); })
-        .then(function (html) { cache[url.href] = html; return html; })
+        .then(function (html) {
+          if (html.indexOf('data-spa-nocache') !== -1) { delete cache[url.href]; }
+          else { cache[url.href] = html; }
+          return html;
+        })
         .catch(function () { cache[url.href] = null; });
     } catch (x) {}
   }, { passive: true });
