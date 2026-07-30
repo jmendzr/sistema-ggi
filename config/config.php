@@ -111,6 +111,13 @@ define('META_WA_WABA_ID',         env('META_WA_WABA_ID',         ''));
 define('META_APP_SECRET',         env('META_APP_SECRET',         '')); // firma de webhooks
 define('META_APP_ID',             env('META_APP_ID',             '1486329949910978')); // público; usado en el resumable upload del perfil
 
+// ── Meta Conversions API (atribución de cierres de venta a Meta Ads) ──────────
+//  Dataset (Pixel) + token de acceso de la Conversions API. Se usan para enviar
+//  el evento de cierre de venta a Meta atribuyéndolo por ctwa_clid del referral
+//  del click-to-WhatsApp. Ambos viven en .env (nunca en el código).
+define('META_DATASET_ID',        env('META_DATASET_ID',        ''));
+define('META_CAPI_ACCESS_TOKEN', env('META_CAPI_ACCESS_TOKEN', ''));
+
 // ── Agente IA (copiloto del inbox) ────────────────────────────────────────────
 //  Conmutable por IA_PROVIDER: 'claude' (Anthropic) u 'openai'. Las llaves viven
 //  en .env (fuera del repo), nunca aquí. Sin llave → el copiloto queda inactivo.
