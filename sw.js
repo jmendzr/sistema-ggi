@@ -11,7 +11,7 @@
  * el SW antiguo elimina automáticamente los cachés obsoletos en 'activate'.
  */
 
-const CACHE_VERSION  = 'ggi-v91';
+const CACHE_VERSION  = 'ggi-v92';
 const CACHE_STATIC   = CACHE_VERSION + '-static';
 const CACHE_PAGES    = CACHE_VERSION + '-pages';
 
@@ -108,9 +108,40 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Páginas PHP → Network-First con fallback offline
+  // Navegación de página completa (arranque del PWA, recarga, escribir URL) →
+  // Stale-While-Revalidate: muestra al instante la última versión cacheada y
+  // refresca en segundo plano. Hace que el PWA abra sin esperar la red.
+  // OJO: solo aplica a mode 'navigate'; los fetch de la navegación SPA (mode
+  // 'cors'/'same-origin') siguen Network-First → datos frescos al navegar.
+  if (req.mode === 'navigate') {
+    event.respondWith(staleWhileRevalidateHTML(req));
+    return;
+  }
+
+  // Páginas PHP (fetch de la SPA, etc.) → Network-First con fallback offline
   event.respondWith(networkFirst(req));
 });
+
+// ── Stale-While-Revalidate para HTML de navegación ─────────────────────────
+async function staleWhileRevalidateHTML(req) {
+  const cache = await caches.open(CACHE_PAGES);
+  const cached = await cache.match(req);
+  const network = fetch(req).then(res => {
+    if (res && res.ok && res.status < 400) {
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('text/html')) cache.put(req, res.clone());
+    }
+    return res;
+  }).catch(() => null);
+  // Con caché → responder YA (arranque instantáneo); la red actualiza para la próxima.
+  if (cached) return cached;
+  // Sin caché → esperar la red; si falla, página offline.
+  const res = await network;
+  if (res) return res;
+  return new Response(offlinePage(), {
+    status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  });
+}
 
 // ── Cache-First: sirve desde caché; actualiza en segundo plano ─────────────
 async function cacheFirst(req, cacheName) {
