@@ -15,7 +15,7 @@ header('Pragma: no-cache');
 
 $id  = (int)($_GET['id']  ?? 0);
 $tab = $_GET['tab'] ?? '';
-$allowed_tabs = ['pagos','certificados','comunicaciones','propuestas','historial'];
+$allowed_tabs = ['pagos','certificados','llamadas','propuestas','historial'];
 
 if (!$id || !in_array($tab, $allowed_tabs, true)) {
     echo json_encode(['html' => '']);
@@ -466,51 +466,54 @@ elseif ($tab === 'certificados') {
 }
 
 // ── COMUNICACIONES ──────────────────────────────────────────────────────────
-elseif ($tab === 'comunicaciones') {
+elseif ($tab === 'llamadas') {
+    // Historial completo de llamadas del cliente (todos los estados).
     $stmt = $pdo->prepare("
-        SELECT cm.*, u.nombre, u.apellido FROM comunicaciones_cliente cm
-        JOIN usuarios u ON u.id = cm.usuario_id
-        WHERE cm.cliente_id = ?
-        ORDER BY cm.created_at DESC LIMIT 20
+        SELECT ll.*, TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS asignado_nombre
+        FROM llamadas_programadas ll
+        LEFT JOIN usuarios u ON u.id = ll.usuario_id
+        WHERE ll.cliente_id = ?
+        ORDER BY ll.fecha_hora DESC
     ");
     $stmt->execute([$id]);
-    $coms = $stmt->fetchAll();
+    $lls   = $stmt->fetchAll();
+    $ahora = time();
 ?>
     <div class="card">
-      <form method="POST" action="<?= APP_URL ?>/modules/comunicaciones/guardar.php">
-        <?= csrf_field() ?>
-        <input type="hidden" name="cliente_id" value="<?= $id ?>">
-        <input type="hidden" name="redirect" value="<?= APP_URL ?>/modules/clientes/ver.php?id=<?= $id ?>&tab=comunicaciones">
-        <div class="com-form">
-          <textarea name="mensaje" placeholder="Escribe una nota, seguimiento o comentario sobre este cliente..." required></textarea>
-          <div class="com-footer">
-            <select name="tipo" class="com-tipo-sel">
-              <option value="nota">Nota</option>
-              <option value="llamada">Llamada</option>
-              <option value="reunion">Reunión</option>
-              <option value="seguimiento">Seguimiento</option>
-              <option value="alerta">Alerta</option>
-            </select>
-            <button type="submit" class="btn btn-primary btn-sm">Agregar nota</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+        <h3 style="margin:0;font-size:15px;color:var(--tx);">Llamadas agendadas</h3>
+        <button type="button" class="btn btn-primary btn-sm" onclick="if(window.ggiAbrirLlamada)window.ggiAbrirLlamada()">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" style="vertical-align:-2px;margin-right:3px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Agendar llamada
+        </button>
+      </div>
+      <?php if (empty($lls)): ?>
+        <div style="text-align:center;padding:40px 20px;color:var(--tx3);font-size:13px;">No hay llamadas registradas para este cliente.</div>
+      <?php else: ?>
+        <?php foreach ($lls as $ll):
+          $ts      = strtotime($ll['fecha_hora']);
+          $abierta = in_array($ll['estado'], ['pendiente','notificada'], true);
+          $vencida = $abierta && $ts < $ahora;
+          if     ($ll['estado'] === 'realizada')  { $b_lbl='Realizada';  $b_bg='var(--s-ok-bg)';   $b_tx='var(--s-ok-tx,#059669)'; }
+          elseif ($ll['estado'] === 'cancelada')  { $b_lbl='Cancelada';  $b_bg='var(--bg-surface2)'; $b_tx='var(--tx3)'; }
+          elseif ($vencida)                        { $b_lbl='Vencida';    $b_bg='var(--s-err-bg)';   $b_tx='var(--s-err)'; }
+          else                                     { $b_lbl='Programada'; $b_bg='var(--ac-soft)';    $b_tx='var(--ac)'; }
+        ?>
+        <div id="llamada-trow-<?= (int)$ll['id'] ?>" style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--brd);flex-wrap:wrap;">
+          <div style="min-width:120px;">
+            <div style="font-size:13px;font-weight:600;color:<?= $vencida ? 'var(--s-err)' : 'var(--tx)' ?>;"><?= date('d/m/Y H:i', $ts) ?></div>
+            <div style="font-size:11.5px;color:var(--tx3);">→ <?= sanitize($ll['asignado_nombre'] ?: '—') ?></div>
           </div>
-        </div>
-      </form>
-      <?php if (!empty($coms)): ?>
-      <div class="feed">
-        <?php foreach ($coms as $com): ?>
-        <div class="feed-item">
-          <div class="feed-avatar"><?= strtoupper(substr($com['nombre'],0,1).substr($com['apellido'],0,1)) ?></div>
-          <div class="feed-body">
-            <div class="feed-meta">
-              <strong><?= sanitize($com['nombre'].' '.$com['apellido']) ?></strong>
-              <span class="feed-tipo"><?= sanitize($com['tipo']) ?></span>
-              — <?= date('d/m/Y H:i', strtotime($com['created_at'])) ?>
-            </div>
-            <div class="feed-msg"><?= nl2br(sanitize($com['mensaje'])) ?></div>
-          </div>
+          <span style="font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;background:<?= $b_bg ?>;color:<?= $b_tx ?>;white-space:nowrap;"><?= $b_lbl ?></span>
+          <?php if (!empty($ll['nota'])): ?><span style="font-size:12.5px;color:var(--tx2);flex:1;min-width:140px;"><?= sanitize($ll['nota']) ?></span><?php endif; ?>
+          <?php if (!empty($ll['nota_cierre'])): ?><span style="font-size:12px;color:var(--tx3);font-style:italic;min-width:120px;">Cierre: <?= sanitize($ll['nota_cierre']) ?></span><?php endif; ?>
+          <?php if ($abierta): ?>
+          <span style="margin-left:auto;display:flex;gap:6px;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="window.ggiLlamadaAccion(<?= (int)$ll['id'] ?>,'realizar')" style="font-size:11px;padding:3px 10px;color:var(--s-ok,#059669);">✓ Realizada</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="window.ggiLlamadaAccion(<?= (int)$ll['id'] ?>,'cancelar')" style="font-size:11px;padding:3px 10px;">Cancelar</button>
+          </span>
+          <?php endif; ?>
         </div>
         <?php endforeach; ?>
-      </div>
       <?php endif; ?>
     </div>
 <?php

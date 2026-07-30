@@ -24,7 +24,7 @@ if (!$_llam_cliente_id) return;
 
 <?php if (!empty($_llam_abiertas)): ?>
 <!-- Llamadas programadas abiertas (contexto actual) -->
-<div style="margin:0 0 16px;padding:12px 15px;border:1px solid var(--s-info-brd,#bfdbfe);background:var(--s-info-bg,#eff6ff);border-radius:11px;">
+<div id="llamadas-box" style="margin:0 0 16px;padding:12px 15px;border:1px solid var(--s-info-brd,#bfdbfe);background:var(--s-info-bg,#eff6ff);border-radius:11px;">
   <div style="font-size:11px;font-weight:700;color:var(--azul);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
     <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
     Llamadas programadas
@@ -151,7 +151,15 @@ async function ggiLlamadaAccion(id, accion) {
     const d = await ggiPost('<?= APP_URL ?>/modules/clientes/ajax_llamada.php', fd, { silent: true });
     if (d.ok) {
       showToast(d.mensaje, 'ok');
+      // Quitar la fila de la cajita superior (llamadas abiertas)
       document.getElementById('llamada-row-' + id)?.remove();
+      // Si la cajita se quedó sin filas, ocultarla (no dejar el recuadro vacío)
+      const box = document.getElementById('llamadas-box');
+      if (box && !box.querySelector('[id^="llamada-row-"]')) box.style.display = 'none';
+      // Si está abierto el tab "Llamadas", recargarlo para reflejar el nuevo estado
+      if (document.getElementById('tab-llamadas') && typeof window.reloadTab === 'function') {
+        window.reloadTab('llamadas');
+      }
       if (typeof window.invalidatePageCache === 'function') window.invalidatePageCache(location.href);
     } else {
       showToast(d.mensaje || 'No se pudo actualizar.', 'error');

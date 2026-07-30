@@ -93,6 +93,10 @@ $cnt_pagos_pend = (int)($_row['pendientes'] ?? 0);
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM comunicaciones_cliente WHERE cliente_id=?");
 $stmt->execute([$id]); $cnt_coms = (int)$stmt->fetchColumn();
 
+// Total de llamadas del cliente (todos los estados) para el tab "Llamadas"
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM llamadas_programadas WHERE cliente_id=?");
+$stmt->execute([$id]); $cnt_llamadas = (int)$stmt->fetchColumn();
+
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM cotizaciones WHERE cliente_id=? AND deleted_at IS NULL");
 $stmt->execute([$id]); $cnt_cots = (int)$stmt->fetchColumn();
 
@@ -643,7 +647,7 @@ include __DIR__ . '/_llamada_modal.php';
     <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;background:var(--s-err);color:#fff;border-radius:50%;font-size:10px;font-weight:700;margin-left:4px;"><?= $cnt_pagos_pend ?></span>
     <?php endif; ?>
   </button>
-  <button type="button" class="tab" data-tab="comunicaciones"       onclick="window.switchTab('comunicaciones')">Comunicaciones (<?= $cnt_coms ?>)</button>
+  <button type="button" class="tab" data-tab="llamadas"             onclick="window.switchTab('llamadas')">Llamadas (<?= $cnt_llamadas ?>)</button>
   <button type="button" class="tab" data-tab="propuestas"           onclick="window.switchTab('propuestas')">Propuestas (<?= $cnt_cots ?>)</button>
   <button type="button" class="tab" data-tab="historial"            onclick="window.switchTab('historial')">
     <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:-1px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -1006,8 +1010,8 @@ include __DIR__ . '/_llamada_modal.php';
 <div style="text-align:center;padding:48px 20px;color:var(--gris-texto);"><svg style="animation:tab-spin .8s linear infinite;opacity:0.35;" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></div>
 </div>
 
-<!-- Tab: Comunicaciones -->
-<div id="tab-comunicaciones" class="tab-panel" style="display:none" data-lazy="1">
+<!-- Tab: Llamadas -->
+<div id="tab-llamadas" class="tab-panel" style="display:none" data-lazy="1">
 <div style="text-align:center;padding:48px 20px;color:var(--gris-texto);"><svg style="animation:tab-spin .8s linear infinite;opacity:0.35;" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></div>
 </div>
 
@@ -1284,6 +1288,16 @@ include __DIR__ . '/_llamada_modal.php';
     }
   };
 
+  // Marcar un tab lazy para re-fetch. Si está visible, refresca al instante;
+  // si no, solo lo invalida para que recargue fresco la próxima vez que se abra
+  // (evita cambiar de pestaña al usuario).
+  window.reloadTab = function(id) {
+    var p = document.getElementById('tab-' + id);
+    if (!p) return;
+    p.dataset.loaded = '0';
+    if (p.classList.contains('active')) window.switchTab(id);
+  };
+
   // Enlazar cada botón de pestaña
   document.querySelectorAll('#tabs-nav .tab').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -1291,7 +1305,7 @@ include __DIR__ . '/_llamada_modal.php';
     });
   });
 
-  // Abrir la pestaña correcta si viene por URL (?tab=comunicaciones)
+  // Abrir la pestaña correcta si viene por URL (?tab=llamadas, etc.)
   var tabParam = new URLSearchParams(window.location.search).get('tab');
   if (tabParam) window.switchTab(tabParam);
 
