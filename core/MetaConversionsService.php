@@ -58,11 +58,17 @@ class MetaConversionsService
     }
 
     /**
-     * Envía el cierre de venta (propuesta aceptada) a Meta Conversions API.
+     * Envía el cierre de venta a Meta Conversions API. Se llama al validar el
+     * PRIMER pago (pago inicial) — ver modules/pagos/ajax_pago.php.
      *
-     * @param PDO   $pdo
-     * @param array $cot  Fila de cotizaciones (necesita: id, cliente_id, monto_total,
-     *                    moneda, numero). Es la que ya se tiene en ajax_estado_cot.php.
+     * Reglas (todas deben cumplirse):
+     *   1. La propuesta debe estar ACEPTADA (aceptación + primer pago = venta real).
+     *   2. El cliente debe haber venido de un Click-to-WhatsApp Ad (tiene ctwa_clid).
+     *   3. Una sola venta por CLIENTE: si el cliente ya fue reportado, no se repite
+     *      (una 2ª ISO del mismo cliente no cuenta como nueva venta).
+     *
+     * @param PDO   $cot  Fila de cotizaciones (necesita: id, cliente_id, monto_total,
+     *                    moneda, numero). Es la que ya se tiene en ajax_pago.php.
      * @return bool true si se envió; false si se omitió o falló (ver $lastError).
      */
     public static function enviarCierreVenta(PDO $pdo, array $cot): bool
@@ -75,16 +81,37 @@ class MetaConversionsService
         }
 
         $clienteId = (int)($cot['cliente_id'] ?? 0);
+        $cotId     = (int)($cot['id'] ?? 0);
+        if ($clienteId <= 0 || $cotId <= 0) {
+            self::$lastError = 'faltan ids (cliente/cotización)';
+            return false;
+        }
+
+        // ── Regla 1: la propuesta debe estar aceptada ──
+        $est = $pdo->prepare("SELECT estado FROM cotizaciones WHERE id = ?");
+        $est->execute([$cotId]);
+        if ($est->fetchColumn() !== 'aceptada') {
+            self::$lastError = 'propuesta no aceptada';
+            return false;
+        }
+
+        // ── Regla 2: debe venir de un anuncio Click-to-WhatsApp ──
         $clid = self::ctwaClidDeCliente($pdo, $clienteId);
         if (!$clid) {
-            // El cliente no vino de un anuncio Click-to-WhatsApp → nada que atribuir.
             self::$lastError = 'cliente sin ctwa_clid';
+            return false;
+        }
+
+        // ── Regla 3: una sola venta por cliente (no repetir en 2ª ISO) ──
+        $ya = $pdo->prepare("SELECT meta_venta_reportada_at FROM clientes WHERE id = ?");
+        $ya->execute([$clienteId]);
+        if ($ya->fetchColumn() !== null) {
+            self::$lastError = 'cliente ya reportado antes';
             return false;
         }
 
         $moneda = strtoupper(trim((string)($cot['moneda'] ?? 'PEN'))) ?: 'PEN';
         $valor  = number_format((float)($cot['monto_total'] ?? 0), 2, '.', '');
-        $cotId  = (int)($cot['id'] ?? 0);
 
         $userData = ['ctwa_clid' => $clid];
         if (defined('META_WA_WABA_ID') && META_WA_WABA_ID !== '') {
@@ -96,7 +123,8 @@ class MetaConversionsService
             'event_time'        => time(),
             'action_source'     => 'business_messaging',
             'messaging_channel' => 'whatsapp',
-            'event_id'          => 'cot-' . $cotId,
+            // Dedup a nivel CLIENTE (una venta por cliente), no por propuesta.
+            'event_id'          => 'cli-' . $clienteId,
             'user_data'         => $userData,
             'custom_data'       => array_filter([
                 'currency' => $moneda,
@@ -105,7 +133,13 @@ class MetaConversionsService
             ], fn($v) => $v !== null && $v !== ''),
         ];
 
-        return self::enviar([$evento]);
+        if (self::enviar([$evento])) {
+            // Marcar el cliente como reportado (idempotente: solo si aún estaba NULL).
+            $pdo->prepare("UPDATE clientes SET meta_venta_reportada_at = NOW() WHERE id = ? AND meta_venta_reportada_at IS NULL")
+                ->execute([$clienteId]);
+            return true;
+        }
+        return false;
     }
 
     /**
