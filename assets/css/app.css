@@ -445,11 +445,16 @@
     flex-direction: column;
   }
 
-  /* Header: barra nativa — sin overflow. Baja bajo el notch (safe-area) en PWA. */
+  /* Header: barra nativa — sin overflow. Baja bajo el notch (safe-area) en PWA.
+     max(env, var): usa el env() del propio documento (top-level) O el valor puenteado
+     por postMessage (--safe-top, para modales dentro de iframes embed) — el que sea
+     mayor. Así funciona tanto en modal top-level como anidado, sin depender solo de
+     la indirección de la custom property. */
   .mant-modal-header {
-    padding:     var(--safe-top, 0px) 4px 0 0 !important;
-    min-height:  calc(54px + var(--safe-top, 0px)) !important;
-    height:      calc(54px + var(--safe-top, 0px));
+    --_st: max(env(safe-area-inset-top, 0px), var(--safe-top, 0px));
+    padding:     var(--_st) 4px 0 0 !important;
+    min-height:  calc(54px + var(--_st)) !important;
+    height:      calc(54px + var(--_st));
     box-sizing:  border-box;
     flex-shrink: 0;
     overflow:    hidden;

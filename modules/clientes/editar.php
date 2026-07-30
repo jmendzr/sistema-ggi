@@ -221,11 +221,11 @@ require_once __DIR__ . '/../../templates/layout.php';
     background:transparent; color:var(--s-err); border:1.5px solid var(--s-err-brd,#fecaca); font-weight:600; }
   .form-actions.ff-actions .ff-delete:hover { background:var(--s-err-bg,#fef2f2); }
   @media (max-width:768px){
-    /* Guardar: primario prominente en su propia fila; Cancelar + Eliminar debajo */
-    .form-actions.ff-actions { gap:8px; }
-    .form-actions.ff-actions .ff-save   { flex:1 1 100%; order:1; min-height:48px; font-weight:700; font-size:15px; }
-    .form-actions.ff-actions .ff-cancel { flex:1 1 auto;  order:2; min-height:46px; margin:0; }
-    .form-actions.ff-actions .ff-delete { flex:1 1 auto;  order:3; min-height:46px; margin-left:0; }
+    /* Una sola fila compacta: Guardar (primario, crece) · Cancelar · Eliminar */
+    .form-actions.ff-actions { gap:8px; flex-wrap:nowrap; }
+    .form-actions.ff-actions .ff-save   { flex:1 1 auto; order:1; min-height:44px; font-weight:700; white-space:nowrap; }
+    .form-actions.ff-actions .ff-cancel { flex:0 0 auto; order:2; min-height:44px; margin:0; white-space:nowrap; padding-left:14px; padding-right:14px; }
+    .form-actions.ff-actions .ff-delete { flex:0 0 auto; order:3; min-height:44px; margin-left:0; white-space:nowrap; padding-left:14px; padding-right:14px; }
   }
   .select-wrap select { width:100%; padding:10px 36px 10px 13px; border:1.5px solid var(--gris-borde); border-radius:9px;
     font-size:13px; font-family:'Inter',sans-serif; background-color:var(--bg-surface2); outline:none;
@@ -438,7 +438,7 @@ require_once __DIR__ . '/../../templates/layout.php';
       <a href="<?= $cancel_url ?>" class="btn btn-outline ff-cancel">Cancelar</a>
       <?php endif; ?>
       <?php if (has_role('gerente_general','gerente_operaciones')): ?>
-      <button type="button" class="btn ff-delete" onclick="confirmarEliminar()">Eliminar empresa</button>
+      <button type="button" class="btn ff-delete" title="Eliminar empresa" onclick="confirmarEliminar()">Eliminar</button>
       <?php endif; ?>
     </div>
 
