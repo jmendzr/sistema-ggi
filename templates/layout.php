@@ -1685,6 +1685,9 @@ session_write_close();
   <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/design-system.css?v=<?= @filemtime(__DIR__ . '/../assets/css/design-system.css') ?>">
   <link rel="stylesheet" href="<?= APP_URL ?>/assets/vendor/flatpickr/flatpickr.min.css">
   <link rel="stylesheet" href="<?= APP_URL ?>/assets/vendor/flatpickr/ggi-theme.css?v=<?= @filemtime(__DIR__ . '/../assets/vendor/flatpickr/ggi-theme.css') ?>">
+  <!-- CSS global de componentes (toasts, modales, pager, bulk bar…): extraído de
+       layout_end.php a un archivo cacheable (auditoría 2026-07). -->
+  <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/app.css?v=<?= @filemtime(__DIR__ . '/../assets/css/app.css') ?>">
 </head>
 <body>
 <?php if (empty($_ggi_embed)): ?>
