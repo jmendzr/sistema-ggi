@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
 
     if (empty($email) || empty($password)) {
-        $error = 'Ingresa tu correo y contraseña.';
+        $error = 'Ingresa tu usuario o correo y la contraseña.';
     } else {
         try {
             $pdo = Database::get();
@@ -49,8 +49,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($intentos_recientes >= LOGIN_MAX_INTENTOS) {
                 $error = 'Demasiados intentos fallidos. Espera 15 minutos e intenta nuevamente.';
             } else {
-                $stmt = $pdo->prepare("SELECT * FROM usuarios WHERE email = ? AND activo = 1 LIMIT 1");
-                $stmt->execute([$email]);
+                // Ingreso por usuario O correo: el campo acepta cualquiera de los dos.
+                $stmt = $pdo->prepare("SELECT * FROM usuarios WHERE (email = ? OR username = ?) AND activo = 1 LIMIT 1");
+                $stmt->execute([$email, $email]);
                 $user = $stmt->fetch();
 
                 if ($user && password_verify($password, $user['password_hash'])) {
@@ -62,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     header('Location: ' . APP_URL . '/modules/dashboard/index.php');
                     exit;
                 } else {
-                    $error = 'Correo o contraseña incorrectos.';
+                    $error = 'Usuario/correo o contraseña incorrectos.';
                     log_actividad('auth', 'login_failed', 'Intento fallido: ' . $email . ' desde ' . $ip);
                 }
             }
@@ -611,17 +612,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?= csrf_field() ?>
         <div class="field">
           <div class="field-label">
-            <label for="email">Correo electrónico</label>
+            <label for="email">Usuario o correo</label>
           </div>
           <div class="input-wrap">
             <svg class="input-icon" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-              <polyline points="22,6 12,13 2,6"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
             </svg>
-            <input type="email" id="email" name="email"
-                   placeholder="usuario@groupglobaliso.com"
+            <input type="text" id="email" name="email"
+                   placeholder="usuario o correo@groupglobaliso.com"
                    value="<?= sanitize($_POST['email'] ?? '') ?>"
-                   autocomplete="email"
+                   autocomplete="username"
                    required autofocus>
           </div>
         </div>

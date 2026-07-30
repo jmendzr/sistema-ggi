@@ -43,6 +43,14 @@ if ($accion === 'guardar') {
     $nombre   = trim($_POST['nombre'] ?? '');
     $apellido = trim($_POST['apellido'] ?? '');
     $email    = trim($_POST['email'] ?? '');
+    // Usuario para login (además del email). Se normaliza a minúsculas y a
+    // caracteres seguros; si viene vacío, se deriva de la parte local del email.
+    $username = strtolower(trim($_POST['username'] ?? ''));
+    $username = preg_replace('/[^a-z0-9._-]/', '', $username);
+    if ($username === '' && $email !== '') {
+        $username = preg_replace('/[^a-z0-9._-]/', '', strtolower(explode('@', $email)[0]));
+    }
+    $username = substr($username, 0, 50);
     $rol      = $_POST['rol'] ?? '';
     $password = $_POST['password'] ?? '';
     $telefono = trim($_POST['telefono'] ?? '');
@@ -64,6 +72,13 @@ if ($accion === 'guardar') {
         $existe = $pdo->prepare("SELECT id FROM usuarios WHERE email=? AND id!=?");
         $existe->execute([$email, $id]);
         if ($existe->fetch()) $errors['email'] = 'Ya existe un usuario con este email.';
+    }
+    if ($username === '') {
+        $errors['username'] = 'Usuario requerido.';
+    } else {
+        $uex = $pdo->prepare("SELECT id FROM usuarios WHERE username=? AND id!=?");
+        $uex->execute([$username, $id]);
+        if ($uex->fetch()) $errors['username'] = 'Ese usuario ya está en uso.';
     }
 
     // Manejo de foto
@@ -104,22 +119,22 @@ if ($accion === 'guardar') {
                     imagen_reducir($foto_dir . $foto_filename, 512); // cap a 512px
                 }
                 if (!empty($password)) {
-                    $pdo->prepare("UPDATE usuarios SET nombre=?,apellido=?,email=?,rol=?,telefono=?,fecha_cumpleanos=?," . ($foto_filename ? "foto=?," : "") . "password_hash=? WHERE id=?")
+                    $pdo->prepare("UPDATE usuarios SET nombre=?,apellido=?,email=?,username=?,rol=?,telefono=?,fecha_cumpleanos=?," . ($foto_filename ? "foto=?," : "") . "password_hash=? WHERE id=?")
                         ->execute($foto_filename
-                            ? [$nombre,$apellido,$email,$rol,$telefono,$fecha_cumpleanos,$foto_filename,password_hash($password,PASSWORD_BCRYPT),$id]
-                            : [$nombre,$apellido,$email,$rol,$telefono,$fecha_cumpleanos,password_hash($password,PASSWORD_BCRYPT),$id]);
+                            ? [$nombre,$apellido,$email,$username,$rol,$telefono,$fecha_cumpleanos,$foto_filename,password_hash($password,PASSWORD_BCRYPT),$id]
+                            : [$nombre,$apellido,$email,$username,$rol,$telefono,$fecha_cumpleanos,password_hash($password,PASSWORD_BCRYPT),$id]);
                 } else {
-                    $pdo->prepare("UPDATE usuarios SET nombre=?,apellido=?,email=?,rol=?,telefono=?,fecha_cumpleanos=?" . ($foto_filename ? ",foto=?" : "") . " WHERE id=?")
+                    $pdo->prepare("UPDATE usuarios SET nombre=?,apellido=?,email=?,username=?,rol=?,telefono=?,fecha_cumpleanos=?" . ($foto_filename ? ",foto=?" : "") . " WHERE id=?")
                         ->execute($foto_filename
-                            ? [$nombre,$apellido,$email,$rol,$telefono,$fecha_cumpleanos,$foto_filename,$id]
-                            : [$nombre,$apellido,$email,$rol,$telefono,$fecha_cumpleanos,$id]);
+                            ? [$nombre,$apellido,$email,$username,$rol,$telefono,$fecha_cumpleanos,$foto_filename,$id]
+                            : [$nombre,$apellido,$email,$username,$rol,$telefono,$fecha_cumpleanos,$id]);
                 }
                 $msg = 'Usuario actualizado exitosamente.';
                 log_actividad('usuarios', 'editar', "Usuario: $email");
             } else {
                 // activo=1 asegura que el nuevo usuario quede activo en la BD
-                $pdo->prepare("INSERT INTO usuarios (nombre,apellido,email,rol,telefono,fecha_cumpleanos,password_hash,activo) VALUES (?,?,?,?,?,?,?,1)")
-                    ->execute([$nombre,$apellido,$email,$rol,$telefono,$fecha_cumpleanos,password_hash($password, PASSWORD_BCRYPT)]);
+                $pdo->prepare("INSERT INTO usuarios (nombre,apellido,email,username,rol,telefono,fecha_cumpleanos,password_hash,activo) VALUES (?,?,?,?,?,?,?,?,1)")
+                    ->execute([$nombre,$apellido,$email,$username,$rol,$telefono,$fecha_cumpleanos,password_hash($password, PASSWORD_BCRYPT)]);
                 $new_id = (int)$pdo->lastInsertId();
                 // Guardar foto si se subió al crear
                 if ($foto_filename) {
@@ -228,6 +243,8 @@ window.__mantData = {
     ['name'=>'nombre','label'=>'Nombre','required'=>true,'value'=>$edit['nombre']??''],
     ['name'=>'apellido','label'=>'Apellido','required'=>true,'value'=>$edit['apellido']??''],
     ['name'=>'email','label'=>'Email','required'=>true,'inputType'=>'email','value'=>$edit['email']??''],
+    ['name'=>'username','label'=>'Usuario (para iniciar sesión)','value'=>$edit['username']??'',
+      'placeholder'=>'Se genera del email si lo dejas vacío','hint'=>'Puede ingresar con este usuario o con su email'],
     ['name'=>'rol','label'=>'Rol','required'=>true,'type'=>'select','value'=>$edit['rol']??'','options'=>$roles_opciones],
     ['name'=>'password','label'=>$edit ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña','required'=>!$edit,'inputType'=>'password','value'=>'','placeholder'=>'Mínimo 8 caracteres'],
     ['name'=>'telefono','label'=>'Teléfono','value'=>$edit['telefono']??'','placeholder'=>'Ej: 961 399 268'],
@@ -243,6 +260,7 @@ window.__mantData = {
     'id'=>$r['id'],
     'cols'=>[
       htmlspecialchars($r['nombre'].' '.$r['apellido']),
+      htmlspecialchars($r['username'] ?? '—'),
       htmlspecialchars($r['email']),
       htmlspecialchars($r['telefono'] ?? '—'),
       $roles_labels[$r['rol']] ?? $r['rol'],
@@ -250,7 +268,7 @@ window.__mantData = {
     ],
     'activo'=>$r['activo']
   ]; }, $registros)) ?>,
-  ['Nombre','Email','Teléfono','Rol','Último acceso'],
+  ['Nombre','Usuario','Email','Teléfono','Rol','Último acceso'],
   <?= $edit ? (int)$edit['id'] : 0 ?>,
   <?= json_encode($msg) ?>];
   window.__mantData = {
