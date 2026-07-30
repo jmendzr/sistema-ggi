@@ -209,6 +209,29 @@ if ($accion === 'validar') {
         error_log('[ajax_pago] factura_por_cargar notif error: ' . $e->getMessage());
     }
 
+    // ── Meta Ads: reportar el cierre de venta a la Conversions API al PRIMER pago ──
+    //    Son 2 pagos (inicial + final); el primer pago validado es la señal de venta.
+    //    Se envía el valor TOTAL del contrato (monto_total de la cotización), que es
+    //    lo que Meta Ads optimiza. Solo si el lead vino de un Click-to-WhatsApp Ad
+    //    (tiene ctwa_clid) y hay credenciales. event_id=cot-<id> deduplica en Meta.
+    //    No bloquea el flujo.
+    if ($pago['tipo'] === 'inicial') {
+        try {
+            require_once __DIR__ . '/../../core/MetaConversionsService.php';
+            $cotRow = $pdo->prepare("SELECT id, cliente_id, monto_total, moneda, numero FROM cotizaciones WHERE id = ?");
+            $cotRow->execute([(int)$pago['cotizacion_id']]);
+            $cotMeta = $cotRow->fetch(\PDO::FETCH_ASSOC);
+            if ($cotMeta) {
+                $cotMeta['cliente_id'] = (int)$pago['cliente_id'];
+                if (MetaConversionsService::enviarCierreVenta($pdo, $cotMeta)) {
+                    log_actividad('pagos', 'meta_capi', "Cierre reportado a Meta Ads (1er pago, cotización #{$pago['cotizacion_id']})");
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('[ajax_pago] Meta Conversions: ' . $e->getMessage());
+        }
+    }
+
     // ── Bono al ejecutivo: SOLO cuando el cliente pagó el TOTAL (todos los pagos de la
     //    cotización validados). Antes se generaba al aceptar la propuesta; ahora es al pago
     //    total. generar_bonos_cotizacion es idempotente (no duplica si ya existe). ──

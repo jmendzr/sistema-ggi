@@ -279,21 +279,9 @@ if ($nuevo_est === 'aceptada') { try {
         log_actividad('pagos', 'generar', "Pagos generados para propuesta #$cot_id (cliente #$cliente_id_final)");
     }
 
-    // ── Meta Ads: reportar el cierre de venta a la Conversions API ──
-    //    Solo tiene efecto si el cliente vino de un Click-to-WhatsApp Ad (tiene
-    //    ctwa_clid) y las credenciales están en .env. No bloquea el flujo.
-    if ($cliente_id_final) {
-        try {
-            require_once __DIR__ . '/../../core/MetaConversionsService.php';
-            $cot_meta = $cot;
-            $cot_meta['cliente_id'] = $cliente_id_final;
-            if (MetaConversionsService::enviarCierreVenta($pdo, $cot_meta)) {
-                log_actividad('propuestas', 'meta_capi', "Cierre reportado a Meta Ads (propuesta #$cot_id)");
-            }
-        } catch (\Throwable $eMeta) {
-            error_log('[ajax_estado_cot] Meta Conversions: ' . $eMeta->getMessage());
-        }
-    }
+    // ── Meta Ads: el cierre de venta se reporta a la Conversions API cuando entra
+    //    el PRIMER pago (pago inicial validado), no al aceptar. Ver
+    //    modules/pagos/ajax_pago.php (acción 'validar', tipo='inicial'). ──
 } catch (\Throwable $e) {
     $err_detail = $e->getMessage() . ' en ' . basename($e->getFile()) . ':' . $e->getLine();
     error_log('[ajax_estado_cot] Error en bloque aceptada: ' . $err_detail);
