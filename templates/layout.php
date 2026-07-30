@@ -1765,9 +1765,52 @@ session_write_close();
   window.addEventListener('message', function(ev) {
     if (ev.data && ev.data.ggi === 'clearDirty') window.ggiEmbedDirty(false);
   });
+
+  /* ── Safe-area dentro del iframe (notch / Dynamic Island) ──────────────────
+     Dentro de un iframe env(safe-area-inset-top) vale 0, así que un modal/header
+     abierto dentro del embed se iría bajo la isla dinámica. Pedimos el inset REAL
+     al documento padre (que sí lo conoce) y lo fijamos como --safe-top; además lo
+     retransmitimos a iframes hijos (modales anidados). No-op en escritorio (0). */
+  var _ggiSafeTop = 0;
+  window.addEventListener('message', function(ev) {
+    if (ev.data && ev.data.ggi === 'safeTop' && typeof ev.data.value === 'number') {
+      _ggiSafeTop = ev.data.value;
+      document.documentElement.style.setProperty('--safe-top', _ggiSafeTop + 'px');
+      // Reenviar a iframes hijos ya presentes (modales anidados)
+      document.querySelectorAll('iframe').forEach(function(f) {
+        try { f.contentWindow.postMessage({ ggi: 'safeTop', value: _ggiSafeTop }, '*'); } catch (e) {}
+      });
+    }
+    // Un iframe hijo pide el inset → le paso el que tengo
+    if (ev.data && ev.data.ggi === 'getSafeTop' && ev.source) {
+      try { ev.source.postMessage({ ggi: 'safeTop', value: _ggiSafeTop }, '*'); } catch (e) {}
+    }
+  });
+  try { window.parent.postMessage({ ggi: 'getSafeTop' }, '*'); } catch (e) {}
 })();
 </script>
 <?php else: ?>
+<!-- ── Safe-area: el documento top-level mide el inset real del dispositivo y lo
+     sirve a los iframes embed que lo pidan (dentro de un iframe env() vale 0). ── -->
+<script>
+(function () {
+  function medirSafeTop() {
+    var p = document.createElement('div');
+    p.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;padding-top:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none;';
+    document.documentElement.appendChild(p);
+    var v = parseFloat(getComputedStyle(p).paddingTop) || 0;
+    p.remove();
+    return v;
+  }
+  var safeTop = medirSafeTop();
+  window.addEventListener('resize', function () { safeTop = medirSafeTop(); }, { passive: true });
+  window.addEventListener('message', function (ev) {
+    if (ev.data && ev.data.ggi === 'getSafeTop' && ev.source) {
+      try { ev.source.postMessage({ ggi: 'safeTop', value: safeTop }, '*'); } catch (e) {}
+    }
+  });
+})();
+</script>
 <!-- Barra de progreso de navegación -->
 <div id="nav-progress" style="position:fixed;top:0;left:0;right:0;height:3px;z-index:99999;pointer-events:none;opacity:0;transition:opacity 0.2s;">
   <div id="nav-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--azul),#4f8ef7);border-radius:0 2px 2px 0;transition:width 0.4s ease;box-shadow:0 0 8px rgba(29,78,216,0.5);"></div>
