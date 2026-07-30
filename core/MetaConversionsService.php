@@ -35,10 +35,17 @@ class MetaConversionsService
     /**
      * Busca el ctwa_clid del cliente (primer referral entrante con clic de anuncio).
      * Devuelve null si el cliente no vino de un Click-to-WhatsApp Ad.
+     *
+     * Dos vías (la atribución NO depende de la vinculación manual):
+     *   1. Conversación ya vinculada al cliente (wa_conversaciones.cliente_id).
+     *   2. Fallback por TELÉFONO del cliente (últimos 9 dígitos, móvil Perú): matchea
+     *      la conversación por número aunque no se haya vinculado formalmente.
      */
     public static function ctwaClidDeCliente(PDO $pdo, int $clienteId): ?string
     {
         if ($clienteId <= 0) return null;
+
+        // ── Vía 1: por conversación vinculada al cliente ──
         $st = $pdo->prepare("
             SELECT m.referral_json
               FROM wa_conversaciones c
@@ -48,6 +55,31 @@ class MetaConversionsService
              ORDER BY m.id ASC
         ");
         $st->execute([$clienteId]);
+        if ($clid = self::extraerClid($st)) return $clid;
+
+        // ── Vía 2: fallback por teléfono del cliente ──
+        $tel = $pdo->prepare("SELECT contacto_telefono FROM clientes WHERE id = ?");
+        $tel->execute([$clienteId]);
+        $digitos = preg_replace('/\D/', '', (string)$tel->fetchColumn());
+        $last9 = substr($digitos, -9);
+        if (strlen($last9) === 9) {
+            $st2 = $pdo->prepare("
+                SELECT m.referral_json
+                  FROM wa_conversaciones c
+                  JOIN wa_mensajes m ON m.conversacion_id = c.id
+                 WHERE RIGHT(REPLACE(REPLACE(REPLACE(c.telefono,' ',''),'+',''),'-',''), 9) = ?
+                   AND m.referral_json IS NOT NULL
+                 ORDER BY m.id ASC
+            ");
+            $st2->execute([$last9]);
+            if ($clid = self::extraerClid($st2)) return $clid;
+        }
+        return null;
+    }
+
+    /** Extrae el primer ctwa_clid presente en un resultado de referral_json. */
+    private static function extraerClid(\PDOStatement $st): ?string
+    {
         foreach ($st as $row) {
             $ref = json_decode((string)$row['referral_json'], true);
             if (is_array($ref) && !empty($ref['ctwa_clid'])) {
