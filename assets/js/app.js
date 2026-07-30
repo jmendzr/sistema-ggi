@@ -588,6 +588,9 @@ function toggleSidebarDesktop() {
   const sidebar = document.querySelector('.sidebar');
   const btn     = document.querySelector('.btn-toggle-desktop svg');
 
+  // En modo embed (iframe de un modal) no hay sidebar → nada que colapsar.
+  if (!sidebar) return;
+
   const collapsed = sidebar.classList.toggle('collapsed');
   body.classList.toggle('sidebar-collapsed', collapsed);
 
