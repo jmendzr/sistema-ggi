@@ -535,7 +535,13 @@ window.ggiDebounce = (function () {
   var _lastPagosCount = -1; // Rastrea cambios para auto-reload en página de pagos
   var _badgesEtag     = '';  // ETag del último poll para evitar procesar respuestas sin cambios
 
+  var _pollInFlight = false;
   function poll() {
+    // Al abrir el PWA se disparan DOMContentLoaded Y visibilitychange casi a la
+    // vez → dos polls solapados. Con esta guarda solo corre uno a la vez.
+    if (_pollInFlight) return;
+    _pollInFlight = true;
+
     var headers = { 'X-Requested-With': 'XMLHttpRequest' };
     if (_badgesEtag) headers['If-None-Match'] = _badgesEtag;
 
@@ -569,7 +575,8 @@ window.ggiDebounce = (function () {
         _lastPagosCount = d.pagos;
       }
     })
-    .catch(function () {});
+    .catch(function () {})
+    .then(function () { _pollInFlight = false; });  // liberar la guarda pase lo que pase
   }
 
   // Ajustar el intervalo del timer según visibilidad del tab
