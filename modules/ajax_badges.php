@@ -16,6 +16,10 @@ if (!is_logged()) {
 
 $user = auth_user();
 $pdo  = Database::get();
+// Libera el lock de sesión ANTES de las queries: este endpoint solo LEE la
+// sesión (id del usuario). Corre en el polling de CADA página; sin esto se
+// serializa con la carga de la página y con otros polls → arranque lento del PWA.
+session_write_close();
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
@@ -105,8 +109,7 @@ try {
     }
 } catch (Exception $e) {}
 
-// Liberar el lock de sesión: todas las lecturas/escrituras de sesión ya terminaron.
-session_write_close();
+// (La sesión ya se cerró arriba, antes de las queries, para no serializar el polling.)
 
 $payload = ['ok' => true, 'notif' => $notif, 'pagos' => $pagos, 'cot' => $cot];
 
