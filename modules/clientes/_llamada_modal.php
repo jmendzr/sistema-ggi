@@ -87,8 +87,11 @@ if (!$_llam_cliente_id) return;
 </div>
 
 <script>
-const LLAMADA_CLIENTE_ID = <?= $_llam_cliente_id ?>;
-const LLAMADA_COT_ID     = <?= $_llam_cot_id ?>;
+// var (no const): en navegación SPA este <script> se re-ejecuta al volver a una
+// ficha; con const daba "Identifier already declared" y rompía todo el JS de la
+// página. var permite la redeclaración sin error.
+var LLAMADA_CLIENTE_ID = <?= $_llam_cliente_id ?>;
+var LLAMADA_COT_ID     = <?= $_llam_cot_id ?>;
 
 function ggiAbrirLlamada() {
   const m = document.getElementById('llamada-modal');

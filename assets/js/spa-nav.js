@@ -12,6 +12,23 @@
   var __ggiNavDepth   = 0;      // cuántos navigate() hacia adelante se hicieron
   var _focusRestore   = null;   // {id, name} del input a re-enfocar tras swap de búsqueda
 
+  /* ── Restauración de scroll en atrás/adelante (control manual) ──────────────
+     Guardamos el scroll de cada entrada de historial y lo restauramos al volver,
+     para que el retroceso no salte al inicio (comportamiento nativo esperado). */
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  var _scrollTimer = null;
+  function saveScroll() {
+    try {
+      var st = history.state || {};
+      st.ggiScroll = window.scrollY || document.documentElement.scrollTop || 0;
+      history.replaceState(st, document.title, location.href);
+    } catch (e) {}
+  }
+  window.addEventListener('scroll', function () {
+    if (_scrollTimer) return;
+    _scrollTimer = setTimeout(function () { _scrollTimer = null; saveScroll(); }, 150);
+  }, { passive: true });
+
   /* ── Barra de progreso ── */
   function startBar() {
     if (!bar || !barWrap) return;
@@ -145,7 +162,7 @@
       if (!form) return;
       _focusRestore = { id: inputEl.id || '', name: inputEl.name || '' };
       try {
-        navigate(buildFormUrl(form));
+        navigate(buildFormUrl(form), false, true); // replace: no apilar cada tecla en el historial
       } catch(x) {
         _focusRestore = null;
         form.submit();
@@ -154,24 +171,30 @@
   };
 
   /* ── Navegar ── */
-  function navigate(href, isPop) {
+  function navigate(href, isPop, replace) {
     if (!mainEl) { location.href = href; return; }
     if (pending) { pending.abort(); }
     // Liberar botones congelados antes de cada navegación SPA
     window.dispatchEvent(new Event('spa:before'));
+    // Guardar el scroll de la página actual antes de salir (solo al ir hacia
+    // adelante; en popstate la entrada actual ya es la de destino).
+    if (!isPop) saveScroll();
     var ac = new AbortController();
     pending = ac;
     startBar();
 
-    getPage(href, ac.signal, isPop)   // popstate siempre refresca (sin caché)
+    // Atrás/adelante (popstate): servir de caché → retroceso instantáneo como el
+    // nativo (evita pantalla en blanco/atascada por refetch de red en móvil). Las
+    // páginas data-spa-nocache no se cachean, así que igual llegan frescas.
+    getPage(href, ac.signal, false)
       .then(function (html) {
-        if (ac !== pending && !isPop) return; // superado por navegación posterior
+        if (ac !== pending) return; // superado por navegación posterior (también en pop)
         pending = null;
 
         /* Ajustar profundidad de historial */
         if (isPop) {
           __ggiNavDepth = Math.max(0, __ggiNavDepth - 1);
-        } else {
+        } else if (!replace) {
           __ggiNavDepth++;
         }
 
@@ -179,8 +202,12 @@
         var newMain = doc.querySelector('.main');
         if (!newMain) { location.href = href; return; } // error/login → normal
 
-        /* URL y título */
-        if (!isPop) history.pushState({ ggi: 1 }, doc.title || '', href);
+        /* URL y título. replace=true (búsqueda/filtros) NO apila historial → evita
+           que el retroceso tenga que atravesar cada estado intermedio del filtro. */
+        if (!isPop) {
+          if (replace) history.replaceState({ ggi: __ggiNavDepth > 0 ? 1 : 0 }, doc.title || '', href);
+          else         history.pushState({ ggi: 1 }, doc.title || '', href);
+        }
         document.title = doc.title || '';
 
         /* Actualizar ítem activo del sidebar leyendo el de la respuesta */
@@ -245,8 +272,12 @@
               try { el.setSelectionRange(el.value.length, el.value.length); } catch (_) {}
             }
           });
+        } else if (isPop) {
+          /* Atrás/adelante: restaurar el scroll guardado de esa entrada (no saltar al tope) */
+          var _y = (history.state && history.state.ggiScroll) || 0;
+          window.scrollTo(0, _y);
         } else {
-          /* Scroll al tope solo cuando NO es una búsqueda (evita salto incómodo) */
+          /* Navegación hacia adelante: ir al tope */
           window.scrollTo(0, 0);
           document.documentElement.scrollTop = 0;
           document.body.scrollTop = 0;
@@ -290,7 +321,7 @@
         doneBar();
       })
       .catch(function (err) {
-        if (err && err.name === 'AbortError') return;
+        if (err && err.name === 'AbortError') { if (!pending) doneBar(); return; } // no colgar la barra si nada sigue
         pending = null;
         doneBar();
         location.href = href; // fallback a navegación normal
@@ -363,9 +394,10 @@
       _focusRestore = { id: active.id || '', name: active.name || '' };
     }
 
-    // Construir URL con datos del formulario
+    // Construir URL con datos del formulario. replace: aplicar un filtro no debe
+    // apilar una entrada de historial por cada cambio (evita "retroceder de más").
     try {
-      navigate(buildFormUrl(form));
+      navigate(buildFormUrl(form), false, true);
     } catch (x) {
       _focusRestore = null;
       form.submit(); // fallback a navegación normal
