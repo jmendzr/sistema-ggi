@@ -542,7 +542,7 @@
   .mant-modal-box:not(.mant-modal-lg) .mant-modal-header {
     min-height:   46px !important;
     height:       auto !important;
-    padding:      10px 8px 10px 14px !important;
+    padding:      calc(10px + max(env(safe-area-inset-top,0px), var(--safe-top,0px))) 8px 10px 14px !important;
   }
   /* Popup: botón de cierre = "✕" a la derecha (no el "← Volver" de pantalla completa) */
   .mant-modal-box:not(.mant-modal-lg) .mant-modal-close {
@@ -1359,7 +1359,9 @@ tr.sm-row-active td:first-child { box-shadow: inset 3px 0 0 var(--ac, #1d4ed8); 
   .form-card { padding: 14px !important; }
   .mant-card-header { padding: 11px 14px !important; }
   .mant-modal-body { padding: 16px !important; }
-  .mant-modal-header { padding: 13px 16px !important; }
+  /* El top incluye el safe-area (isla dinámica) — si no, esta regla (que gana el
+     cascade por ir después y con !important) pisaba el padding de safe-area. */
+  .mant-modal-header { padding: calc(13px + max(env(safe-area-inset-top,0px), var(--safe-top,0px))) 16px 13px !important; }
   .mant-card-title { font-size: 13px !important; }
   .mant-table th { font-size: 10px !important; padding: 9px 12px !important; }
   .mant-table td { font-size: 12px !important; padding: 10px 12px !important; }
