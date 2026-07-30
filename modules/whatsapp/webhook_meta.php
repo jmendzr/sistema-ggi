@@ -243,6 +243,9 @@ try {
                         'image_url'     => $ref['image_url']     ?? null,
                         'thumbnail_url' => $ref['thumbnail_url'] ?? null,
                         'video_url'     => $ref['video_url']     ?? null,
+                        // ctwa_clid: id del clic del anuncio → clave para atribuir
+                        // la venta al anuncio vía Conversions API de Meta.
+                        'ctwa_clid'     => $ref['ctwa_clid']     ?? null,
                     ], fn($v) => $v !== null && $v !== '');
                     if ($refData) {
                         $pdo->prepare("UPDATE wa_mensajes SET referral_json = ? WHERE wa_message_id = ?")
