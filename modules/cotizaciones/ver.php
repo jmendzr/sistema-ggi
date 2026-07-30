@@ -254,17 +254,29 @@ ggi_breadcrumb(array_filter([
 ]));
 ?>
 
+<style>
+/* Móvil: WhatsApp ocupa su propia fila; Aceptar/Rechazar/… (kebab) comparten la
+   siguiente → el menú "⋮" nunca queda solo en una fila. */
+@media (max-width:768px){
+  .prop-actions { width:100%; }
+  .prop-actions .prop-wa { flex:1 1 100%; justify-content:center; }
+  .prop-actions #btn-aceptar,
+  .prop-actions #btn-rechazar,
+  .prop-actions #btn-desistir { flex:1 1 auto; justify-content:center; }
+  .prop-actions .ggi-row-menu-wrap { flex:0 0 auto; }
+}
+</style>
 <!-- Page header -->
 <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
   <div>
     <h1><?= sanitize($cot['numero']) ?></h1>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+  <div class="prop-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
     <?php $_tel_cli = preg_replace('/\D/', '', (string)($cot['contacto_telefono'] ?? '')); ?>
     <!-- PRIMARIOS: enviar por WhatsApp + decisión (aceptar/rechazar) -->
     <?php if (!empty($cot['cliente_id'])): ?>
     <a href="<?= APP_URL ?>/modules/inbox/index.php<?= $_tel_cli ? '?tel=' . urlencode($_tel_cli) : '' ?>"
-       class="btn btn-sm" title="Abrir el chat del cliente para enviarle la propuesta (PDF con un clic)"
+       class="btn btn-sm prop-wa" title="Abrir el chat del cliente para enviarle la propuesta (PDF con un clic)"
        style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#25D366;color:#fff;border:none;border-radius:9px;font-size:12px;font-weight:600;">
       <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
       Enviar por WhatsApp

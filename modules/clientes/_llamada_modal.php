@@ -38,8 +38,8 @@ if (!$_llam_cliente_id) return;
     <span style="font-size:12px;color:var(--gris-texto);">→ <?= sanitize($_ll['asignado_nombre']) ?></span>
     <?php if (!empty($_ll['nota'])): ?><span style="font-size:12px;color:var(--gris-texto);flex:1;min-width:120px;"><?= sanitize($_ll['nota']) ?></span><?php endif; ?>
     <span style="margin-left:auto;display:flex;gap:6px;">
-      <button type="button" class="btn btn-outline btn-sm" onclick="ggiLlamadaAccion(<?= $_ll['id'] ?>,'realizar')" style="font-size:11px;padding:3px 10px;color:var(--s-ok,#059669);">✓ Realizada</button>
-      <button type="button" class="btn btn-outline btn-sm" onclick="ggiLlamadaAccion(<?= $_ll['id'] ?>,'cancelar')" style="font-size:11px;padding:3px 10px;">Cancelar</button>
+      <button type="button" class="btn btn-outline btn-sm" onclick="ggiLlamadaAccion(<?= $_ll['id'] ?>,'realizar')">Realizada</button>
+      <button type="button" class="btn btn-outline btn-sm" onclick="ggiLlamadaAccion(<?= $_ll['id'] ?>,'cancelar')">Cancelar</button>
     </span>
   </div>
   <?php endforeach; ?>
@@ -49,7 +49,7 @@ if (!$_llam_cliente_id) return;
 <!-- ── Modal: agendar llamada con recordatorio push ── -->
 <div class="ggi-modal-overlay" id="llamada-modal">
   <div class="ggi-modal-box" style="max-width:430px;" role="dialog" aria-modal="true" aria-label="Agendar llamada">
-    <div class="ggi-modal-header"><h3 style="font-size:15px;margin:0;">📞 Agendar llamada</h3></div>
+    <div class="ggi-modal-header"><h3 style="font-size:15px;margin:0;">Agendar llamada</h3></div>
     <div class="ggi-modal-body">
       <p style="font-size:12.5px;color:var(--gris-texto);margin:0 0 12px;">
         Recibirás una notificación push antes de la hora acordada con <strong><?= sanitize($_llam_empresa) ?></strong><?= $_llam_cot_id ? ' (ligada a esta propuesta)' : '' ?>.

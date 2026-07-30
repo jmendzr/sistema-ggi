@@ -508,8 +508,8 @@ elseif ($tab === 'llamadas') {
           <?php if (!empty($ll['nota_cierre'])): ?><span style="font-size:12px;color:var(--tx3);font-style:italic;min-width:120px;">Cierre: <?= sanitize($ll['nota_cierre']) ?></span><?php endif; ?>
           <?php if ($abierta): ?>
           <span style="margin-left:auto;display:flex;gap:6px;">
-            <button type="button" class="btn btn-outline btn-sm" onclick="window.ggiLlamadaAccion(<?= (int)$ll['id'] ?>,'realizar')" style="font-size:11px;padding:3px 10px;color:var(--s-ok,#059669);">✓ Realizada</button>
-            <button type="button" class="btn btn-outline btn-sm" onclick="window.ggiLlamadaAccion(<?= (int)$ll['id'] ?>,'cancelar')" style="font-size:11px;padding:3px 10px;">Cancelar</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="window.ggiLlamadaAccion(<?= (int)$ll['id'] ?>,'realizar')">Realizada</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="window.ggiLlamadaAccion(<?= (int)$ll['id'] ?>,'cancelar')">Cancelar</button>
           </span>
           <?php endif; ?>
         </div>

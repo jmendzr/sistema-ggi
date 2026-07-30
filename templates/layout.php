@@ -1718,7 +1718,8 @@ session_write_close();
     z-index: 100;
     background: var(--bg-surface, #fff);
     border-top: 1px solid var(--gris-borde, #E2E8F0);
-    padding: 12px 16px;
+    /* safe-bottom: la barra fija no debe quedar bajo el gesture bar / home indicator */
+    padding: 12px 16px calc(12px + var(--safe-bottom, 0px));
     margin: 0;
     box-shadow: 0 -4px 20px rgba(0,0,0,.06);
     border-radius: 0;
@@ -1771,19 +1772,21 @@ session_write_close();
      abierto dentro del embed se iría bajo la isla dinámica. Pedimos el inset REAL
      al documento padre (que sí lo conoce) y lo fijamos como --safe-top; además lo
      retransmitimos a iframes hijos (modales anidados). No-op en escritorio (0). */
-  var _ggiSafeTop = 0;
+  var _ggiSafeTop = 0, _ggiSafeBottom = 0;
   window.addEventListener('message', function(ev) {
     if (ev.data && ev.data.ggi === 'safeTop' && typeof ev.data.value === 'number') {
-      _ggiSafeTop = ev.data.value;
+      _ggiSafeTop    = ev.data.value;
+      _ggiSafeBottom = (typeof ev.data.bottom === 'number') ? ev.data.bottom : _ggiSafeBottom;
       document.documentElement.style.setProperty('--safe-top', _ggiSafeTop + 'px');
+      document.documentElement.style.setProperty('--safe-bottom', _ggiSafeBottom + 'px');
       // Reenviar a iframes hijos ya presentes (modales anidados)
       document.querySelectorAll('iframe').forEach(function(f) {
-        try { f.contentWindow.postMessage({ ggi: 'safeTop', value: _ggiSafeTop }, '*'); } catch (e) {}
+        try { f.contentWindow.postMessage({ ggi: 'safeTop', value: _ggiSafeTop, top: _ggiSafeTop, bottom: _ggiSafeBottom }, '*'); } catch (e) {}
       });
     }
     // Un iframe hijo pide el inset → le paso el que tengo
     if (ev.data && ev.data.ggi === 'getSafeTop' && ev.source) {
-      try { ev.source.postMessage({ ggi: 'safeTop', value: _ggiSafeTop }, '*'); } catch (e) {}
+      try { ev.source.postMessage({ ggi: 'safeTop', value: _ggiSafeTop, top: _ggiSafeTop, bottom: _ggiSafeBottom }, '*'); } catch (e) {}
     }
   });
   try { window.parent.postMessage({ ggi: 'getSafeTop' }, '*'); } catch (e) {}
@@ -1794,19 +1797,21 @@ session_write_close();
      sirve a los iframes embed que lo pidan (dentro de un iframe env() vale 0). ── -->
 <script>
 (function () {
-  function medirSafeTop() {
+  function medir(prop) {
     var p = document.createElement('div');
-    p.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;padding-top:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none;';
+    p.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;padding-top:env(' + prop + ',0px);visibility:hidden;pointer-events:none;';
     document.documentElement.appendChild(p);
     var v = parseFloat(getComputedStyle(p).paddingTop) || 0;
     p.remove();
     return v;
   }
-  var safeTop = medirSafeTop();
-  window.addEventListener('resize', function () { safeTop = medirSafeTop(); }, { passive: true });
+  function medirInsets() { return { top: medir('safe-area-inset-top'), bottom: medir('safe-area-inset-bottom') }; }
+  var insets = medirInsets();
+  window.addEventListener('resize', function () { insets = medirInsets(); }, { passive: true });
   window.addEventListener('message', function (ev) {
     if (ev.data && ev.data.ggi === 'getSafeTop' && ev.source) {
-      try { ev.source.postMessage({ ggi: 'safeTop', value: safeTop }, '*'); } catch (e) {}
+      // 'value' (compat) = top; 'top'/'bottom' explícitos
+      try { ev.source.postMessage({ ggi: 'safeTop', value: insets.top, top: insets.top, bottom: insets.bottom }, '*'); } catch (e) {}
     }
   });
 })();

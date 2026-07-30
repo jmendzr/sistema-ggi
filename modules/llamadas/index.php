@@ -70,12 +70,12 @@ $dias  = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 require_once __DIR__ . '/../../templates/layout.php';
 ?>
 <!-- data-spa-nocache: el calendario cambia al marcar llamadas en otras páginas → siempre fresco -->
-<div class="page-header" data-spa-nocache style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
+<div class="page-header cal-head" data-spa-nocache style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
   <div>
     <h1>Calendario de llamadas</h1>
     <p style="color:var(--tx3);font-size:13px;margin-top:2px;"><?= $total ?> llamada<?= $total !== 1 ? 's' : '' ?> en <?= $meses[$mes] ?> <?= $anio ?></p>
   </div>
-  <div style="display:flex;align-items:center;gap:8px;">
+  <div class="cal-nav" style="display:flex;align-items:center;gap:8px;">
     <a href="?ym=<?= $prevYm ?>" class="btn btn-outline btn-sm" title="Mes anterior" aria-label="Mes anterior">
       <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
     </a>
@@ -83,7 +83,7 @@ require_once __DIR__ . '/../../templates/layout.php';
     <a href="?ym=<?= $nextYm ?>" class="btn btn-outline btn-sm" title="Mes siguiente" aria-label="Mes siguiente">
       <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
     </a>
-    <span style="min-width:150px;text-align:center;font-weight:700;font-size:15px;color:var(--tx);"><?= $meses[$mes] ?> <?= $anio ?></span>
+    <span class="cal-mes" style="min-width:150px;text-align:center;font-weight:700;font-size:15px;color:var(--tx);"><?= $meses[$mes] ?> <?= $anio ?></span>
   </div>
 </div>
 
@@ -101,16 +101,23 @@ require_once __DIR__ . '/../../templates/layout.php';
   .cal-ll.hecha { background:var(--s-ok-bg,#ecfdf5); border-left-color:var(--gr,#10b981); opacity:.75; }
   .cal-ll b { font-weight:700; }
   .cal-empty { color:var(--tx3); font-size:12px; padding:40px; text-align:center; }
+  /* Scroll horizontal en pantallas estrechas: el grid mantiene celdas legibles */
+  .cal-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
   @media (max-width:768px){
-    .cal-cell { min-height:76px; }
+    .cal-grid { min-width:640px; }   /* evita columnas apretadas ilegibles */
+    .cal-cell { min-height:80px; }
     .cal-dow  { padding:6px 6px; font-size:10px; }
-    .cal-ll   { font-size:10.5px; }
+    .cal-ll   { font-size:11px; }
+    .cal-head { flex-direction:column; align-items:stretch !important; gap:10px !important; }
+    .cal-head .cal-nav { justify-content:space-between; }
+    .cal-head .cal-mes { flex:1; text-align:center; }
   }
 </style>
 
 <?php if ($total === 0): ?>
   <div class="cal-empty">No hay llamadas agendadas en <?= $meses[$mes] ?> <?= $anio ?>.</div>
 <?php else: ?>
+<div class="cal-scroll">
 <div class="cal-grid" role="grid" aria-label="Calendario de llamadas">
   <?php foreach ($dias as $d): ?><div class="cal-dow"><?= $d ?></div><?php endforeach; ?>
   <?php
@@ -143,6 +150,7 @@ require_once __DIR__ . '/../../templates/layout.php';
   $resto = (7 - ($celdasUsadas % 7)) % 7;
   for ($i = 0; $i < $resto; $i++) echo '<div class="cal-cell otro"></div>';
   ?>
+</div>
 </div>
 <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--tx3);">
   <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--ac);vertical-align:middle;margin-right:5px;"></span>Programada</span>

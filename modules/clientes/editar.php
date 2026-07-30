@@ -213,6 +213,20 @@ require_once __DIR__ . '/../../templates/layout.php';
   .ruc-status.err { color:#ef4444; }
   .ruc-status.loading { color:var(--gris-texto); }
   .form-actions { padding:16px 28px; background:var(--bg-surface2); border-top:1px solid var(--gris-borde); display:flex; gap:10px; flex-wrap:wrap; }
+  /* Jerarquía de la barra de acciones (escritorio y móvil) */
+  .form-actions.ff-actions { align-items:center; }
+  .form-actions.ff-actions .ff-save   { flex:0 0 auto; }
+  .form-actions.ff-actions .ff-cancel { flex:0 0 auto; }
+  .form-actions.ff-actions .ff-delete { flex:0 0 auto; margin-left:auto;
+    background:transparent; color:var(--s-err); border:1.5px solid var(--s-err-brd,#fecaca); font-weight:600; }
+  .form-actions.ff-actions .ff-delete:hover { background:var(--s-err-bg,#fef2f2); }
+  @media (max-width:768px){
+    /* Guardar: primario prominente en su propia fila; Cancelar + Eliminar debajo */
+    .form-actions.ff-actions { gap:8px; }
+    .form-actions.ff-actions .ff-save   { flex:1 1 100%; order:1; min-height:48px; font-weight:700; font-size:15px; }
+    .form-actions.ff-actions .ff-cancel { flex:1 1 auto;  order:2; min-height:46px; margin:0; }
+    .form-actions.ff-actions .ff-delete { flex:1 1 auto;  order:3; min-height:46px; margin-left:0; }
+  }
   .select-wrap select { width:100%; padding:10px 36px 10px 13px; border:1.5px solid var(--gris-borde); border-radius:9px;
     font-size:13px; font-family:'Inter',sans-serif; background-color:var(--bg-surface2); outline:none;
     cursor:pointer; transition:border-color .2s; color:var(--gris-dark); }
@@ -414,19 +428,17 @@ require_once __DIR__ . '/../../templates/layout.php';
       </div>
     </div>
 
-    <!-- Acciones -->
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary">
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Guardar cambios
-      </button>
+    <!-- Acciones: Guardar (primario prominente) · Cancelar (secundario) ·
+         Eliminar (destructivo, separado y de-enfatizado) -->
+    <div class="form-actions ff-actions">
+      <button type="submit" class="btn btn-primary ff-save">Guardar cambios</button>
       <?php if ($_ggi_embed): ?>
-      <button type="button" class="btn btn-outline" onclick="window.parent.postMessage({ggi:'close'}, '*')">Cancelar</button>
+      <button type="button" class="btn btn-outline ff-cancel" onclick="window.parent.postMessage({ggi:'close'}, '*')">Cancelar</button>
       <?php else: ?>
-      <a href="<?= $cancel_url ?>" class="btn btn-outline">Cancelar</a>
+      <a href="<?= $cancel_url ?>" class="btn btn-outline ff-cancel">Cancelar</a>
       <?php endif; ?>
       <?php if (has_role('gerente_general','gerente_operaciones')): ?>
-      <button type="button" class="btn btn-danger" style="margin-left:auto;" onclick="confirmarEliminar()">Eliminar empresa</button>
+      <button type="button" class="btn ff-delete" onclick="confirmarEliminar()">Eliminar empresa</button>
       <?php endif; ?>
     </div>
 
