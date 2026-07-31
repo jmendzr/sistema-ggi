@@ -138,3 +138,6 @@ define('IA_GEMINI_MODEL',   env('IA_GEMINI_MODEL',   'gemini-flash-latest'));
 define('ALEGRA_EMAIL', env('ALEGRA_EMAIL', ''));
 define('ALEGRA_TOKEN', env('ALEGRA_TOKEN', ''));
 define('ALEGRA_API',   'https://api.alegra.com/api/v1');
+// Interruptor maestro: '0' = solo BORRADOR (prueba, no va a SUNAT) · '1' = emisión REAL.
+// Mientras esté en '0', el botón "Emitir factura" crea borradores en Alegra.
+define('ALEGRA_EMITIR_REAL', env('ALEGRA_STAMP', '0') === '1');

@@ -68,6 +68,8 @@ if ($tab === 'pagos') {
     ?>
     <?php
         $es_gerente = has_role('gerente_general', 'gerente_operaciones');
+        $_esGG      = has_role('gerente_general'); // emitir factura Alegra: solo GG
+        $_alegraOn  = defined('ALEGRA_EMAIL') && ALEGRA_EMAIL !== '';
     ?>
     <?php if ($cnt_rechazados > 0): ?>
     <div class="alert-banner err" style="margin-bottom:16px;">
@@ -189,11 +191,17 @@ if ($tab === 'pagos') {
               Facturas
             </span>
             <?php if ($es_gerente && count($cot_facturas) < 2): ?>
-            <button type="button" class="btn btn-primary btn-sm"
-                    onclick="ggiAbrirSubirFactura(<?= $cot_id_g ?>, '<?= sanitize($grupo[0]['cot_numero']) ?>', 0)">
-              <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Cargar factura
-            </button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <?php if ($_esGG && $_alegraOn): ?>
+              <button type="button" class="btn btn-outline btn-sm"
+                      onclick="ggiAbrirEmitir(<?= $cot_id_g ?>, '<?= sanitize($grupo[0]['cot_numero']) ?>')">Emitir factura</button>
+              <?php endif; ?>
+              <button type="button" class="btn btn-primary btn-sm"
+                      onclick="ggiAbrirSubirFactura(<?= $cot_id_g ?>, '<?= sanitize($grupo[0]['cot_numero']) ?>', 0)">
+                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Cargar factura
+              </button>
+            </div>
             <?php endif; ?>
           </div>
           <?php if (empty($cot_facturas)): ?>
@@ -297,6 +305,107 @@ if ($tab === 'pagos') {
         </form>
       </div>
     </div>
+
+    <?php if ($_esGG && $_alegraOn): ?>
+    <!-- Modal emitir factura (Alegra) — solo Gerente General -->
+    <div id="modal-emitir-alegra" class="modal-overlay" style="z-index:9999;">
+      <div style="background:var(--bg-surface);border-radius:16px;padding:24px;width:100%;max-width:470px;margin:20px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:90vh;overflow-y:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div>
+            <h3 style="margin:0;font-size:16px;font-weight:700;">Emitir factura electrónica</h3>
+            <p id="al-cot-label" style="margin:2px 0 0;font-size:12px;color:var(--gris-texto);"></p>
+          </div>
+          <button type="button" onclick="ggiCerrarEmitir()" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--gris-texto);font-size:16px;">✕</button>
+        </div>
+        <input type="hidden" id="al-cot" value="">
+        <div style="margin-bottom:14px;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:700;text-align:center;background:<?= ALEGRA_EMITIR_REAL ? 'var(--s-err-bg)' : 'var(--s-warn-bg)' ?>;color:<?= ALEGRA_EMITIR_REAL ? 'var(--s-err-tx)' : 'var(--s-warn-tx)' ?>;">
+          <?= ALEGRA_EMITIR_REAL ? 'MODO EMISIÓN REAL — VA A SUNAT' : 'MODO BORRADOR — no va a SUNAT (prueba)' ?>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--gris-dark);margin-bottom:6px;">¿Qué emitir?</label>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="radio" name="al-tipo" value="total" checked> Factura total (por todo)</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="radio" name="al-tipo" value="anticipo"> Anticipo (1er pago)</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="radio" name="al-tipo" value="saldo"> Saldo (2do pago)</label>
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--gris-dark);margin-bottom:6px;">Detracción</label>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="radio" name="al-det" value="auto" checked> Autodetracción (GGI se detrae)</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="radio" name="al-det" value="cliente"> Cliente deposita la detracción</label>
+          </div>
+        </div>
+        <div id="al-resumen"></div>
+        <div id="al-msg" style="display:none;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+          <button type="button" onclick="ggiCerrarEmitir()" class="btn btn-outline btn-sm">Cancelar</button>
+          <button type="button" onclick="ggiAlegraPreview()" class="btn btn-outline btn-sm">Ver resumen</button>
+          <button type="button" id="al-btn-emitir" onclick="ggiAlegraEmitir()" class="btn btn-primary btn-sm" disabled><?= ALEGRA_EMITIR_REAL ? 'Emitir a SUNAT' : 'Generar borrador' ?></button>
+        </div>
+      </div>
+    </div>
+    <script>
+    var AL_REAL = <?= ALEGRA_EMITIR_REAL ? 'true' : 'false' ?>;
+    var AL_EMIT_LABEL = AL_REAL ? 'Emitir a SUNAT' : 'Generar borrador';
+    var AL_CSRF = '<?= htmlspecialchars(csrf_token()) ?>';
+    function ggiAbrirEmitir(cotId, num){
+      document.getElementById('al-cot').value = cotId;
+      document.getElementById('al-cot-label').textContent = 'Propuesta ' + (num || ('#'+cotId));
+      document.getElementById('al-resumen').innerHTML = '';
+      document.getElementById('al-msg').style.display = 'none';
+      var be = document.getElementById('al-btn-emitir'); be.disabled = true; be.textContent = AL_EMIT_LABEL;
+      var t = document.querySelector('input[name="al-tipo"]'); if (t) t.checked = true;
+      var d = document.querySelector('input[name="al-det"]'); if (d) d.checked = true;
+      document.getElementById('modal-emitir-alegra').classList.add('open');
+    }
+    function ggiCerrarEmitir(){ document.getElementById('modal-emitir-alegra').classList.remove('open'); }
+    function _alData(accion){
+      var fd = new FormData();
+      fd.append('_csrf', AL_CSRF);
+      fd.append('accion', accion);
+      fd.append('cotizacion_id', document.getElementById('al-cot').value);
+      fd.append('tipo', (document.querySelector('input[name="al-tipo"]:checked')||{}).value || '');
+      fd.append('detraccion_modo', (document.querySelector('input[name="al-det"]:checked')||{}).value || 'auto');
+      return fd;
+    }
+    function _alMsg(t, ok){
+      var m = document.getElementById('al-msg');
+      m.style.cssText = 'display:block;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:12.5px;background:'+(ok?'var(--s-ok-bg)':'var(--s-err-bg)')+';color:'+(ok?'var(--s-ok-tx)':'var(--s-err-tx)')+';';
+      m.textContent = t;
+    }
+    async function ggiAlegraPreview(){
+      var fd = _alData('preview'); if (!fd.get('tipo')) { _alMsg('Elige qué emitir.', false); return; }
+      document.getElementById('al-resumen').innerHTML = '<div style="color:var(--gris-texto);font-size:12px;">Calculando…</div>';
+      try{
+        var d = await (await fetch('<?= APP_URL ?>/modules/facturas/emitir_alegra.php', {method:'POST', body:fd})).json();
+        if (!d.ok) { document.getElementById('al-resumen').innerHTML=''; _alMsg(d.msg||'Error', false); return; }
+        var r = d.resumen, s = function(v){ return 'S/ ' + Number(v).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+        document.getElementById('al-resumen').innerHTML =
+          '<div style="border:1px solid var(--gris-borde);border-radius:9px;padding:12px 14px;font-size:13px;">'
+          +'<div style="font-weight:700;margin-bottom:4px;">'+r.cliente+' · RUC '+r.ruc+'</div>'
+          +'<div style="color:var(--gris-texto);margin-bottom:8px;font-size:12px;">'+r.descripcion+'</div>'
+          +'<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Base gravada</span><b>'+s(r.base)+'</b></div>'
+          +'<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>IGV 18%</span><b>'+s(r.igv)+'</b></div>'
+          +'<div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid var(--gris-borde);margin-top:4px;"><span>Total</span><b>'+s(r.total)+'</b></div>'
+          +(r.detraccion>0 ? '<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--s-warn-tx);"><span>Detracción 12% ('+(r.detraccion_modo==='cliente'?'cliente deposita':'autodetracción')+')</span><b>'+s(r.detraccion)+'</b></div>' : '')
+          +'</div>';
+        document.getElementById('al-msg').style.display = 'none';
+        document.getElementById('al-btn-emitir').disabled = false;
+      }catch(e){ document.getElementById('al-resumen').innerHTML=''; _alMsg('Error de conexión.', false); }
+    }
+    async function ggiAlegraEmitir(){
+      var be = document.getElementById('al-btn-emitir'); be.disabled = true; be.textContent = 'Procesando…';
+      try{
+        var d = await (await fetch('<?= APP_URL ?>/modules/facturas/emitir_alegra.php', {method:'POST', body:_alData('emitir')})).json();
+        if (d.ok) { _alMsg(d.msg, true); if (window.invalidatePageCache) window.invalidatePageCache(location.href); setTimeout(function(){ ggiCerrarEmitir(); if (window.reloadTab) window.reloadTab('pagos'); else location.reload(); }, 2200); }
+        else { _alMsg(d.msg||'No se pudo emitir.', false); be.disabled = false; be.textContent = AL_EMIT_LABEL; }
+      }catch(e){ _alMsg('Error de conexión.', false); be.disabled = false; be.textContent = AL_EMIT_LABEL; }
+    }
+    document.addEventListener('change', function(e){ if (e.target && (e.target.name==='al-tipo' || e.target.name==='al-det')) { var b=document.getElementById('al-btn-emitir'); if (b) b.disabled = true; } });
+    </script>
+    <?php endif; ?>
+
     <script>
     function ggiAbrirSubirFactura(cotizacionId, cotNumero, facturaId) {
       document.getElementById('modal-factura-cot-id').value = cotizacionId;
