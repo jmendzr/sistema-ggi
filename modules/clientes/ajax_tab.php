@@ -181,6 +181,13 @@ if ($tab === 'pagos') {
         ");
         $fact_stmt->execute([$id, $cot_id_g]);
         $cot_facturas = $fact_stmt->fetchAll(\PDO::FETCH_ASSOC);
+        // Tipos de factura Alegra ya emitidos (para que el modal deshabilite opciones inválidas)
+        $_alegraTipos = [];
+        foreach ($cot_facturas as $_cf) {
+            if (($_cf['origen'] ?? 'manual') === 'alegra' && ($_cf['estado_timbrado'] ?? '') !== 'error' && !empty($_cf['tipo_factura'])) {
+                $_alegraTipos[] = $_cf['tipo_factura'];
+            }
+        }
       ?>
       <?php if ($es_gerente || !empty($cot_facturas)): ?>
       <div style="border-top:1px solid var(--gris-borde);padding:12px 18px;">
@@ -190,17 +197,25 @@ if ($tab === 'pagos') {
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
               Facturas
             </span>
-            <?php if ($es_gerente && count($cot_facturas) < 2): ?>
+            <?php
+              // Emitir (Alegra): visible mientras quede algo por facturar (no 'total' ni 'saldo' ya emitidos).
+              $_puedeEmitir = $_esGG && $_alegraOn && !in_array('total', $_alegraTipos, true) && !in_array('saldo', $_alegraTipos, true);
+              // Cargar (manual): límite histórico de 2 facturas por cotización.
+              $_puedeCargar = $es_gerente && count($cot_facturas) < 2;
+            ?>
+            <?php if ($_puedeEmitir || $_puedeCargar): ?>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              <?php if ($_esGG && $_alegraOn): ?>
+              <?php if ($_puedeEmitir): ?>
               <button type="button" class="btn btn-outline btn-sm"
-                      onclick="ggiAbrirEmitir(<?= $cot_id_g ?>, '<?= sanitize($grupo[0]['cot_numero']) ?>')">Emitir factura</button>
+                      onclick='ggiAbrirEmitir(<?= $cot_id_g ?>, <?= json_encode($grupo[0]['cot_numero'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>, <?= json_encode($_alegraTipos) ?>)'>Emitir factura</button>
               <?php endif; ?>
+              <?php if ($_puedeCargar): ?>
               <button type="button" class="btn btn-primary btn-sm"
                       onclick="ggiAbrirSubirFactura(<?= $cot_id_g ?>, '<?= sanitize($grupo[0]['cot_numero']) ?>', 0)">
                 <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Cargar factura
               </button>
+              <?php endif; ?>
             </div>
             <?php endif; ?>
           </div>
@@ -340,7 +355,7 @@ if ($tab === 'pagos') {
         <div id="al-msg" style="display:none;"></div>
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
           <button type="button" onclick="ggiCerrarEmitir()" class="btn btn-outline btn-sm">Cancelar</button>
-          <button type="button" onclick="ggiAlegraPreview()" class="btn btn-outline btn-sm">Ver resumen</button>
+          <button type="button" id="al-btn-preview" onclick="ggiAlegraPreview()" class="btn btn-outline btn-sm">Ver resumen</button>
           <button type="button" id="al-btn-emitir" onclick="ggiAlegraEmitir()" class="btn btn-primary btn-sm" disabled><?= ALEGRA_EMITIR_REAL ? 'Emitir a SUNAT' : 'Generar borrador' ?></button>
         </div>
       </div>
@@ -349,14 +364,38 @@ if ($tab === 'pagos') {
     var AL_REAL = <?= ALEGRA_EMITIR_REAL ? 'true' : 'false' ?>;
     var AL_EMIT_LABEL = AL_REAL ? 'Emitir a SUNAT' : 'Generar borrador';
     var AL_CSRF = '<?= htmlspecialchars(csrf_token()) ?>';
-    function ggiAbrirEmitir(cotId, num){
+    function ggiAbrirEmitir(cotId, num, emitidos){
+      emitidos = emitidos || [];
       document.getElementById('al-cot').value = cotId;
       document.getElementById('al-cot-label').textContent = 'Propuesta ' + (num || ('#'+cotId));
       document.getElementById('al-resumen').innerHTML = '';
       document.getElementById('al-msg').style.display = 'none';
-      var be = document.getElementById('al-btn-emitir'); be.disabled = true; be.textContent = AL_EMIT_LABEL;
-      var t = document.querySelector('input[name="al-tipo"]'); if (t) t.checked = true;
+      var be = document.getElementById('al-btn-emitir'); be.textContent = AL_EMIT_LABEL;
+      var bp = document.getElementById('al-btn-preview');
       var d = document.querySelector('input[name="al-det"]'); if (d) d.checked = true;
+
+      // ── Qué tipos siguen siendo válidos según lo ya emitido ──
+      var valid = { total:false, anticipo:false, saldo:false }, doneMsg = '';
+      if (emitidos.indexOf('total') > -1)      doneMsg = 'Esta propuesta ya se facturó al total.';
+      else if (emitidos.indexOf('saldo') > -1) doneMsg = 'Esta propuesta ya tiene anticipo y saldo facturados.';
+      else if (emitidos.indexOf('anticipo') > -1) valid.saldo = true;   // solo queda el saldo
+      else { valid.total = true; valid.anticipo = true; }               // fresca: total o anticipo
+
+      var firstValid = null;
+      ['total','anticipo','saldo'].forEach(function(tp){
+        var r = document.querySelector('input[name="al-tipo"][value="'+tp+'"]'); if (!r) return;
+        var lbl = r.closest('label');
+        r.disabled = !valid[tp]; r.checked = false;
+        if (lbl) lbl.style.opacity = valid[tp] ? '1' : '.4';
+        if (valid[tp] && !firstValid) { firstValid = r; r.checked = true; }
+      });
+
+      be.disabled = true;
+      bp.disabled = !firstValid;
+      if (!firstValid) {
+        document.getElementById('al-resumen').innerHTML =
+          '<div style="padding:10px 12px;border:1px solid var(--s-ok-brd);background:var(--s-ok-bg);color:var(--s-ok-tx);border-radius:8px;font-size:12.5px;">'+doneMsg+'</div>';
+      }
       document.getElementById('modal-emitir-alegra').classList.add('open');
     }
     function ggiCerrarEmitir(){ document.getElementById('modal-emitir-alegra').classList.remove('open'); }

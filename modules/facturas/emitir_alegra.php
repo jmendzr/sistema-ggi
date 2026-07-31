@@ -38,7 +38,9 @@ $cot = $pdo->prepare("
 $cot->execute([$cotId]);
 $cot = $cot->fetch(\PDO::FETCH_ASSOC);
 if (!$cot) _j(['ok'=>false,'msg'=>'Cotización no encontrada.']);
+if ($cot['estado'] !== 'aceptada') _j(['ok'=>false,'msg'=>'La cotización no está aceptada; no se puede facturar.']);
 if ((int)$cot['incluye_igv'] !== 1) _j(['ok'=>false,'msg'=>'Esta cotización no incluye IGV; no se factura por Alegra.']);
+if (empty($cot['ruc'])) _j(['ok'=>false,'msg'=>'El cliente no tiene RUC registrado.']);
 
 $clienteId = (int)$cot['cliente_id'];
 
@@ -61,6 +63,7 @@ if ($tipo === 'total') {
     if ($monto <= 0) _j(['ok'=>false,'msg'=>"No hay pago '$ptipo' registrado en esta cotización."]);
     $base = round($monto / 1.18, 2);
 }
+if ($base <= 0) _j(['ok'=>false,'msg'=>'La base de la factura es 0; revisa los montos de la cotización.']);
 
 // ── Referencia del anticipo para el saldo ──
 $refAnticipo = null;
