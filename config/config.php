@@ -131,3 +131,10 @@ define('IA_OPENAI_MODEL',   env('IA_OPENAI_MODEL',   'gpt-4o'));
 define('IA_GEMINI_KEY',     env('IA_GEMINI_KEY',     ''));
 define('IA_GEMINI_KEY_2',   env('IA_GEMINI_KEY_2',   ''));
 define('IA_GEMINI_MODEL',   env('IA_GEMINI_MODEL',   'gemini-flash-latest'));
+
+// ── Alegra — facturación electrónica SUNAT (Perú) ─────────────────────────────
+//  Basic Auth = base64(email:token). Credenciales solo en .env (fuera del repo).
+//  Base API: https://api.alegra.com/api/v1/
+define('ALEGRA_EMAIL', env('ALEGRA_EMAIL', ''));
+define('ALEGRA_TOKEN', env('ALEGRA_TOKEN', ''));
+define('ALEGRA_API',   'https://api.alegra.com/api/v1');
