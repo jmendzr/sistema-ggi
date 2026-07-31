@@ -673,12 +673,6 @@ $_msg = match($rol) {
   <p><?= $_msg ?></p>
 </div>
 
-<!-- TEMPORAL: enlace de diagnóstico safe-area (para abrir dentro de la PWA). Quitar tras diagnosticar. -->
-<a href="<?= APP_URL ?>/diag_safe.php"
-   style="display:inline-flex;align-items:center;gap:8px;margin-bottom:16px;padding:10px 16px;border:1.5px dashed var(--s-warn,#f59e0b);border-radius:9px;background:var(--s-warn-bg,#fef3c7);color:var(--s-warn-tx,#92400e);font-size:13px;font-weight:600;text-decoration:none;">
-  🔧 Abrir diagnóstico de la isla dinámica (temporal)
-</a>
-
 <?php if ($rol === 'ejecutivo_ventas'): ?>
 <!-- ═══════════════ DASHBOARD EJECUTIVO DE VENTAS ═══════════════ -->
 
