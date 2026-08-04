@@ -60,6 +60,33 @@ class AlegraService
         return [$code, json_decode($raw, true)];
     }
 
+    /** Busca el contacto en Alegra por RUC (solo lectura). null si no existe. */
+    public static function buscarContacto(string $ruc): ?int
+    {
+        $ruc = preg_replace('/\D/', '', $ruc);
+        if ($ruc === '') return null;
+        [$c, $r] = self::req('GET', '/contacts?identification=' . rawurlencode($ruc));
+        return ($c === 200 && isset($r[0]['id'])) ? (int)$r[0]['id'] : null;
+    }
+
+    /** Facturas recientes de un contacto en Alegra (para avisar de duplicados). */
+    public static function facturasDeContacto(int $contactId, int $limit = 8): array
+    {
+        [$c, $r] = self::req('GET', '/invoices?client_id=' . $contactId . '&start=0&limit=' . $limit . '&order_direction=DESC&order_field=id');
+        if ($c !== 200 || !is_array($r)) return [];
+        $out = [];
+        foreach ($r as $f) {
+            $out[] = [
+                'numero' => $f['numberTemplate']['fullNumber'] ?? ('#' . ($f['id'] ?? '')),
+                'total'  => (float)($f['total'] ?? 0),
+                'date'   => $f['date'] ?? '',
+                'status' => $f['status'] ?? '',
+                'item'   => $f['items'][0]['name'] ?? '',
+            ];
+        }
+        return $out;
+    }
+
     /**
      * Busca el contacto en Alegra por RUC; si no existe, lo crea.
      * @return int|null id del contacto en Alegra, o null si falla.
@@ -69,8 +96,7 @@ class AlegraService
         $ruc = preg_replace('/\D/', '', (string)($cliente['ruc'] ?? ''));
         if ($ruc === '') { self::$lastError = 'cliente sin RUC'; return null; }
 
-        [$c, $r] = self::req('GET', '/contacts?identification=' . rawurlencode($ruc));
-        if ($c === 200 && isset($r[0]['id'])) return (int)$r[0]['id'];
+        if ($id = self::buscarContacto($ruc)) return $id;
 
         // Crear
         $payload = array_filter([

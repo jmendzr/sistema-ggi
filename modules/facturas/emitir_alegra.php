@@ -41,6 +41,7 @@ if (!$cot) _j(['ok'=>false,'msg'=>'Cotización no encontrada.']);
 if ($cot['estado'] !== 'aceptada') _j(['ok'=>false,'msg'=>'La cotización no está aceptada; no se puede facturar.']);
 if ((int)$cot['incluye_igv'] !== 1) _j(['ok'=>false,'msg'=>'Esta cotización no incluye IGV; no se factura por Alegra.']);
 if (empty($cot['ruc'])) _j(['ok'=>false,'msg'=>'El cliente no tiene RUC registrado.']);
+if (strtoupper((string)($cot['moneda'] ?? 'PEN')) !== 'PEN') _j(['ok'=>false,'msg'=>'Esta cotización es en '.$cot['moneda'].'. La emisión automática por ahora solo soporta soles (PEN); emítela manualmente en Alegra.']);
 
 $clienteId = (int)$cot['cliente_id'];
 
@@ -54,14 +55,22 @@ $normas = array_map(function($r){ return preg_match('/(\d{4,5})/', $r['codigo'],
 $subtotal = (float)$cot['subtotal'];
 if ($tipo === 'total') {
     $base = round($subtotal, 2);
+    // Total: TODOS los pagos deben estar validados.
+    $pc = $pdo->prepare("SELECT COUNT(*) t, SUM(estado='validado') ok FROM pagos_cliente WHERE cotizacion_id=? AND deleted_at IS NULL");
+    $pc->execute([$cotId]);
+    $pr = $pc->fetch(\PDO::FETCH_ASSOC);
+    if (!($pr && (int)$pr['t'] > 0 && (int)$pr['t'] === (int)$pr['ok'])) {
+        _j(['ok'=>false,'msg'=>'Para facturar al total, TODOS los pagos deben estar validados.']);
+    }
 } else {
     // anticipo → pago 'inicial'; saldo → pago 'final'. Base = monto (con IGV) / 1.18
     $ptipo = $tipo === 'anticipo' ? 'inicial' : 'final';
-    $pg = $pdo->prepare("SELECT monto FROM pagos_cliente WHERE cotizacion_id=? AND tipo=? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1");
+    $pg = $pdo->prepare("SELECT monto, estado FROM pagos_cliente WHERE cotizacion_id=? AND tipo=? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1");
     $pg->execute([$cotId, $ptipo]);
-    $monto = (float)$pg->fetchColumn();
-    if ($monto <= 0) _j(['ok'=>false,'msg'=>"No hay pago '$ptipo' registrado en esta cotización."]);
-    $base = round($monto / 1.18, 2);
+    $pago = $pg->fetch(\PDO::FETCH_ASSOC);
+    if (!$pago || (float)$pago['monto'] <= 0) _j(['ok'=>false,'msg'=>"No hay pago '$ptipo' registrado en esta cotización."]);
+    if ($pago['estado'] !== 'validado') _j(['ok'=>false,'msg'=>"El pago '$ptipo' aún no está validado. Valídalo antes de facturar."]);
+    $base = round((float)$pago['monto'] / 1.18, 2);
 }
 if ($base <= 0) _j(['ok'=>false,'msg'=>'La base de la factura es 0; revisa los montos de la cotización.']);
 
@@ -105,8 +114,25 @@ $resumen = [
     'modo'          => ALEGRA_EMITIR_REAL ? 'REAL (SUNAT)' : 'BORRADOR (prueba)',
 ];
 
-// ── PREVIEW: solo devolver el resumen ──
-if ($accion === 'preview') _j(['ok'=>true,'resumen'=>$resumen]);
+// ── Avisos de facturas ya existentes (para no duplicar) ──
+//    (a) en el sistema (facturas_cliente de esta cotización) y
+//    (b) en Alegra directamente (facturas del cliente emitidas a mano, aún no cargadas).
+$avisos = [];
+$fg = $pdo->prepare("SELECT numero_factura, origen, tipo_factura, monto_total, created_at FROM facturas_cliente WHERE cotizacion_id=? ORDER BY id DESC");
+$fg->execute([$cotId]);
+foreach ($fg->fetchAll(\PDO::FETCH_ASSOC) as $f) {
+    $avisos[] = ['fuente'=>'sistema', 'numero'=>$f['numero_factura'] ?: '(sin nº)', 'origen'=>$f['origen'], 'total'=>$f['monto_total'], 'fecha'=>substr((string)$f['created_at'],0,10)];
+}
+$facturasAlegra = [];
+$cid = AlegraService::buscarContacto((string)$cot['ruc']);
+if ($cid) {
+    foreach (AlegraService::facturasDeContacto($cid, 8) as $fa) {
+        $facturasAlegra[] = $fa;
+    }
+}
+
+// ── PREVIEW: resumen + avisos ──
+if ($accion === 'preview') _j(['ok'=>true, 'resumen'=>$resumen, 'facturas_sistema'=>$avisos, 'facturas_alegra'=>$facturasAlegra]);
 
 // ── EMITIR ──
 $cliente = ['ruc'=>$cot['ruc'], 'razon_social'=>$cot['razon_social'], 'direccion'=>($cot['direccion'] ?: '')];

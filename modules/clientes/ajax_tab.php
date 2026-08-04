@@ -413,6 +413,21 @@ if ($tab === 'pagos') {
       m.style.cssText = 'display:block;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:12.5px;background:'+(ok?'var(--s-ok-bg)':'var(--s-err-bg)')+';color:'+(ok?'var(--s-ok-tx)':'var(--s-err-tx)')+';';
       m.textContent = t;
     }
+    function _alAvisos(sis, ale, s){
+      sis = sis || []; ale = ale || [];
+      if (!sis.length && !ale.length) return '';
+      var h = '<div style="margin-top:10px;border:1px solid var(--s-warn-brd,#fcd34d);background:var(--s-warn-bg);border-radius:9px;padding:10px 12px;font-size:12px;">'
+            + '<div style="font-weight:700;color:var(--s-warn-tx);margin-bottom:5px;">⚠ Este cliente ya tiene facturas — revisa antes de emitir</div>';
+      if (sis.length){
+        h += '<div style="color:var(--gris-texto);margin-bottom:2px;">En el sistema (esta propuesta):</div>';
+        sis.forEach(function(f){ h += '<div style="padding:1px 0;">• '+f.numero+' <span style="opacity:.7;">('+f.origen+' · '+s(f.total)+' · '+f.fecha+')</span></div>'; });
+      }
+      if (ale.length){
+        h += '<div style="color:var(--gris-texto);margin:4px 0 2px;">En Alegra (este cliente):</div>';
+        ale.forEach(function(f){ h += '<div style="padding:1px 0;">• '+f.numero+' <span style="opacity:.7;">('+s(f.total)+' · '+f.date+' · '+f.status+')</span></div>'; });
+      }
+      return h + '</div>';
+    }
     async function ggiAlegraPreview(){
       var fd = _alData('preview'); if (!fd.get('tipo')) { _alMsg('Elige qué emitir.', false); return; }
       document.getElementById('al-resumen').innerHTML = '<div style="color:var(--gris-texto);font-size:12px;">Calculando…</div>';
@@ -428,7 +443,8 @@ if ($tab === 'pagos') {
           +'<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>IGV 18%</span><b>'+s(r.igv)+'</b></div>'
           +'<div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid var(--gris-borde);margin-top:4px;"><span>Total</span><b>'+s(r.total)+'</b></div>'
           +(r.detraccion>0 ? '<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--s-warn-tx);"><span>Detracción 12% ('+(r.detraccion_modo==='cliente'?'cliente deposita':'autodetracción')+')</span><b>'+s(r.detraccion)+'</b></div>' : '')
-          +'</div>';
+          +'</div>'
+          + _alAvisos(d.facturas_sistema, d.facturas_alegra, s);
         document.getElementById('al-msg').style.display = 'none';
         document.getElementById('al-btn-emitir').disabled = false;
       }catch(e){ document.getElementById('al-resumen').innerHTML=''; _alMsg('Error de conexión.', false); }
