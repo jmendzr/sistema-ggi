@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../core/PushService.php';
 require_once __DIR__ . '/../../vendor/autoload.php';
 session_init();
 require_login();
-require_role('gerente_general', 'gerente_operaciones'); // aprobar acta: solo gerencia (el ejecutivo NO)
+require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
 
 header('Content-Type: application/json; charset=utf-8');
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -39,6 +39,20 @@ if ($doc['confirmada']) {
 }
 
 $user = auth_user();
+
+// Validar que ejecutivo sea el responsable ACTUAL del cliente.
+// Se usa el mismo fallback que el resto del sistema: responsible_user_id es el
+// campo canónico, pero cuando está NULL (clientes existentes que nunca tuvieron
+// transferencia explícita) se considera ejecutivo_id como responsable legado.
+if ($user['rol'] === 'ejecutivo_ventas') {
+    $cliente = $pdo->prepare("SELECT COALESCE(responsible_user_id, ejecutivo_id) AS responsable FROM clientes WHERE id = ?");
+    $cliente->execute([$doc['cliente_id']]);
+    $cliente = $cliente->fetch();
+
+    if (!$cliente || $user['id'] != $cliente['responsable']) {
+        echo json_encode(['ok' => false, 'msg' => 'Solo el ejecutivo responsable puede aprobar.']); exit;
+    }
+}
 
 // Marcar acta como confirmada
 $pdo->prepare("
