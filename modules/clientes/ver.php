@@ -872,8 +872,8 @@ include __DIR__ . '/_llamada_modal.php';
     $confirmada         = $acta_confirmada;
     $puede_regenerar    = $puede_gestionar;   // gerentes siempre pueden generar/regenerar
     $acta_pendiente_cambios = $doc_acta_vigente && ($doc_acta_vigente['doc_estado'] === 'pendiente_cambios');
-    $es_responsable     = $es_ejecutivo && $user['id'] == $c['responsible_user_id'];
-    $puede_confirmar    = ($puede_gestionar || $es_responsable) && $doc_acta_vigente && !$confirmada && !$acta_pendiente_cambios;
+    // Aprobar / solicitar cambios del acta: SOLO gerencia (el ejecutivo es de solo lectura).
+    $puede_confirmar    = $puede_gestionar && $doc_acta_vigente && !$confirmada && !$acta_pendiente_cambios;
     $isos_label         = implode(', ', array_column($isos_ultima_cot, 'codigo'));
     // ¿El acta aplica según las normas de las propuestas aceptadas? (si ya hay acta
     // generada, se muestra igual; el "no aplica" solo cambia el estado vacío).
@@ -959,11 +959,6 @@ include __DIR__ . '/_llamada_modal.php';
       </div>
     </div>
     <div id="acta-msg" style="display:none;margin-top:8px;font-size:12px;padding:8px 12px;border-radius:8px;"></div>
-    <?php if ($acta_pendiente_cambios && $es_ejecutivo): ?>
-    <div style="margin-top:12px;padding:12px;background:var(--s-warn-bg);border:1px solid var(--s-warn-brd);border-radius:8px;border-left:3px solid var(--s-warn);font-size:12px;color:var(--s-warn-tx);">
-      ⚠️ <strong>Acta pendiente de regeneración:</strong> Se han solicitado cambios. Espera a que un gerente regenere el acta para poder aprobarla.
-    </div>
-    <?php endif; ?>
   </div>
   <?php endif; ?>
 
