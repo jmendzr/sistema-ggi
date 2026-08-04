@@ -181,6 +181,41 @@ class AlegraService
         return self::req('DELETE', '/invoices/' . $alegraId);
     }
 
+    /** URL del PDF de una factura (GET /invoices/{id}?fields=pdf → campo 'pdf'). */
+    public static function pdfUrl(int $alegraId): ?string
+    {
+        [$c, $r] = self::req('GET', '/invoices/' . $alegraId . '?fields=pdf');
+        return ($c === 200 && !empty($r['pdf'])) ? (string)$r['pdf'] : null;
+    }
+
+    /**
+     * Descarga el PDF de la factura y lo guarda junto a las facturas del cliente
+     * (misma convención que la carga manual). Devuelve [rutaRelativa, nombre] o null.
+     */
+    public static function descargarPdf(int $alegraId, int $clienteId, string $numero): ?array
+    {
+        $url = self::pdfUrl($alegraId);
+        if (!$url) { self::$lastError = 'sin URL de PDF'; return null; }
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 40, CURLOPT_FOLLOWLOCATION => true]);
+        $bin  = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($bin === false || $code !== 200 || substr((string)$bin, 0, 4) !== '%PDF') {
+            self::$lastError = 'descarga PDF falló (HTTP ' . $code . ')';
+            return null;
+        }
+
+        $dir = '/home/groupglo/domains/sistema.groupglobaliso.com/public_html/documentaciones_clientes/facturas/' . $clienteId . '/';
+        if (!is_dir($dir) && !@mkdir($dir, 0755, true)) { self::$lastError = 'no se pudo crear el directorio'; return null; }
+        $safe     = preg_replace('/[^A-Za-z0-9\-_]/', '_', $numero !== '' ? $numero : ('factura_' . $alegraId));
+        $filename = $safe . '_' . date('Ymd_His') . '.pdf';
+        if (@file_put_contents($dir . $filename, $bin) === false) { self::$lastError = 'no se pudo guardar el PDF'; return null; }
+
+        return ['documentaciones_clientes/facturas/' . $clienteId . '/' . $filename, ($numero !== '' ? $numero : 'Factura') . '.pdf'];
+    }
+
     /** Arma la descripción del ítem a partir de las normas de la cotización. */
     public static function descripcionNormas(array $normas, string $tipo, ?string $refAnticipo = null): string
     {
@@ -190,7 +225,16 @@ class AlegraService
             return "Saldo correspondiente al servicio de asesoría y gestión para certificaciones ISO, según contrato, habiéndose emitido previamente factura por pago anticipado{$ref}";
         }
         if (count($lista) === 0) return 'Servicio de asesoría y gestión para certificaciones ISO';
-        if (count($lista) === 1) return 'Incluye norma ISO ' . $lista[0];
-        return 'Incluye normas ISO ' . implode(', ', $lista);
+        // Si TODAS son "ISO XXXX" → "Incluye norma(s) ISO 9001, 14001, ..." (ISO una vez).
+        $nums = []; $todasISO = true;
+        foreach ($lista as $c) {
+            if (preg_match('/^ISO\s+(.+)$/i', $c, $m)) $nums[] = trim($m[1]);
+            else { $todasISO = false; break; }
+        }
+        if ($todasISO) {
+            return (count($nums) === 1 ? 'Incluye norma ISO ' : 'Incluye normas ISO ') . implode(', ', $nums);
+        }
+        // Mezcla o no-ISO (SA8000, BPL…): usar el código completo.
+        return (count($lista) === 1 ? 'Incluye norma ' : 'Incluye normas ') . implode(', ', $lista);
     }
 }

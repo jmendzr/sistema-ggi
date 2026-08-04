@@ -236,11 +236,18 @@ if ($tab === 'pagos') {
                   <?= date('d/m/Y', strtotime($_fac['created_at'])) ?><?php $_subido = sanitize(trim(($_fac['subido_nombre'] ?? '') . ' ' . ($_fac['subido_apellido'] ?? ''))); if ($_subido): ?> · <?= $_subido ?><?php endif; ?>
                 </div>
               </div>
-              <div style="display:inline-flex;gap:4px;flex-shrink:0;">
+              <div style="display:inline-flex;gap:4px;flex-shrink:0;align-items:center;">
+                <?php if (($_fac['origen'] ?? 'manual') === 'alegra'): ?>
+                <span style="font-size:9px;font-weight:700;color:var(--ac);background:var(--ac-soft);border-radius:5px;padding:2px 6px;letter-spacing:.3px;">ALEGRA</span>
+                <?php endif; ?>
+                <?php if (!empty($_fac['archivo_path'])): ?>
                 <a href="<?= APP_URL ?>/<?= sanitize($_fac['archivo_path']) ?>"
                    target="_blank" data-ggi-preview data-title="Factura — <?= sanitize($_fac['archivo_nombre']) ?>" class="btn-ic btn-ic-blue" title="Ver factura">
                   <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </a>
+                <?php else: ?>
+                <span style="font-size:10px;color:var(--gris-texto);">sin PDF</span>
+                <?php endif; ?>
                 <?php if ($es_gerente): ?>
                 <button type="button" class="btn-ic btn-ic-gray" title="Actualizar PDF"
                         onclick="ggiAbrirSubirFactura(<?= $cot_id_g ?>, '<?= sanitize($grupo[0]['cot_numero']) ?>', <?= $_fac['id'] ?>)">

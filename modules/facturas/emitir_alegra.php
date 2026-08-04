@@ -48,8 +48,8 @@ $clienteId = (int)$cot['cliente_id'];
 // ── Normas de la cotización → descripción ──
 $nq = $pdo->prepare("SELECT ni.codigo FROM cotizacion_normas cn JOIN normas_iso ni ON ni.id = cn.norma_iso_id WHERE cn.cotizacion_id = ? ORDER BY cn.id ASC");
 $nq->execute([$cotId]);
-// codigo = "ISO 37001:2016" → "37001" (descripcionNormas antepone "ISO ")
-$normas = array_map(function($r){ return preg_match('/(\d{4,5})/', $r['codigo'], $m) ? $m[1] : trim($r['codigo']); }, $nq->fetchAll(\PDO::FETCH_ASSOC));
+// codigo = "ISO 37001:2016" → "ISO 37001" (quita el año); "SA8000:2026" → "SA8000".
+$normas = array_map(function($r){ return trim(preg_replace('/:.*/', '', (string)$r['codigo'])); }, $nq->fetchAll(\PDO::FETCH_ASSOC));
 
 // ── Base según tipo ──
 $subtotal = (float)$cot['subtotal'];
@@ -151,15 +151,23 @@ if (!in_array($hc, [200,201], true) || !isset($resp['id'])) {
 $numero  = $resp['numberTemplate']['fullNumber'] ?? null;
 $estado  = ALEGRA_EMITIR_REAL ? ($resp['stamp']['emissionStatus'] ?? 'stamped') : 'draft';
 
+// Descargar y guardar el PDF de la factura (para verlo/enviarlo como los manuales).
+$pdfPath = null; $pdfNombre = null;
+$pdfInfo = AlegraService::descargarPdf((int)$resp['id'], $clienteId, (string)($numero ?? ''));
+if ($pdfInfo) { [$pdfPath, $pdfNombre] = $pdfInfo; }
+else { error_log('[emitir_alegra] PDF no guardado: '.AlegraService::$lastError); }
+
 $pdo->prepare("
     INSERT INTO facturas_cliente
       (cliente_id, cotizacion_id, origen, numero_factura, alegra_id, tipo_factura, operation_type,
-       detraccion_modo, monto_base, monto_igv, monto_total, detraccion_monto, estado_timbrado, alegra_resp, subido_por)
-    VALUES (?,?, 'alegra', ?,?,?,?,?,?,?,?,?,?,?,?)
+       detraccion_modo, monto_base, monto_igv, monto_total, detraccion_monto, estado_timbrado, alegra_resp,
+       archivo_path, archivo_nombre, subido_por)
+    VALUES (?,?, 'alegra', ?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ")->execute([
     $clienteId, $cotId, $numero, (int)$resp['id'], $tipo, $resumen['operation_type'],
     $detModoFinal, $base, $igv, $total, $detMonto, $estado,
-    json_encode(['status'=>$resp['status']??null,'stamp'=>$resp['stamp']??null], JSON_UNESCAPED_UNICODE), $user['id'],
+    json_encode(['status'=>$resp['status']??null,'stamp'=>$resp['stamp']??null], JSON_UNESCAPED_UNICODE),
+    $pdfPath, $pdfNombre, $user['id'],
 ]);
 
 log_actividad('facturas', 'emitir_alegra', "Factura $tipo ".($numero?:'(borrador)')." emitida vía Alegra (cotización #$cotId, modo ".($resumen['modo']).")");
