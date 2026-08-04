@@ -141,3 +141,6 @@ define('ALEGRA_API',   'https://api.alegra.com/api/v1');
 // Interruptor maestro: '0' = solo BORRADOR (prueba, no va a SUNAT) · '1' = emisión REAL.
 // Mientras esté en '0', el botón "Emitir factura" crea borradores en Alegra.
 define('ALEGRA_EMITIR_REAL', env('ALEGRA_STAMP', '0') === '1');
+// Cuenta de detracción (Banco de la Nación) — obligatoria para "Operación sujeta a
+// detracción" (cliente deposita). Editable en .env si cambia.
+define('ALEGRA_DETRACCION_CUENTA', env('ALEGRA_DETRACCION_CUENTA', '00-059-203142'));

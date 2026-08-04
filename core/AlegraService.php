@@ -165,6 +165,10 @@ class AlegraService
                 'percentage' => 12,
                 'amount'     => round($total * 0.12, 2),
             ]];
+            // "Operación sujeta a detracción" exige la cuenta de detracción (Banco de la Nación).
+            if ($operationType === 'SALE_SUBJECT_TO_DEDUCTION' && defined('ALEGRA_DETRACCION_CUENTA') && ALEGRA_DETRACCION_CUENTA !== '') {
+                $payload['accountWithholding'] = ALEGRA_DETRACCION_CUENTA;
+            }
         }
         return $payload;
     }
