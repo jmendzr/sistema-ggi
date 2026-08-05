@@ -193,6 +193,15 @@ if ($nuevo_est === 'aceptada') { try {
         }
         log_actividad('clientes', 'estado', "Cliente #$cliente_id_final → activo (propuesta #$cot_id)");
         $response['cliente_id'] = $cliente_id_final;
+
+        // ── Enganche de atribución: vincular la conversación de WhatsApp (incl. la del
+        //    anuncio con ctwa_clid) al cliente por teléfono, para no perder la venta en
+        //    Meta Ads si el chat aún no estaba vinculado. Automático, no bloquea.
+        try {
+            require_once __DIR__ . '/../../core/WaInbox.php';
+            $_tel_wa = $cot['contacto_telefono'] ?? '';
+            if ($_tel_wa !== '') WaInbox::vincularPorTelefono($pdo, (int)$cliente_id_final, $_tel_wa);
+        } catch (\Throwable $eWa) { error_log('[ajax_estado_cot] vincular WA: '.$eWa->getMessage()); }
     }
 
     // ── Transferencia de responsabilidad (si hay ejecutivo distinto al actual) ──

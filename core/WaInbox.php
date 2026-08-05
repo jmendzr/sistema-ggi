@@ -318,6 +318,24 @@ class WaInbox
         return (int) $q->fetchColumn() ?: null;
     }
 
+    /**
+     * Vincula conversaciones de WhatsApp aún SIN cliente a un cliente, por teléfono
+     * (últimos 9 dígitos). Se llama cuando un lead se vuelve cliente (p. ej. al aceptar
+     * la propuesta): así la conversación —incluida la que trae el ctwa_clid del anuncio—
+     * queda enganchada al cliente sin depender de que llegue un nuevo mensaje.
+     * @return int cuántas conversaciones se vincularon.
+     */
+    public static function vincularPorTelefono(\PDO $pdo, int $clienteId, ?string $telefono): int
+    {
+        if ($clienteId <= 0) return 0;
+        $last9 = substr(preg_replace('/\D/', '', (string)$telefono), -9);
+        if (strlen($last9) !== 9) return 0;
+        $limpio = "REPLACE(REPLACE(REPLACE(COALESCE(telefono,''),' ',''),'+',''),'-','')";
+        $st = $pdo->prepare("UPDATE wa_conversaciones SET cliente_id = ? WHERE cliente_id IS NULL AND $limpio LIKE ?");
+        $st->execute([$clienteId, '%' . $last9]);
+        return $st->rowCount();
+    }
+
     /** Texto corto para la lista de conversaciones. */
     private static function preview(?string $texto, string $tipo, ?string $templateName = null): string
     {
