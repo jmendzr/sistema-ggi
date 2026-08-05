@@ -169,8 +169,35 @@ $pdo->prepare("
     json_encode(['status'=>$resp['status']??null,'stamp'=>$resp['stamp']??null], JSON_UNESCAPED_UNICODE),
     $pdfPath, $pdfNombre, $user['id'],
 ]);
+$facturaRowId = (int)$pdo->lastInsertId();
 
 log_actividad('facturas', 'emitir_alegra', "Factura $tipo ".($numero?:'(borrador)')." emitida vía Alegra (cotización #$cotId, modo ".($resumen['modo']).")");
 
-_j(['ok'=>true, 'numero'=>$numero, 'estado'=>$estado, 'resumen'=>$resumen,
-    'msg'=> (ALEGRA_EMITIR_REAL ? 'Factura emitida a SUNAT: ' : 'Borrador creado en Alegra: ').($numero?:'(sin número)')]);
+// ── Enviar la factura al cliente por WhatsApp (igual que la carga manual) ──
+//    Solo si hay PDF (emisión REAL timbrada; los borradores no generan PDF).
+$waEnviado = false;
+if ($pdfPath) {
+    require_once __DIR__ . '/../../core/NotificationService.php';
+    try {
+        NotificationService::dispatch('factura_emitida', [
+            'id'            => $facturaRowId,
+            'cliente_id'    => $clienteId,
+            'cotizacion_id' => $cotId,
+            // La plantilla ggi_factura_emitida usa param_keys ["razon_social","cot_numero"];
+            // {{2}} debe ser el N° de FACTURA → pasamos el número de Alegra (FA01-XXXXX).
+            'cot_numero'    => $numero ?: ($cot['numero'] ?? ''),
+            'triggered_by'  => $user['id'],
+            'title'         => "Factura emitida — {$cot['razon_social']}",
+            'message'       => "Se emitió la factura {$numero} para {$cot['razon_social']}.",
+            'doc_url'       => APP_URL . '/' . $pdfPath,
+            'doc_filename'  => $pdfNombre,
+        ]);
+        $pdo->prepare("UPDATE facturas_cliente SET wa_enviado=1, wa_enviado_at=NOW() WHERE id=?")->execute([$facturaRowId]);
+        NotificationService::markResolved(['factura_por_cargar'], $clienteId);
+        $waEnviado = true;
+    } catch (\Throwable $e) { error_log('[emitir_alegra] WhatsApp factura: '.$e->getMessage()); }
+}
+
+_j(['ok'=>true, 'numero'=>$numero, 'estado'=>$estado, 'resumen'=>$resumen, 'wa_enviado'=>$waEnviado,
+    'msg'=> (ALEGRA_EMITIR_REAL ? 'Factura emitida a SUNAT: ' : 'Borrador creado en Alegra: ').($numero?:'(sin número)')
+            . ($waEnviado ? ' · enviada al cliente por WhatsApp' : '')]);
