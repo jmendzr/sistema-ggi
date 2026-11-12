@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../core/envio_notificar.php';
 session_init();
 require_login();
 $user = auth_user();
-require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gestor_logistico','delivery');
+require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial','gestor_logistico','delivery','administracion_finanzas');
 
 $pdo = Database::get();
 $buscar     = trim($_GET['q'] ?? '');
@@ -153,7 +153,7 @@ require_once __DIR__ . '/../../templates/layout.php';
       <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Vista lista
     </a>
-    <?php if (has_role('gerente_general','gerente_operaciones','gestor_logistico','delivery')): ?>
+    <?php if (has_role('gerente_general','gerente_operaciones','gestor_logistico','delivery','administracion_finanzas')): ?>
     <a href="<?= APP_URL ?>/modules/envios/crear.php" class="btn btn-primary">
       <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Registrar envío

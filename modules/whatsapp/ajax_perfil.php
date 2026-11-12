@@ -35,8 +35,11 @@ if ($accion === 'guardar') {
 
     $campos = [];
     // about: máx 139; description: máx 512; address: máx 256; email: máx 128
+    // OJO: Meta rechaza un 'about' VACÍO con "(#131000) Something went wrong"
+    // (a diferencia de los demás campos, que sí se pueden vaciar). Por eso solo
+    // se envía cuando trae contenido; en blanco se deja el que ya tiene.
     $about = trim($_POST['about'] ?? '');
-    $campos['about']       = mb_substr($about, 0, 139);
+    if ($about !== '') $campos['about'] = mb_substr($about, 0, 139);
     $campos['description'] = mb_substr(trim($_POST['description'] ?? ''), 0, 512);
     $campos['address']     = mb_substr(trim($_POST['address'] ?? ''), 0, 256);
     $email = trim($_POST['email'] ?? '');

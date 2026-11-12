@@ -3,7 +3,7 @@ require_once __DIR__ . '/../../core/helpers.php';
 require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
-require_role('gerente_general','gerente_operaciones','ejecutivo_ventas');
+require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial');
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok'=>false]); exit; }

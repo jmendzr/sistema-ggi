@@ -11,7 +11,7 @@ require_once __DIR__ . '/../../core/helpers.php';
 require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
-require_role('gerente_general', 'gerente_operaciones');
+require_role('gerente_general', 'gerente_operaciones','gerente_comercial');
 
 $pdo = Database::get();
 $campanas = $pdo->query("
@@ -26,12 +26,19 @@ $seg_labels = [
     'enviadas_sin_respuesta' => 'Propuestas enviadas sin respuesta',
     'desistidas'             => 'Propuestas desistidas',
     'sin_respuesta_wa'       => 'Sin respuesta en WhatsApp',
+    'lista'                  => 'Lista manual / CSV',
 ];
 $est_cfg = [
-    'draft'     => ['label' => 'Borrador',   'cls' => 'badge-gray'],
-    'sending'   => ['label' => 'Enviando',   'cls' => 'badge-blue'],
-    'completed' => ['label' => 'Completada', 'cls' => 'badge-green'],
-    'failed'    => ['label' => 'Fallida',    'cls' => 'badge-red'],
+    'encolada'   => ['label' => 'Encolada',   'cls' => 'badge-gray'],
+    'enviando'   => ['label' => 'Enviando',   'cls' => 'badge-blue'],
+    'finalizada' => ['label' => 'Completada', 'cls' => 'badge-green'],
+    'pausada'    => ['label' => 'Pausada',    'cls' => 'badge-amber'],
+    'cancelada'  => ['label' => 'Cancelada',  'cls' => 'badge-red'],
+    // Compat. con estados antiguos.
+    'draft'      => ['label' => 'Borrador',   'cls' => 'badge-gray'],
+    'sending'    => ['label' => 'Enviando',   'cls' => 'badge-blue'],
+    'completed'  => ['label' => 'Completada', 'cls' => 'badge-green'],
+    'failed'     => ['label' => 'Fallida',    'cls' => 'badge-red'],
 ];
 require_once __DIR__ . '/../../templates/layout.php';
 ?>
@@ -63,10 +70,13 @@ require_once __DIR__ . '/../../templates/layout.php';
   <div style="font-size:13px;color:var(--gris-texto);">
     Envíos masivos con plantillas aprobadas por Meta. Se despachan por lotes.
   </div>
-  <button type="button" class="btn btn-primary btn-sm" onclick="ncAbrir()">
-    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    Nueva campaña
-  </button>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <a class="btn btn-outline btn-sm" href="<?= APP_URL ?>/modules/whatsapp/interesados.php">🔥 Interesados (clics)</a>
+    <button type="button" class="btn btn-primary btn-sm" onclick="ncAbrir()">
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Nueva campaña
+    </button>
+  </div>
 </div>
 
 <div class="camp-aviso">
@@ -100,7 +110,7 @@ require_once __DIR__ . '/../../templates/layout.php';
       $ec    = $est_cfg[$c['estado']] ?? ['label' => ucfirst($c['estado']), 'cls' => 'badge-gray'];
       $stats = $c['stats_json'] ? (json_decode($c['stats_json'], true) ?: []) : [];
     ?>
-      <tr data-campana-id="<?= $c['id'] ?>">
+      <tr data-campana-id="<?= $c['id'] ?>" data-estado="<?= sanitize($c['estado']) ?>">
         <td style="font-weight:600;color:var(--gris-dark);"><?= sanitize($c['nombre']) ?></td>
         <td style="font-size:12px;"><?= sanitize($seg_labels[$c['segmento']] ?? $c['segmento']) ?></td>
         <td><code style="font-size:11px;"><?= sanitize($c['template_name']) ?></code></td>
@@ -113,8 +123,9 @@ require_once __DIR__ . '/../../templates/layout.php';
           <span class="camp-stats">
             <span class="camp-stat" title="Entregados">📬 <?= (int)($stats['delivered'] ?? 0) ?></span>
             <span class="camp-stat" title="Leídos">👁 <?= (int)($stats['read'] ?? 0) ?></span>
-            <span class="camp-stat" title="Respondieron">💬 <?= (int)($stats['responded'] ?? 0) ?></span>
+            <span class="camp-stat" title="Respondieron / tasa de respuesta">💬 <?= (int)($stats['responded'] ?? 0) ?><?php if (isset($stats['rate'])): ?> (<?= (int)$stats['rate'] ?>%)<?php endif; ?></span>
             <?php if (!empty($stats['failed'])): ?><span class="camp-stat" style="color:var(--s-err);" title="Fallidos">✕ <?= (int)$stats['failed'] ?></span><?php endif; ?>
+            <?php if (!empty($stats['pending'])): ?><span class="camp-stat" title="Pendientes de envío">⏳ <?= (int)$stats['pending'] ?></span><?php endif; ?>
           </span>
           <?php else: ?><span style="font-size:11px;color:var(--gris-texto);">Sin datos — sincroniza</span><?php endif; ?>
         </td>
@@ -150,6 +161,7 @@ require_once __DIR__ . '/../../templates/layout.php';
             <option value="enviadas_sin_respuesta">Propuestas enviadas sin respuesta</option>
             <option value="desistidas">Propuestas desistidas</option>
             <option value="sin_respuesta_wa">Clientes sin respuesta en WhatsApp</option>
+            <option value="lista">Lista manual / CSV (pegar números)</option>
           </select>
           <label id="nc-dias-lbl" style="font-size:12px;color:var(--gris-texto);display:inline-flex;align-items:center;gap:6px;">
             <span id="nc-dias-txt">con más de</span>
@@ -157,6 +169,13 @@ require_once __DIR__ . '/../../templates/layout.php';
             días
           </label>
           <button type="button" class="btn btn-outline btn-sm" onclick="ncCargarSegmento()">Cargar destinatarios</button>
+        </div>
+        <div id="nc-lista-box" style="display:none;margin-top:10px;">
+          <textarea id="nc-lista" rows="5" placeholder="Un número por línea. Opcional: número,empresa&#10;51999888777,ACME S.A.C.&#10;51988777666" style="width:100%;padding:9px 11px;border:1.5px solid var(--gris-borde);border-radius:8px;font-size:12.5px;font-family:'Inter',sans-serif;background:var(--gris-card);color:var(--gris-dark);outline:none;resize:vertical;"></textarea>
+          <div style="margin-top:6px;font-size:11.5px;color:var(--gris-texto);">
+            Pega los números (uno por línea; puedes añadir la empresa separada por coma).
+            <label style="color:var(--azul);cursor:pointer;font-weight:600;"> · Cargar un .csv<input type="file" id="nc-csv" accept=".csv,.txt" style="display:none;" onchange="ncCsvCargar(this)"></label>
+          </div>
         </div>
         <div class="nc-counts" id="nc-counts" style="display:none;"></div>
         <div class="nc-preview" id="nc-preview" style="display:none;"></div>
@@ -203,14 +222,13 @@ async function campPost(data) {
 
 // ── Sincronizar métricas de una campaña ──
 async function campSync(id, btn) {
-  const orig = btn.textContent;
-  btn.disabled = true; btn.textContent = '…';
+  window.ggiBtnLoading && window.ggiBtnLoading(btn, true);   // U-05: estado de carga global
   try {
     const d = await campPost({ accion: 'sync', campana_id: id });
     if (d.ok) location.reload();
     else if (typeof showToast === 'function') showToast(d.msg || 'Error al sincronizar.', 'error');
   } catch (e) { if (typeof showToast === 'function') showToast('Error de conexión.', 'error'); }
-  btn.disabled = false; btn.textContent = orig;
+  finally { window.ggiBtnLoading && window.ggiBtnLoading(btn, false); }
 }
 
 // ── Modal nueva campaña ──
@@ -230,12 +248,30 @@ function ncSegCambio() {
   const seg = document.getElementById('nc-segmento').value;
   const txt = document.getElementById('nc-dias-txt');
   const inp = document.getElementById('nc-dias');
+  const esLista = seg === 'lista';
+  // La lista manual no usa el filtro de días; muestra su cuadro de texto.
+  document.getElementById('nc-dias-lbl').style.display = esLista ? 'none' : 'inline-flex';
+  document.getElementById('nc-lista-box').style.display = esLista ? 'block' : 'none';
   if (seg === 'enviadas_sin_respuesta') { txt.textContent = 'con más de';        inp.value = inp.value || 7; }
   if (seg === 'desistidas')             { txt.textContent = 'de los últimos';    inp.value = 90; }
   if (seg === 'sin_respuesta_wa')       { txt.textContent = 'enviado hace máx.'; inp.value = 30; }
   _ncSegOk = false;
   document.getElementById('nc-counts').style.display = 'none';
   document.getElementById('nc-preview').style.display = 'none';
+}
+
+// Carga un .csv/.txt en el textarea de la lista manual (cliente, sin subir nada al servidor).
+function ncCsvCargar(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    const ta = document.getElementById('nc-lista');
+    ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + (rd.result || '');
+    if (typeof showToast === 'function') showToast('Archivo cargado. Revisa y pulsa "Cargar destinatarios".', 'ok');
+  };
+  rd.readAsText(f);
+  input.value = '';
 }
 
 async function ncCargarSegmento() {
@@ -247,7 +283,8 @@ async function ncCargarSegmento() {
     const d = await campPost({
       accion: 'segmento',
       segmento: document.getElementById('nc-segmento').value,
-      dias: document.getElementById('nc-dias').value
+      dias: document.getElementById('nc-dias').value,
+      lista: document.getElementById('nc-lista').value
     });
     if (!d.ok) { counts.innerHTML = '<span style="color:var(--s-err);">' + (d.msg || 'Error') + '</span>'; return; }
     _ncSegOk = d.validos > 0;
@@ -332,6 +369,7 @@ function ncEnviar() {
           accion: 'enviar',
           segmento: document.getElementById('nc-segmento').value,
           dias: document.getElementById('nc-dias').value,
+          lista: document.getElementById('nc-lista').value,
           template_id: t.id,
           template_name: t.name,
           template_lang: t.language,   // es / es_PE: sin esto Meta no encuentra la plantilla
@@ -354,6 +392,47 @@ function ncEnviar() {
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+// ── Progreso en vivo: refresca las campañas en curso sin recargar la página ──
+const CAMP_EST = {
+  encolada:  { l:'Encolada',   c:'badge-gray'  },
+  enviando:  { l:'Enviando',   c:'badge-blue'  },
+  finalizada:{ l:'Completada', c:'badge-green' },
+  pausada:   { l:'Pausada',    c:'badge-amber' },
+  cancelada: { l:'Cancelada',  c:'badge-red'   },
+};
+function campPinta(tr, d) {
+  const s = d.stats || {};
+  const cell = tr.querySelector('.camp-stats-cell');
+  if (cell) {
+    let h = '<span class="camp-stats">' +
+      '<span class="camp-stat" title="Entregados">📬 ' + (s.delivered || 0) + '</span>' +
+      '<span class="camp-stat" title="Leídos">👁 ' + (s.read || 0) + '</span>' +
+      '<span class="camp-stat" title="Respondieron / tasa de respuesta">💬 ' + (s.responded || 0) + ' (' + (s.rate || 0) + '%)</span>';
+    if (s.failed)  h += '<span class="camp-stat" style="color:var(--s-err);" title="Fallidos">✕ ' + s.failed + '</span>';
+    if (s.pending) h += '<span class="camp-stat" title="Pendientes de envío">⏳ ' + s.pending + '</span>';
+    cell.innerHTML = h + '</span>';
+  }
+  const est = CAMP_EST[d.estado];
+  if (est) {
+    const badge = tr.querySelector('td:nth-child(6) span');
+    if (badge) { badge.className = est.c; badge.textContent = est.l; }
+    tr.dataset.estado = d.estado;
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const enCurso = () => [...document.querySelectorAll('tr[data-estado]')]
+    .filter(r => ['encolada', 'enviando'].includes(r.dataset.estado));
+  if (!enCurso().length) return;
+  const tick = async () => {
+    const filas = enCurso();
+    for (const r of filas) {
+      try { const d = await campPost({ accion: 'sync', campana_id: r.dataset.campanaId }); if (d && d.ok) campPinta(r, d); } catch (e) {}
+    }
+    if (enCurso().length) setTimeout(tick, 7000);
+  };
+  setTimeout(tick, 5000);
+});
 </script>
 
 <?php require_once __DIR__ . '/../../templates/layout_end.php'; ?>

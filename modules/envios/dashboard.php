@@ -3,7 +3,7 @@ require_once __DIR__ . '/../../core/helpers.php';
 require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
-require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gestor_logistico');
+require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial','gestor_logistico','administracion_finanzas');
 
 $pdo  = Database::get();
 $user = auth_user();

@@ -533,7 +533,18 @@ window.ggiDebounce = (function () {
   }
 
   var _lastPagosCount = -1; // Rastrea cambios para auto-reload en página de pagos
+  var _lastNotifCount = -1; // idem notificaciones
+  var _lastCotCount   = -1; // idem propuestas
   var _badgesEtag     = '';  // ETag del último poll para evitar procesar respuestas sin cambios
+
+  // ¿Es seguro auto-refrescar el contenido? No si hay un modal abierto o el
+  // usuario está escribiendo/eligiendo en un campo (no interrumpir su trabajo).
+  function _ggiSafeToRefresh() {
+    if (document.querySelector('.modal-overlay.open, .ggi-modal-overlay.open, #mant-modal.open')) return false;
+    var a = document.activeElement;
+    if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName || '')) return false;
+    return true;
+  }
 
   var _pollInFlight = false;
   function poll() {
@@ -568,11 +579,27 @@ window.ggiDebounce = (function () {
         _setBadge('nav-badge-cot',   d.cot,   _active === 'propuestas');
         _setBadge('nav-badge-pagos', d.pagos,  _active === 'pagos');
         _setBadge('nav-badge-notif', d.notif,  _active === 'notificaciones');
-        // Notificar con toast cuando hay nuevos pagos pendientes (sin recargar)
-        if (_active === 'pagos' && _lastPagosCount >= 0 && d.pagos > _lastPagosCount) {
+
+        // ¿Subió el contador de la página que el usuario está viendo?
+        var _incPagos = (_lastPagosCount >= 0 && d.pagos > _lastPagosCount);
+        var _incNotif = (_lastNotifCount >= 0 && d.notif > _lastNotifCount);
+        var _incCot   = (_lastCotCount   >= 0 && d.cot   > _lastCotCount);
+        var _incActiva = (_active === 'pagos' && _incPagos)
+                      || (_active === 'notificaciones' && _incNotif)
+                      || (_active === 'propuestas' && _incCot);
+
+        // Auto-refrescar el contenido en sitio (conserva scroll, no apila historial)
+        // cuando llegan novedades a la página actual y es seguro hacerlo.
+        if (_incActiva && typeof window.ggiRefreshCurrent === 'function' && _ggiSafeToRefresh()) {
+          window.ggiRefreshCurrent();
+        } else if (_active === 'pagos' && _incPagos) {
+          // Si no se pudo refrescar (modal/edición), al menos avisar.
           if (typeof showToast === 'function') showToast('Hay nuevos pagos pendientes de validación.', 'ok');
         }
+
         _lastPagosCount = d.pagos;
+        _lastNotifCount = d.notif;
+        _lastCotCount   = d.cot;
       }
     })
     .catch(function () {})
@@ -986,6 +1013,7 @@ if (typeof showToast === 'function') showToast('Revisa los campos marcados en ro
 <!-- Datepicker propio (flatpickr) — calendario moderno alineado al design system -->
 <script src="<?= APP_URL ?>/assets/vendor/flatpickr/flatpickr.min.js"></script>
 <script src="<?= APP_URL ?>/assets/vendor/flatpickr/es.js"></script>
+<script src="<?= APP_URL ?>/assets/vendor/flatpickr/monthSelect/index.js"></script>
 <script>
 (function () {
   // Inicializa flatpickr en los <input type="date"> aún sin inicializar (idempotente).
@@ -1002,12 +1030,31 @@ if (typeof showToast === 'function') showToast('Revisa los campos marcados en ro
         flatpickr(inp, {
           dateFormat: 'Y-m-d',   // valor enviado (no cambia el backend)
           altInput:   true,
+          altInputClass: 'ggi-fp',
           altFormat:  'd/m/Y',   // lo que ve el usuario
           allowInput: true,
           disableMobile: false   // en móvil/PWA usa el picker nativo (mejor en táctil)
         });
       } catch (e) { inp.removeAttribute('data-fp'); }
     });
+
+    // Selector de MES (input[type="month"]) con el plugin monthSelect: popup
+    // temático del sistema en vez del nativo. Valor 'YYYY-MM' (compatible con el
+    // backend), muestra "Mes Año".
+    if (window.monthSelectPlugin) {
+      scope.querySelectorAll('input[type="month"]:not([data-fp])').forEach(function (inp) {
+        inp.setAttribute('data-fp', '1');
+        try {
+          flatpickr(inp, {
+            altInput: true,
+            altInputClass: 'ggi-fp',
+            allowInput: true,
+            disableMobile: false,
+            plugins: [ new monthSelectPlugin({ shorthand: false, dateFormat: 'Y-m', altFormat: 'F Y' }) ]
+          });
+        } catch (e) { inp.removeAttribute('data-fp'); }
+      });
+    }
   };
   if (document.readyState !== 'loading') window.ggiInitDatepickers();
   else document.addEventListener('DOMContentLoaded', function () { window.ggiInitDatepickers(); });

@@ -2,7 +2,7 @@
 $page_title  = 'Reportes';
 $active_menu = 'reportes';
 require_once __DIR__ . '/../../templates/layout.php';
-require_role('gerente_general', 'gerente_operaciones');
+require_role('gerente_general', 'gerente_operaciones', 'administracion_finanzas');
 
 $pdo  = Database::get();
 $año  = (int)($_GET['año'] ?? date('Y'));
@@ -227,6 +227,12 @@ $max_dept = max(array_values($clientes_dept) ?: [1]);
     <p>Análisis y métricas del sistema · <?= $año ?></p>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <?php if (can('facturas_emitir')): ?>
+    <a href="<?= APP_URL ?>/modules/facturas/reporte.php" class="btn btn-primary btn-sm">
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+      Reporte de facturación
+    </a>
+    <?php endif; ?>
     <a href="<?= APP_URL ?>/modules/exportar.php?modulo=certificados" class="btn btn-outline btn-sm">
       <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Exportar certificados

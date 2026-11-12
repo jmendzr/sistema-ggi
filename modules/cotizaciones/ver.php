@@ -296,7 +296,7 @@ ggi_breadcrumb(array_filter([
       Rechazar
     </button>
     <?php endif; ?>
-    <?php if ($cot['estado'] === 'aceptada' && has_role('gerente_general','gerente_operaciones')): ?>
+    <?php if ($cot['estado'] === 'aceptada' && has_role('gerente_general','gerente_operaciones','gerente_comercial')): ?>
     <button id="btn-desistir" onclick="confirmarDesistir()"
       style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:var(--s-err-bg);color:var(--s-err);border:1.5px solid var(--s-err-brd);border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:.15s;"
       onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
@@ -311,14 +311,31 @@ ggi_breadcrumb(array_filter([
         <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
       </button>
       <div class="ggi-row-menu">
-        <a class="ggi-row-menu-item" href="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&inline=1"
+        <style>
+          .ggi-brand-sel{display:flex;align-items:center;gap:8px;padding:9px 12px 10px;border-bottom:1px solid var(--brd)}
+          .ggi-brand-sel .bs-lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--tx2)}
+          .ggi-brand-sel .bs-seg{display:inline-flex;border:1px solid var(--brd);border-radius:8px;overflow:hidden}
+          .ggi-brand-sel .bs-seg button{border:0;background:transparent;color:var(--tx2);font-size:11px;font-weight:600;padding:5px 11px;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
+          .ggi-brand-sel .bs-seg button+button{border-left:1px solid var(--brd)}
+          .ggi-brand-sel .bs-seg button:hover{background:var(--bg-hover)}
+          .ggi-brand-sel .bs-seg button[data-marca="ggi"].is-active{background:#2DB140;color:#fff}
+          .ggi-brand-sel .bs-seg button[data-marca="acreditta"].is-active{background:#F5851F;color:#fff}
+        </style>
+        <div class="ggi-brand-sel" role="group" aria-label="Marca de la propuesta">
+          <span class="bs-lbl">Marca</span>
+          <div class="bs-seg">
+            <button type="button" data-marca="ggi" class="is-active">Group Global ISO</button>
+            <button type="button" data-marca="acreditta">Acreditta ISO</button>
+          </div>
+        </div>
+        <a id="lnk-ver-propuesta" class="ggi-row-menu-item" href="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&inline=1"
            data-ggi-preview data-src="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&inline=1"
            data-download-url="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&dl=1"
            data-title="Propuesta <?= sanitize($cot['numero']) ?>">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           Ver propuesta
         </a>
-        <a class="ggi-row-menu-item" href="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&dl=1" download
+        <a id="lnk-desc-propuesta" class="ggi-row-menu-item" href="<?= APP_URL ?>/modules/cotizaciones/pdf.php?id=<?= $id ?>&dl=1" download
            onclick="event.preventDefault(); ggiDownloadBlob(this.href);">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Descargar PDF
@@ -990,6 +1007,28 @@ $puede_seguimiento = in_array($user['rol'], ['gerente_general','gerente_operacio
 <?php endif; ?>
 
 <script>
+// Selector de marca (Group Global ISO / Acreditta ISO) para generar la propuesta.
+ggiReady(() => {
+  const _bw = document.querySelector('.ggi-brand-sel');
+  if (!_bw || _bw.dataset.wired) return;
+  _bw.dataset.wired = '1';
+  const _ls = ['lnk-ver-propuesta', 'lnk-desc-propuesta'].map(i => document.getElementById(i)).filter(Boolean);
+  const _at = ['href', 'data-src', 'data-download-url'];
+  const _apply = (marca) => {
+    _ls.forEach(a => _at.forEach(at => {
+      let base = a.getAttribute('data-base-' + at);
+      if (base === null) { base = a.getAttribute(at) || ''; if (base) a.setAttribute('data-base-' + at, base); }
+      if (!base) return;
+      a.setAttribute(at, marca === 'acreditta' ? base + '&marca=acreditta' : base);
+    }));
+    _bw.querySelectorAll('button[data-marca]').forEach(b => b.classList.toggle('is-active', b.dataset.marca === marca));
+    try { localStorage.setItem('ggi_prop_marca', marca); } catch (e) {}
+  };
+  _bw.querySelectorAll('button[data-marca]').forEach(b => b.addEventListener('click', () => _apply(b.dataset.marca)));
+  let _sv = 'ggi'; try { _sv = localStorage.getItem('ggi_prop_marca') || 'ggi'; } catch (e) {}
+  _apply(_sv);
+});
+
 ggiReady(() => {
   const p = new URLSearchParams(window.location.search);
   const m = p.get('msg');
@@ -1006,21 +1045,49 @@ ggiReady(() => {
       ?>
       const _pdfNombre = '<?= addslashes($pdf_nombre) ?>';
 
-      // Descarga automática con 400 ms de espera para que la página esté lista
-      setTimeout(() => {
+      // Al generar una propuesta nueva, preguntar con qué marca descargarla.
+      const _num = '<?= sanitize($cot["numero"]) ?>';
+      const _descargar = (marca) => {
+        const url = _pdfDl + (marca === 'acreditta' ? '&marca=acreditta' : '');
         if (typeof ggiDownloadBlob === 'function') {
-          ggiDownloadBlob(_pdfDl);
+          ggiDownloadBlob(url);
         } else {
           var a = document.createElement('a');
-          a.href = _pdfDl; a.download = _pdfNombre; a.style.display = 'none';
+          a.href = url; a.download = _pdfNombre; a.style.display = 'none';
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
         }
-      }, 400);
+        const nm = marca === 'acreditta' ? 'Acreditta ISO' : 'Group Global ISO';
+        showToast('✅ Propuesta ' + _num + ' generada con <strong>' + nm + '</strong> y descargada.', 'ok', 8000);
+      };
 
-      showToast(
-        '✅ Propuesta <?= sanitize($cot["numero"]) ?> creada y descargada como <strong>' + _pdfNombre + '</strong>',
-        'ok', 8000
-      );
+      if (!document.getElementById('ggi-marca-css')) {
+        const st = document.createElement('style'); st.id = 'ggi-marca-css';
+        st.textContent = '.ggi-marca-ov{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px}'
+          + '.ggi-marca-box{background:var(--bg-surface,#fff);border:1px solid var(--brd,#e2e8f0);border-radius:14px;box-shadow:0 24px 60px -20px rgba(0,0,0,.4);padding:24px;max-width:420px;width:100%;text-align:center}'
+          + '.ggi-marca-box .mm-t{font-size:16px;font-weight:800;color:var(--tx,#111827);margin-bottom:4px}'
+          + '.ggi-marca-box .mm-s{font-size:12px;color:var(--tx2,#64748b);margin-bottom:18px}'
+          + '.ggi-marca-box .mm-btns{display:flex;gap:10px}'
+          + '.ggi-marca-box .mm-b{flex:1;border:0;border-radius:10px;padding:14px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff;transition:.15s}'
+          + '.ggi-marca-box .mm-b:hover{opacity:.9}.ggi-marca-box .mm-ggi{background:#2DB140}.ggi-marca-box .mm-acr{background:#F5851F}';
+        document.head.appendChild(st);
+      }
+
+      // Pequeña espera para que la página esté lista antes de mostrar el modal
+      setTimeout(() => {
+        const ov = document.createElement('div');
+        ov.className = 'ggi-marca-ov';
+        ov.innerHTML = '<div class="ggi-marca-box" role="dialog" aria-modal="true" aria-labelledby="ggi-marca-t">'
+          + '<div id="ggi-marca-t" class="mm-t">¿Con qué marca generar la propuesta?</div>'
+          + '<div class="mm-s">Propuesta ' + _num + '</div>'
+          + '<div class="mm-btns"><button type="button" data-m="ggi" class="mm-b mm-ggi">Group Global ISO</button>'
+          + '<button type="button" data-m="acreditta" class="mm-b mm-acr">Acreditta ISO</button></div></div>';
+        document.body.appendChild(ov);
+        const cerrar = () => ov.remove();
+        ov.addEventListener('click', (e) => { if (e.target === ov) cerrar(); });
+        ov.querySelectorAll('button[data-m]').forEach(b => b.addEventListener('click', () => { cerrar(); _descargar(b.dataset.m); }));
+        document.addEventListener('keydown', function esc(e){ if (e.key === 'Escape') { cerrar(); document.removeEventListener('keydown', esc); } });
+        const f = ov.querySelector('.mm-ggi'); if (f) f.focus();
+      }, 400);
     } else if (isEditado) {
       showToast('Cambios guardados correctamente.', 'ok');
     } else if (m) {
@@ -1276,7 +1343,7 @@ async function cambiarEstado(nuevoEstado, fechaRequerida) {
 </div>
 
 <!-- Modal: Marcar propuesta como desistida (empresa aceptó y luego no respondió) -->
-<?php if (has_role('gerente_general','gerente_operaciones')): ?>
+<?php if (has_role('gerente_general','gerente_operaciones','gerente_comercial')): ?>
 <div class="ggi-modal-overlay" id="modal-desistir" onclick="if(event.target===this)cerrarModalDesistir()">
   <div class="ggi-modal-box" style="max-width:460px;">
     <div class="ggi-modal-header">
@@ -1467,10 +1534,10 @@ if (!window.ShortcutManager) {
         setTimeout(function () { toast.style.opacity = '0'; }, 1800);
         setTimeout(function () { toast.remove(); }, 2250);
       } else {
-        alert('No se pudo guardar la nota. Intenta de nuevo.');
+        showToast('No se pudo guardar la nota. Intenta de nuevo.', 'error');
       }
     } catch (e) {
-      alert('Error de conexión al guardar la nota.');
+      showToast('Error de conexión al guardar la nota.', 'error');
     } finally {
       btn.disabled         = false;
       saving.style.display = 'none';

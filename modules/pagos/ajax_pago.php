@@ -140,7 +140,7 @@ if ($accion === 'subir_voucher') {
 // ──────────────────────────────────────────────────────
 if ($accion === 'validar') {
 
-    if (!has_role('gerente_general', 'gerente_operaciones')) {
+    if (!has_role('gerente_general', 'gerente_operaciones', 'administracion_finanzas')) {
         _pago_json(['ok' => false, 'msg' => 'Sin permiso']);
     }
     if ($pago['estado'] !== 'pendiente_validacion') {
@@ -304,7 +304,7 @@ if ($accion === 'validar') {
 // ──────────────────────────────────────────────────────
 if ($accion === 'rechazar') {
 
-    if (!has_role('gerente_general', 'gerente_operaciones')) {
+    if (!has_role('gerente_general', 'gerente_operaciones', 'administracion_finanzas')) {
         _pago_json(['ok' => false, 'msg' => 'Sin permiso']);
     }
     if ($pago['estado'] !== 'pendiente_validacion') {

@@ -31,17 +31,26 @@ if (!function_exists('generar_bonos_cotizacion')) {
     function generar_bonos_cotizacion(\PDO $pdo, int $cot_id): void
     {
         try {
-            // 1. Obtener el ejecutivo asignado a la cotización
-            $stmt = $pdo->prepare("SELECT ejecutivo_id FROM cotizaciones WHERE id = ?");
+            // 1. Destinatario del bono. Regla: si quien CREÓ la propuesta es el
+            //    Gerente Comercial, el bono es SUYO aunque el documento salga a
+            //    nombre de un ejecutivo (usó su perfil). En cualquier otro caso el
+            //    bono va al ejecutivo asignado (ejecutivo_id).
+            $stmt = $pdo->prepare("SELECT c.ejecutivo_id, c.creado_por, u.rol AS creador_rol
+                                     FROM cotizaciones c
+                                     LEFT JOIN usuarios u ON u.id = c.creado_por
+                                    WHERE c.id = ?");
             $stmt->execute([$cot_id]);
             $cot = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$cot) return;
 
-            if (!$cot || empty($cot['ejecutivo_id'])) {
-                // Cotización sin ejecutivo asignado — no generar bono
+            $ejecutivo_id = ($cot['creador_rol'] === 'gerente_comercial')
+                ? (int)$cot['creado_por']
+                : (int)$cot['ejecutivo_id'];
+
+            if (!$ejecutivo_id) {
+                // Sin destinatario (propuesta sin ejecutivo y no creada por el comercial)
                 return;
             }
-
-            $ejecutivo_id = (int)$cot['ejecutivo_id'];
 
             // 2. Obtener las normas vinculadas a esta cotización
             $stmt_normas = $pdo->prepare(

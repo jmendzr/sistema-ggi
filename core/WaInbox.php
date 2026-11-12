@@ -110,16 +110,20 @@ class WaInbox
         ?int $enviadoPor = null,
         string $estado = 'sent',
         ?string $errorMsg = null,
-        ?string $phoneNumberId = null
+        ?string $phoneNumberId = null,
+        ?array $media = null,  // ['path'=>ruta relativa, 'mime'=>..., 'nombre'=>...] p. ej. la factura PDF adjunta
+        bool $desdeApp = false // true = eco de coexistencia (enviado desde la app de WhatsApp del número)
     ): int {
         $convId = self::ensureConversacion($pdo, $telefono, $phoneNumberId);
 
         $ins = $pdo->prepare(
             "INSERT IGNORE INTO wa_mensajes
-                (conversacion_id, wa_message_id, direccion, tipo, texto, template_name, estado, error_msg, enviado_por)
-             VALUES (?, ?, 'out', ?, ?, ?, ?, ?, ?)"
+                (conversacion_id, wa_message_id, direccion, tipo, texto, template_name, estado, error_msg, enviado_por,
+                 media_path, media_mime, media_nombre, desde_app)
+             VALUES (?, ?, 'out', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
-        $ins->execute([$convId, $waMessageId, $tipo, $texto, $templateName, $estado, $errorMsg, $enviadoPor]);
+        $ins->execute([$convId, $waMessageId, $tipo, $texto, $templateName, $estado, $errorMsg, $enviadoPor,
+            $media['path'] ?? null, $media['mime'] ?? null, $media['nombre'] ?? null, $desdeApp ? 1 : 0]);
 
         if ($ins->rowCount() > 0) {
             $pdo->prepare(
@@ -361,5 +365,163 @@ class WaInbox
         ];
 
         return $etiquetas[$tipo] ?? ($templateName ? 'Plantilla: ' . $templateName : ucfirst($tipo));
+    }
+
+    /**
+     * Marca la conversación como LEAD CALIENTE (el cliente pulsó "Quiero
+     * aprovecharlo" en el aviso de cotización por vencer): la fija arriba en el
+     * inbox y notifica (push + campanita) al ejecutivo del cliente para que la
+     * atienda de inmediato. Se hace una sola vez por conversación.
+     */
+    public static function marcarLeadCaliente(\PDO $pdo, int $convId, ?string $motivo = null): void
+    {
+        // Solo la primera vez (evita re-notificar si el cliente vuelve a pulsar).
+        $upd = $pdo->prepare("UPDATE wa_conversaciones SET lead_caliente_at = NOW(), fijada = 1 WHERE id = ? AND lead_caliente_at IS NULL");
+        $upd->execute([$convId]);
+        if ($upd->rowCount() === 0) return;
+
+        $c = $pdo->prepare("
+            SELECT co.cliente_id, co.asignado_a, cl.razon_social, cl.ejecutivo_id
+            FROM wa_conversaciones co
+            LEFT JOIN clientes cl ON cl.id = co.cliente_id
+            WHERE co.id = ?
+        ");
+        $c->execute([$convId]);
+        $row = $c->fetch(\PDO::FETCH_ASSOC) ?: [];
+        $razon = $row['razon_social'] ?? 'Un cliente';
+
+        if ($motivo === 'promo') {
+            $titulo  = "🔥 Interesado en promo — {$razon}";
+            $mensaje = "{$razon} pulsó \"Quiero aprovechar\" en la promoción. Contáctalo cuanto antes para cerrar.";
+        } else {
+            $titulo  = "🔥 Interesado — {$razon}";
+            $mensaje = "{$razon} pulsó \"Quiero aprovecharlo\" en el aviso de su cotización por vencer. Contáctalo cuanto antes.";
+        }
+        $url     = (defined('APP_URL') ? APP_URL : '') . '/modules/inbox/index.php';
+
+        // Destinatarios: ejecutivo del cliente + agente asignado; si no hay, gerencia.
+        $dest = [];
+        if (!empty($row['ejecutivo_id'])) $dest[] = (int)$row['ejecutivo_id'];
+        if (!empty($row['asignado_a']))   $dest[] = (int)$row['asignado_a'];
+        if (!$dest) {
+            foreach ($pdo->query("SELECT id FROM usuarios WHERE activo=1 AND rol IN ('gerente_general','gerente_operaciones')")->fetchAll(\PDO::FETCH_COLUMN) as $g) {
+                $dest[] = (int)$g;
+            }
+        }
+
+        if (is_file(__DIR__ . '/PushService.php')) require_once __DIR__ . '/PushService.php';
+        $insN = $pdo->prepare("INSERT INTO notificaciones (usuario_id, tipo, titulo, mensaje, url_accion) VALUES (?, 'lead_caliente', ?, ?, ?)");
+        foreach (array_unique($dest) as $uid) {
+            try { $insN->execute([$uid, $titulo, $mensaje, $url]); } catch (\Throwable $e) {}
+            if (class_exists('PushService')) {
+                try { PushService::notify($uid, $titulo, $mensaje, $url, 'lead-' . $convId); } catch (\Throwable $e) {}
+            }
+        }
+    }
+
+    /**
+     * ¿Estamos FUERA del horario de atención? (hora Lima)
+     * Atención: Lun–Vie 08:00–18:30 · Sáb 08:00–13:00 · Dom cerrado · feriados cerrado.
+     */
+    public static function fueraDeHorario(\PDO $pdo, ?\DateTime $ahora = null): bool
+    {
+        $tz    = new \DateTimeZone(defined('APP_TIMEZONE') ? APP_TIMEZONE : 'America/Lima');
+        $ahora = $ahora ? (clone $ahora) : new \DateTime('now', $tz);
+        $ahora->setTimezone($tz);
+
+        // Feriado → cerrado.
+        $fer = $pdo->prepare("SELECT 1 FROM feriados WHERE fecha = ?");
+        $fer->execute([$ahora->format('Y-m-d')]);
+        if ($fer->fetchColumn()) return true;
+
+        $dow  = (int)$ahora->format('N');                               // 1=Lun … 7=Dom
+        $mins = (int)$ahora->format('H') * 60 + (int)$ahora->format('i');
+        $abre = 8 * 60;                                                 // 08:00
+        if ($dow === 7) return true;                                   // Domingo
+        if ($dow === 6) return $mins < $abre || $mins >= 13 * 60;      // Sábado 08:00–13:00
+        return $mins < $abre || $mins >= (18 * 60 + 30);              // L–V 08:00–18:30
+    }
+
+    /**
+     * Auto-respuesta cuando el cliente escribe FUERA de horario a un número
+     * CONVERSACIONAL (Frank/Andrés) — nunca al de notificaciones. Responde desde
+     * ese mismo número, una vez cada 8 h como máximo (anti-spam).
+     */
+    public static function autoRespuestaFuera(\PDO $pdo, int $convId, string $telefono, ?string $phoneNumberId): void
+    {
+        // Nunca en el número de notificaciones (una sola vía).
+        $notif = defined('META_WA_PHONE_NUMBER_ID') ? META_WA_PHONE_NUMBER_ID : '';
+        if (!$phoneNumberId || ($notif !== '' && $phoneNumberId === $notif)) return;
+
+        if (!self::fueraDeHorario($pdo)) return;
+
+        // Anti-spam: máximo una auto-respuesta cada 8 h (claim atómico contra ráfagas).
+        $claim = $pdo->prepare(
+            "UPDATE wa_conversaciones SET auto_fuera_at = NOW()
+              WHERE id = ? AND (auto_fuera_at IS NULL OR auto_fuera_at < (NOW() - INTERVAL 8 HOUR))"
+        );
+        $claim->execute([$convId]);
+        if ($claim->rowCount() === 0) return;
+
+        // Mensaje según el motivo: feriado vs fuera de horario, + cuándo retomamos.
+        $tz    = new \DateTimeZone(defined('APP_TIMEZONE') ? APP_TIMEZONE : 'America/Lima');
+        $ahora = new \DateTime('now', $tz);
+        $ferQ  = $pdo->prepare("SELECT nombre FROM feriados WHERE fecha = ?");
+        $ferQ->execute([$ahora->format('Y-m-d')]);
+        $feriadoNombre = $ferQ->fetchColumn();
+        $apertura = self::proximaAperturaTexto($pdo, $ahora);
+
+        $cab = $feriadoNombre
+            ? "Hoy es *feriado* ({$feriadoNombre}) y no tenemos atención."
+            : "En este momento estamos *fuera de horario de atención* (Lun–Vie 8:00 a. m. a 6:30 p. m. · Sáb hasta 1:00 p. m.).";
+
+        $msg = "¡Hola! 👋 Gracias por escribir a Group Global ISO.\n\n"
+             . $cab . " Retomamos la atención {$apertura}.\n\n"
+             . "Tu mensaje quedó registrado y un asesor te responderá apenas volvamos. "
+             . "Si gustas, cuéntanos qué norma o certificación te interesa para adelantar tu atención. ¡Gracias! 🙌";
+
+        require_once __DIR__ . '/WhatsAppService.php';
+        $waId = WhatsAppService::sendText($telefono, $msg, null, $phoneNumberId);
+        self::registrarSaliente(
+            $pdo, $telefono, $waId, 'text', $msg,
+            null, null, $waId ? 'sent' : 'failed',
+            $waId ? null : WhatsAppService::lastError(), $phoneNumberId
+        );
+    }
+
+    /**
+     * Texto amigable de la próxima apertura ("hoy"/"mañana"/"el lunes"/"el 12/08"
+     * + "a las 8:00 a. m."), salteando domingos y feriados. Apertura siempre 08:00.
+     */
+    private static function proximaAperturaTexto(\PDO $pdo, \DateTime $desde): string
+    {
+        $tz  = new \DateTimeZone(defined('APP_TIMEZONE') ? APP_TIMEZONE : 'America/Lima');
+        $d   = clone $desde; $d->setTimezone($tz);
+        $hoy = $d->format('Y-m-d');
+        $fer = $pdo->prepare("SELECT 1 FROM feriados WHERE fecha = ?");
+
+        $apertura = null;
+        for ($i = 0; $i < 45; $i++) {
+            $dow = (int)$d->format('N');                 // 1=Lun … 7=Dom
+            $fer->execute([$d->format('Y-m-d')]);
+            $abierto = !$fer->fetchColumn() && $dow !== 7; // Domingo y feriados cerrados
+            if ($abierto) {
+                if ($i > 0) { $apertura = (clone $d)->setTime(8, 0, 0); break; }
+                // Es hoy: solo sirve si aún no dieron las 8:00 (si ya pasó, siguiente día hábil).
+                $curMin = (int)$desde->format('H') * 60 + (int)$desde->format('i');
+                if ($curMin < 8 * 60) { $apertura = (clone $d)->setTime(8, 0, 0); break; }
+            }
+            $d->modify('+1 day')->setTime(0, 0, 0);
+        }
+        if (!$apertura) return 'pronto';
+
+        $dias    = [1=>'lunes',2=>'martes',3=>'miércoles',4=>'jueves',5=>'viernes',6=>'sábado',7=>'domingo'];
+        $difDias = (int)(new \DateTime($hoy, $tz))->diff(new \DateTime($apertura->format('Y-m-d'), $tz))->format('%a');
+        if     ($difDias === 0) $cuando = 'hoy';
+        elseif ($difDias === 1) $cuando = 'mañana';
+        elseif ($difDias <= 6)  $cuando = 'el ' . $dias[(int)$apertura->format('N')];
+        else                    $cuando = 'el ' . $apertura->format('d/m');
+
+        return $cuando . ' a las 8:00 a. m.';
     }
 }

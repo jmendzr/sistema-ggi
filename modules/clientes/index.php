@@ -334,7 +334,7 @@ if ($factura_pend)         $_nfiltros++;
         <th scope="col">Acciones</th>
       </tr>
     </thead>
-    <?php $puede_portal = has_role('gerente_general','gerente_operaciones','ejecutivo_ventas'); ?>
+    <?php $puede_portal = has_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial'); ?>
     <tbody>
       <?php foreach ($clientes as $c): ?>
       <?php

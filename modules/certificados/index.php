@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
 $user = auth_user();
-require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gestor_logistico');
+require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial','gestor_logistico','administracion_finanzas');
 
 $pdo = Database::get();
 
@@ -124,7 +124,7 @@ require_once __DIR__ . '/../../templates/layout.php';
       <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Exportar
     </a>
-    <?php if (has_role('gerente_general','gerente_operaciones')): ?>
+    <?php if (has_role('gerente_general','gerente_operaciones','administracion_finanzas')): ?>
     <button type="button" class="btn btn-primary" onclick="ggiOpenForm('<?= APP_URL ?>/modules/certificados/crear.php','Nuevo certificado')">
       <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Nuevo certificado

@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../core/NotificationService.php';
 require_once __DIR__ . '/../../vendor/autoload.php';
 session_init();
 require_login();
-require_role('gerente_general','gerente_operaciones','ejecutivo_ventas');
+require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial');
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok'=>false]); exit; }
@@ -38,6 +38,24 @@ if (!empty($_POST['cot_ids'])) {
             ->execute(array_merge([$nuevo_est], $ids));
     }
     log_actividad('propuestas','estado_bulk',"Bulk ".count($ids)." propuestas → $nuevo_est");
+
+    // ── Al ACEPTAR en lote: activar cliente + crear certificados y pagos por cada
+    //    propuesta (antes el bulk solo cambiaba el estado → quedaban SIN cert ni pago).
+    //    Usa el helper compartido con el flujo individual. Idempotente.
+    if ($nuevo_est === 'aceptada') {
+        require_once __DIR__ . '/aceptar_helper.php';
+        $acc = $pdo->prepare("SELECT id, cliente_id FROM cotizaciones WHERE id IN ($ph) AND estado='aceptada' AND cliente_id IS NOT NULL");
+        $acc->execute($ids);
+        foreach ($acc->fetchAll(\PDO::FETCH_ASSOC) as $ac) {
+            try {
+                $pdo->prepare("UPDATE clientes SET estado='activo' WHERE id=?")->execute([(int)$ac['cliente_id']]);
+                cot_generar_certs_y_pagos($pdo, (int)$ac['id'], (int)$ac['cliente_id'], (int)$user['id']);
+            } catch (\Throwable $e) {
+                error_log('[ajax_estado_cot bulk aceptar] cot '.$ac['id'].': '.$e->getMessage());
+            }
+        }
+    }
+
     echo json_encode(['ok'=>true]); exit;
 }
 
@@ -238,39 +256,12 @@ if ($nuevo_est === 'aceptada') { try {
         }
     }
 
-    // ── Crear certificados en_proceso por cada norma de la propuesta ──
+    // ── Certificados en_proceso (por norma) + pagos 50/50 ──
+    //    Helper compartido con el flujo bulk; idempotente (no duplica).
     if ($cliente_id_final) {
-        $normas_stmt = $pdo->prepare("
-            SELECT norma_iso_id, casa_certificadora_id
-            FROM cotizacion_normas
-            WHERE cotizacion_id = ?
-        ");
-        $normas_stmt->execute([$cot_id]);
-        $certs_creados = 0;
-
-        foreach ($normas_stmt->fetchAll() as $nc) {
-            // Saltar si ya existe un certificado vigente/en proceso para este cliente+norma
-            // ('vencido','suspendido','rechazado') sí permiten crear uno nuevo
-            $existe = $pdo->prepare("
-                SELECT id FROM certificados
-                WHERE cliente_id=? AND norma_iso_id=?
-                  AND estado NOT IN ('vencido','suspendido','rechazado')
-            ");
-            $existe->execute([$cliente_id_final, $nc['norma_iso_id']]);
-            if ($existe->fetch()) continue;
-
-            // Usar QRO (id=1) como casa por defecto si no viene especificada
-            $casa_id = $nc['casa_certificadora_id'] ?: 1;
-
-            $pdo->prepare("
-                INSERT INTO certificados
-                  (cliente_id, cotizacion_id, norma_iso_id, casa_certificadora_id, estado, creado_por)
-                VALUES (?, ?, ?, ?, 'en_proceso', ?)
-            ")->execute([$cliente_id_final, $cot_id, $nc['norma_iso_id'], $casa_id, $user['id']]);
-            $certs_creados++;
-            log_actividad('certificados', 'crear', "Certificado en_proceso desde propuesta #$cot_id");
-        }
-        $response['certs_creados'] = $certs_creados;
+        require_once __DIR__ . '/aceptar_helper.php';
+        $_cp = cot_generar_certs_y_pagos($pdo, $cot_id, (int)$cliente_id_final, (int)$user['id']);
+        $response['certs_creados'] = $_cp['certs'];
     }
 
     // ── Bonos: NO se generan al aceptar la propuesta. El bono se asigna al ejecutivo
@@ -280,13 +271,6 @@ if ($nuevo_est === 'aceptada') { try {
     // ── Envío: se genera cuando TODOS los certificados de esta propuesta
     //    pasen a estado 'vigente'. Ver módulo certificados/ajax_estado_cert.php,
     //    certificados/editar.php y certificados/ajax_bulk.php. ──
-
-    // ── Generar pagos inicial y final (50/50) ──
-    if ($cliente_id_final) {
-        require_once __DIR__ . '/../pagos/generar.php';
-        generar_pagos_cotizacion($pdo, $cot_id, $cliente_id_final);
-        log_actividad('pagos', 'generar', "Pagos generados para propuesta #$cot_id (cliente #$cliente_id_final)");
-    }
 
     // ── Meta Ads: el cierre de venta se reporta a la Conversions API cuando entra
     //    el PRIMER pago (pago inicial validado), no al aceptar. Ver

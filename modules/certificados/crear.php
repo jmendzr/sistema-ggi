@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../core/Database.php';
 require_once __DIR__ . '/../../core/NotificationService.php';
 session_init();
 require_login();
-require_role('gerente_general','gerente_operaciones');
+require_role('gerente_general','gerente_operaciones','administracion_finanzas');
 
 $pdo    = Database::get();
 $errors = [];
@@ -22,7 +22,7 @@ $clientes_query = $user['rol'] === 'ejecutivo_ventas'
 if ($user['rol'] === 'ejecutivo_ventas') $clientes_query->execute([$user['id']]);
 else $clientes_query->execute([]);
 $clientes = $clientes_query->fetchAll();
-$normas   = $pdo->query("SELECT id, codigo, nombre FROM normas_iso WHERE activo=1 ORDER BY codigo")->fetchAll();
+$normas   = $pdo->query("SELECT id, codigo, nombre, meses_vigencia FROM normas_iso WHERE activo=1 ORDER BY codigo")->fetchAll();
 $casas    = $pdo->query("SELECT id, nombre FROM casas_certificadoras WHERE activo=1 ORDER BY nombre")->fetchAll();
 
 // Función para subir un archivo de certificado
@@ -81,10 +81,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data['fecha_auditoria_1'] = null;
     $data['fecha_auditoria_2'] = null;
     if (!empty($data['fecha_emision'])) {
-        // Un día antes del aniversario correspondiente
-        $data['fecha_auditoria_1'] = date('Y-m-d', strtotime($data['fecha_emision'] . ' +1 year  -1 day'));
-        $data['fecha_auditoria_2'] = date('Y-m-d', strtotime($data['fecha_emision'] . ' +2 years -1 day'));
-        $data['fecha_vencimiento'] = date('Y-m-d', strtotime($data['fecha_emision'] . ' +3 years -1 day'));
+        // Vencimiento/auditorías según la vigencia de la norma (BPL=1 año, ISO=3 años)
+        $fechas = cert_calcular_fechas($data['fecha_emision'], cert_meses_vigencia($pdo, $data['norma_iso_id']));
+        $data['fecha_vencimiento'] = $fechas['fecha_vencimiento'];
+        $data['fecha_auditoria_1'] = $fechas['fecha_auditoria_1'];
+        $data['fecha_auditoria_2'] = $fechas['fecha_auditoria_2'];
     }
 
     if (empty($errors)) {
@@ -111,9 +112,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cl_cert = $cl_cert->fetch();
         $ruc     = $cl_cert['ruc'] ?? '';
 
-        // Subir archivos manteniendo nombre original
+        // Subir archivos manteniendo nombre original.
+        // BPL solo se emite en español → se ignora el archivo en inglés.
         $archivo_es = subirCertificado($_FILES['cert_es'] ?? [], $ruc, $cert_id, 'ES');
-        $archivo_en = subirCertificado($_FILES['cert_en'] ?? [], $ruc, $cert_id, 'EN');
+        $archivo_en = cert_norma_solo_es($pdo, $data['norma_iso_id'])
+                        ? null
+                        : subirCertificado($_FILES['cert_en'] ?? [], $ruc, $cert_id, 'EN');
 
         if ($archivo_es || $archivo_en) {
             $pdo->prepare("UPDATE certificados SET certificado_archivo=?, certificado_archivo_en=? WHERE id=?")
@@ -252,7 +256,7 @@ require_once __DIR__ . '/../../templates/layout.php';
           <select name="norma_iso_id" id="norma_iso_id" data-no-search class="<?= isset($errors['norma_iso_id'])?'error':'' ?>">
             <option value="">— Seleccionar norma —</option>
             <?php foreach ($normas as $n): ?>
-            <option value="<?= $n['id'] ?>" <?= (($_POST['norma_iso_id']??0)==$n['id'])?'selected':'' ?>><?= sanitize($n['codigo'].' — '.$n['nombre']) ?></option>
+            <option value="<?= $n['id'] ?>" data-meses="<?= (int)$n['meses_vigencia'] ?>" data-codigo="<?= sanitize($n['codigo']) ?>" <?= (($_POST['norma_iso_id']??0)==$n['id'])?'selected':'' ?>><?= sanitize($n['codigo'].' — '.$n['nombre']) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
@@ -288,7 +292,7 @@ require_once __DIR__ . '/../../templates/layout.php';
         <?php if (isset($errors['fecha_emision'])): ?><div class="err-msg"><?= $errors['fecha_emision'] ?></div><?php endif; ?>
       </div>
       <div class="field">
-        <label>Vencimiento <span class="auto">AUTO +3 años</span></label>
+        <label>Vencimiento <span class="auto" id="lbl-venc-auto">AUTO</span></label>
         <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" value="<?= sanitize($_POST['fecha_vencimiento']??'') ?>" readonly>
       </div>
       <div class="field">
@@ -319,7 +323,7 @@ require_once __DIR__ . '/../../templates/layout.php';
           <button type="button" class="file-remove" onclick="removeFile('es')">✕</button>
         </div>
       </div>
-      <div class="field">
+      <div class="field" id="field-en">
         <label>Certificado en Inglés</label>
         <div class="dropzone" id="dz-en">
           <input type="file" name="cert_en" id="file-en" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="showFile('en', this)">
@@ -379,15 +383,31 @@ function _setFechaCalc(id, val) {
   if (el._flatpickr) el._flatpickr.setDate(val, false); // false = no dispara onChange
   else el.value = val;
 }
+// Vigencia (meses) de la norma seleccionada; por defecto 36 (ciclo ISO de 3 años).
+function _mesesVigenciaSel() {
+  const sel = document.getElementById('norma_iso_id');
+  const opt = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+  const m = opt ? parseInt(opt.getAttribute('data-meses'), 10) : 0;
+  return (m && m > 0) ? m : 36;
+}
+function _addMeses(d, meses) { const r = new Date(d + 'T00:00:00'); r.setMonth(r.getMonth()+meses); r.setDate(r.getDate()-1); return r.toISOString().split('T')[0]; }
 function calcularFechas() {
+  const meses = _mesesVigenciaSel();
+  const lbl = document.getElementById('lbl-venc-auto');
+  if (lbl) lbl.textContent = 'AUTO +' + (meses % 12 === 0 ? (meses/12) + (meses === 12 ? ' año' : ' años') : meses + ' meses');
   const el = document.getElementById('fecha_emision');
   const v = el ? el.value : ''; // flatpickr mantiene el valor original en Y-m-d
   if (!v) return;
-  // Un día antes del aniversario correspondiente
-  const addY = (d, y) => { const r = new Date(d + 'T00:00:00'); r.setFullYear(r.getFullYear()+y); r.setDate(r.getDate()-1); return r.toISOString().split('T')[0]; };
-  _setFechaCalc('fecha_auditoria_1', addY(v, 1));
-  _setFechaCalc('fecha_auditoria_2', addY(v, 2));
-  _setFechaCalc('fecha_vencimiento', addY(v, 3));
+  _setFechaCalc('fecha_vencimiento', _addMeses(v, meses));
+  // Auditorías de seguimiento (+1/+2 años) solo en ciclos multianuales (≥ 24 meses)
+  if (meses >= 24) {
+    const addY = (d, y) => { const r = new Date(d + 'T00:00:00'); r.setFullYear(r.getFullYear()+y); r.setDate(r.getDate()-1); return r.toISOString().split('T')[0]; };
+    _setFechaCalc('fecha_auditoria_1', addY(v, 1));
+    _setFechaCalc('fecha_auditoria_2', addY(v, 2));
+  } else {
+    _setFechaCalc('fecha_auditoria_1', '');
+    _setFechaCalc('fecha_auditoria_2', '');
+  }
 }
 function showFile(lang, input) {
   if (!input.files[0]) return;
@@ -407,11 +427,26 @@ function removeFile(lang) {
   const el = document.getElementById('fecha_emision');
   if (el && el._flatpickr) {
     el._flatpickr.config.onChange.push(function () { calcularFechas(); });
-    if (el.value) calcularFechas();
+    const norma = document.getElementById('norma_iso_id');
+    if (norma) norma.addEventListener('change', function () { calcularFechas(); toggleIngles(); });
+    calcularFechas(); // fija la etiqueta AUTO y recalcula si ya hay fecha
+    toggleIngles();   // estado inicial según la norma preseleccionada
   } else {
     setTimeout(_hookFechaEmision, 150); // reintentar hasta que flatpickr esté montado
   }
 })();
+
+// BPL solo se emite en español: oculta el campo del certificado en inglés y lo limpia.
+function toggleIngles() {
+  const sel = document.getElementById('norma_iso_id');
+  const opt = sel ? sel.options[sel.selectedIndex] : null;
+  const cod = opt ? (opt.getAttribute('data-codigo') || '').toUpperCase() : '';
+  const field = document.getElementById('field-en');
+  if (!field) return;
+  const soloEs = (cod === 'BPL');
+  field.style.display = soloEs ? 'none' : '';
+  if (soloEs && typeof removeFile === 'function') removeFile('en'); // limpia cualquier archivo cargado
+}
 </script>
 <script>
 initSearchSelect({

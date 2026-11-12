@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../core/PushService.php';
 require_once __DIR__ . '/../../vendor/autoload.php';
 session_init();
 require_login();
-require_role('gerente_general', 'gerente_operaciones');
+require_role('gerente_general', 'gerente_operaciones', 'gerente_comercial');
 
 header('Content-Type: application/json; charset=utf-8');
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

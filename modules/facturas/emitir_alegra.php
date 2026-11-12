@@ -16,7 +16,7 @@ function _j(array $d): void { while (ob_get_level()>0) ob_end_clean(); header('C
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') _j(['ok'=>false,'msg'=>'Método no permitido']);
 csrf_verify();
-if (!has_role('gerente_general')) _j(['ok'=>false,'msg'=>'Solo el Gerente General puede emitir facturas.']);
+if (!can('facturas_emitir')) _j(['ok'=>false,'msg'=>'No tienes permiso para emitir facturas.']);
 
 $user   = auth_user();
 $pdo    = Database::get();
@@ -148,56 +148,54 @@ if (!in_array($hc, [200,201], true) || !isset($resp['id'])) {
     _j(['ok'=>false,'msg'=>'Alegra rechazó la factura: '.$err]);
 }
 
-$numero  = $resp['numberTemplate']['fullNumber'] ?? null;
-$estado  = ALEGRA_EMITIR_REAL ? ($resp['stamp']['emissionStatus'] ?? 'stamped') : 'draft';
+$numero = $resp['numberTemplate']['fullNumber'] ?? null;
+$stamp  = $resp['stamp'] ?? null;
+// SUNAT es asíncrono: al emitir suele quedar "waiting" y minutos después "accepted".
+$clase  = ALEGRA_EMITIR_REAL ? AlegraService::clasificarTimbrado($stamp) : 'draft';
+$estado = ALEGRA_EMITIR_REAL ? ($stamp['emissionStatus'] ?? 'STAMPED') : 'draft';
 
-// Descargar y guardar el PDF de la factura (para verlo/enviarlo como los manuales).
-$pdfPath = null; $pdfNombre = null;
-$pdfInfo = AlegraService::descargarPdf((int)$resp['id'], $clienteId, (string)($numero ?? ''));
-if ($pdfInfo) { [$pdfPath, $pdfNombre] = $pdfInfo; }
-else { error_log('[emitir_alegra] PDF no guardado: '.AlegraService::$lastError); }
-
+// Insertar SIN PDF ni envío todavía. El PDF definitivo y el WhatsApp al cliente
+// solo se hacen cuando SUNAT ACEPTA (ahora si es inmediato; si no, vía cron).
 $pdo->prepare("
     INSERT INTO facturas_cliente
       (cliente_id, cotizacion_id, origen, numero_factura, alegra_id, tipo_factura, operation_type,
        detraccion_modo, monto_base, monto_igv, monto_total, detraccion_monto, estado_timbrado, alegra_resp,
        archivo_path, archivo_nombre, subido_por)
-    VALUES (?,?, 'alegra', ?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    VALUES (?,?, 'alegra', ?,?,?,?,?,?,?,?,?,?,?, NULL, NULL, ?)
 ")->execute([
     $clienteId, $cotId, $numero, (int)$resp['id'], $tipo, $resumen['operation_type'],
     $detModoFinal, $base, $igv, $total, $detMonto, $estado,
-    json_encode(['status'=>$resp['status']??null,'stamp'=>$resp['stamp']??null], JSON_UNESCAPED_UNICODE),
-    $pdfPath, $pdfNombre, $user['id'],
+    json_encode(['status'=>$resp['status']??null,'stamp'=>$stamp], JSON_UNESCAPED_UNICODE),
+    $user['id'],
 ]);
 $facturaRowId = (int)$pdo->lastInsertId();
 
-log_actividad('facturas', 'emitir_alegra', "Factura $tipo ".($numero?:'(borrador)')." emitida vía Alegra (cotización #$cotId, modo ".($resumen['modo']).")");
+log_actividad('facturas', 'emitir_alegra', "Factura $tipo ".($numero?:'(borrador)')." emitida vía Alegra (cotización #$cotId, modo ".($resumen['modo'])." · SUNAT: $clase)");
 
-// ── Enviar la factura al cliente por WhatsApp (igual que la carga manual) ──
-//    Solo si hay PDF (emisión REAL timbrada; los borradores no generan PDF).
-$waEnviado = false;
-if ($pdfPath) {
-    require_once __DIR__ . '/../../core/NotificationService.php';
-    try {
-        NotificationService::dispatch('factura_emitida', [
-            'id'            => $facturaRowId,
-            'cliente_id'    => $clienteId,
-            'cotizacion_id' => $cotId,
-            // La plantilla ggi_factura_emitida usa param_keys ["razon_social","cot_numero"];
-            // {{2}} debe ser el N° de FACTURA → pasamos el número de Alegra (FA01-XXXXX).
-            'cot_numero'    => $numero ?: ($cot['numero'] ?? ''),
-            'triggered_by'  => $user['id'],
-            'title'         => "Factura emitida — {$cot['razon_social']}",
-            'message'       => "Se emitió la factura {$numero} para {$cot['razon_social']}.",
-            'doc_url'       => APP_URL . '/' . $pdfPath,
-            'doc_filename'  => $pdfNombre,
-        ]);
-        $pdo->prepare("UPDATE facturas_cliente SET wa_enviado=1, wa_enviado_at=NOW() WHERE id=?")->execute([$facturaRowId]);
-        NotificationService::markResolved(['factura_por_cargar'], $clienteId);
-        $waEnviado = true;
-    } catch (\Throwable $e) { error_log('[emitir_alegra] WhatsApp factura: '.$e->getMessage()); }
+// ── Según el estado SUNAT ──
+$waEnviado = false; $espera = false; $rechazada = false;
+if ($clase === 'accepted') {
+    // Aceptada de inmediato → descargar PDF definitivo + enviar al cliente.
+    require_once __DIR__ . '/factura_finalizar.php';
+    $fin = factura_finalizar_aceptada($pdo, $facturaRowId, $user['id']);
+    $waEnviado = !empty($fin['wa']);
+} elseif ($clase === 'rejected') {
+    $rechazada = true;
+    error_log("[emitir_alegra] SUNAT rechazó $numero: ".json_encode($stamp, JSON_UNESCAPED_UNICODE));
+} elseif ($clase !== 'draft') {
+    // waiting / unknown → el cron de re-chequeo la completará al aceptarse.
+    $espera = true;
 }
 
-_j(['ok'=>true, 'numero'=>$numero, 'estado'=>$estado, 'resumen'=>$resumen, 'wa_enviado'=>$waEnviado,
-    'msg'=> (ALEGRA_EMITIR_REAL ? 'Factura emitida a SUNAT: ' : 'Borrador creado en Alegra: ').($numero?:'(sin número)')
-            . ($waEnviado ? ' · enviada al cliente por WhatsApp' : '')]);
+if (!ALEGRA_EMITIR_REAL) {
+    $msg = 'Borrador creado en Alegra: '.($numero ?: '(sin número)');
+} elseif ($rechazada) {
+    $msg = 'SUNAT RECHAZÓ la factura '.($numero ?: '').'. Revísala en Alegra; NO se envió al cliente.';
+} elseif ($clase === 'accepted') {
+    $msg = 'Factura emitida y aceptada por SUNAT: '.$numero.($waEnviado ? ' · enviada al cliente por WhatsApp' : '');
+} else {
+    $msg = 'Factura emitida ('.$numero.'). Esperando la aceptación de SUNAT; al aceptarse se descarga el PDF y se envía al cliente automáticamente.';
+}
+
+_j(['ok'=>true, 'numero'=>$numero, 'estado'=>$estado, 'clase'=>$clase, 'resumen'=>$resumen,
+    'wa_enviado'=>$waEnviado, 'espera'=>$espera, 'rechazada'=>$rechazada, 'msg'=>$msg]);

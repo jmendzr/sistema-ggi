@@ -19,7 +19,7 @@ session_init();
 require_login();
 header('Content-Type: application/json');
 
-if (!has_role('gerente_general', 'gerente_operaciones')) {
+if (!has_role('gerente_general', 'gerente_operaciones', 'gerente_comercial')) {
     echo json_encode(['ok' => false, 'msg' => 'Solo gerencia puede marcar una propuesta como desistida.']);
     exit;
 }

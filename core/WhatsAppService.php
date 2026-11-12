@@ -149,7 +149,7 @@ class WhatsAppService
         // propuesta_aceptada: usar el contacto de la cotización (persona que negoció)
         // demás eventos: usar el contacto principal del cliente empresa
         $rawPhone = $cliente['contacto_telefono'];
-        if ($eventCode === 'propuesta_aceptada' && !empty($context['cotizacion_id'])) {
+        if (in_array($eventCode, ['propuesta_aceptada', 'cotizacion_por_vencer'], true) && !empty($context['cotizacion_id'])) {
             $cotStmt = $pdo->prepare("SELECT contacto_telefono FROM cotizaciones WHERE id = ?");
             $cotStmt->execute([$context['cotizacion_id']]);
             $cotPhone = $cotStmt->fetchColumn();
@@ -197,10 +197,18 @@ class WhatsAppService
         // El ejecutivo debe ver en el hilo lo que el sistema ya le dijo al cliente,
         // o responderá a ciegas. enviado_por = NULL marca "automático".
         require_once __DIR__ . '/WaInbox.php';
+        // Si el template llevaba documento adjunto (p. ej. la factura PDF), lo
+        // registramos también en el hilo para que sea VERIFICABLE en el inbox.
+        $mediaSal = null;
+        if ($docUrl) {
+            // Guardar la ruta RELATIVA al web root (media.php la sirve con sesión).
+            $rel = preg_replace('#^' . preg_quote(rtrim(APP_URL, '/'), '#') . '/#', '', $docUrl);
+            $mediaSal = ['path' => $rel, 'mime' => 'application/pdf', 'nombre' => $docFilename ?: basename($docUrl)];
+        }
         WaInbox::registrarSaliente(
-            $pdo, $phone, $waId, 'template',
+            $pdo, $phone, $waId, ($docUrl ? 'document' : 'template'),
             self::renderTemplateTexto($tpl['body_text'] ?? null, $params, $tpl['template_name']),
-            $tpl['template_name'], null, $estado, $error
+            $tpl['template_name'], null, $estado, $error, null, $mediaSal
         );
     }
 
@@ -396,6 +404,22 @@ class WhatsAppService
         return ($c >= 200 && $c < 300) ? $d : null;
     }
 
+    /**
+     * Edita los componentes de una plantilla existente (por su ID de Meta).
+     * Meta reenvía la plantilla a revisión (vuelve a PENDING). No se puede
+     * cambiar el nombre ni el idioma; los componentes se reemplazan completos,
+     * así que hay que mandar TODOS (header, body, footer, buttons).
+     */
+    public static function editarPlantilla(string $templateId, array $comp): ?array
+    {
+        self::$lastError = null;
+        if ($templateId === '') { self::$lastError = 'Falta el ID de la plantilla'; return null; }
+
+        [$c, $d] = self::graph($templateId, 'POST', ['components' => $comp]);
+
+        return ($c >= 200 && $c < 300) ? $d : null;
+    }
+
     /** Elimina una plantilla de Meta por nombre (borra todos sus idiomas). */
     public static function eliminarPlantilla(string $nombre): bool
     {
@@ -503,11 +527,11 @@ class WhatsAppService
      * válido dentro de la ventana de 24 h.
      */
     public static function sendMedia(string $to, string $tipo, string $mediaId,
-                                     ?string $caption = null, ?string $nombre = null): ?string
+                                     ?string $caption = null, ?string $nombre = null, ?string $fromPhoneId = null): ?string
     {
         self::$lastError = null;
 
-        $phoneId = self::phoneId();
+        $phoneId = ($fromPhoneId !== null && $fromPhoneId !== '') ? $fromPhoneId : self::phoneId();
         if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return null; }
 
         $obj = ['id' => $mediaId];
@@ -555,10 +579,10 @@ class WhatsAppService
      *
      * @param array $interactive Objeto 'interactive' ya armado por quien llama.
      */
-    public static function sendInteractive(string $to, array $interactive): ?string
+    public static function sendInteractive(string $to, array $interactive, ?string $fromPhoneId = null): ?string
     {
         self::$lastError = null;
-        $phoneId = self::phoneId();
+        $phoneId = ($fromPhoneId !== null && $fromPhoneId !== '') ? $fromPhoneId : self::phoneId();
         if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return null; }
 
         $payload = [
@@ -595,10 +619,10 @@ class WhatsAppService
     /**
      * Envía una tarjeta de contacto. Solo dentro de la ventana de 24 h.
      */
-    public static function sendContacto(string $to, string $nombre, string $telefono, string $empresa = ''): ?string
+    public static function sendContacto(string $to, string $nombre, string $telefono, string $empresa = '', ?string $fromPhoneId = null): ?string
     {
         self::$lastError = null;
-        $phoneId = self::phoneId();
+        $phoneId = ($fromPhoneId !== null && $fromPhoneId !== '') ? $fromPhoneId : self::phoneId();
         if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return null; }
 
         $contacto = [
@@ -631,6 +655,83 @@ class WhatsAppService
         $e = $d['error'] ?? [];
         self::$lastError = mb_substr('HTTP ' . $code . ': ' . ($e['message'] ?? (string) $res), 0, 400);
         return null;
+    }
+
+    /**
+     * Envía una UBICACIÓN (pin en el mapa). Solo dentro de la ventana de 24 h,
+     * como todo mensaje libre. Devuelve el wa_message_id o null.
+     */
+    public static function sendLocation(string $to, float $lat, float $lng,
+                                        string $nombre = '', string $direccion = '', ?string $fromPhoneId = null): ?string
+    {
+        self::$lastError = null;
+        $phoneId = ($fromPhoneId !== null && $fromPhoneId !== '') ? $fromPhoneId : self::phoneId();
+        if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return null; }
+
+        $loc = ['latitude' => $lat, 'longitude' => $lng];
+        if ($nombre    !== '') $loc['name']    = $nombre;
+        if ($direccion !== '') $loc['address'] = $direccion;
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type'    => 'individual',
+            'to'                => $to,
+            'type'              => 'location',
+            'location'          => $loc,
+        ];
+
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/messages");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', self::authHeader()],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $d = json_decode((string) $res, true);
+        if ($code >= 200 && $code < 300) return $d['messages'][0]['id'] ?? null;
+
+        $e = $d['error'] ?? [];
+        self::$lastError = mb_substr('HTTP ' . $code . ': ' . ($e['message'] ?? (string) $res), 0, 400);
+        return null;
+    }
+
+    /**
+     * Marca un mensaje ENTRANTE como leído (tildes azules para el cliente) y,
+     * opcionalmente, muestra el indicador "escribiendo…" (se ve ~25 s o hasta
+     * que enviemos un mensaje). Requiere el wa_message_id del mensaje recibido
+     * y el phone_number_id del número GGI por el que llegó. Best-effort.
+     */
+    public static function markRead(string $waMessageId, bool $typing = false, ?string $fromPhoneId = null): bool
+    {
+        self::$lastError = null;
+        if ($waMessageId === '') return false;
+        $phoneId = ($fromPhoneId !== null && $fromPhoneId !== '') ? $fromPhoneId : self::phoneId();
+        if (!$phoneId || !self::apiKey()) { self::$lastError = 'Sin credenciales'; return false; }
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'status'            => 'read',
+            'message_id'        => $waMessageId,
+        ];
+        if ($typing) $payload['typing_indicator'] = ['type' => 'text'];
+
+        $ch = curl_init(self::apiBase() . "/{$phoneId}/messages");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10, CURLOPT_CONNECTTIMEOUT => 6,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', self::authHeader()],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($code >= 200 && $code < 300) return true;
+        $d = json_decode((string) $res, true);
+        self::$lastError = mb_substr('HTTP ' . $code . ': ' . ($d['error']['message'] ?? (string) $res), 0, 400);
+        return false;
     }
 
     /**
@@ -844,12 +945,15 @@ class WhatsAppService
      * @return string|null  message_id de WhatsApp, o null si falló
      *                      (el motivo queda en self::lastError()).
      */
-    public static function sendText(string $to, string $texto, ?string $responderA = null): ?string
+    public static function sendText(string $to, string $texto, ?string $responderA = null, ?string $fromPhoneId = null): ?string
     {
         self::$lastError = null;
 
         $apiKey  = self::apiKey();
-        $phoneId = self::phoneId();
+        // Número de ORIGEN: por defecto el de notificaciones; se puede forzar otro
+        // (p. ej. responder desde el número conversacional de Frank/Andrés al que
+        // escribió el cliente, no desde el de notificaciones).
+        $phoneId = ($fromPhoneId !== null && $fromPhoneId !== '') ? $fromPhoneId : self::phoneId();
 
         if (!$apiKey || !$phoneId) {
             self::$lastError = 'Credenciales de WhatsApp (' . self::provider() . ') no configuradas en .env';
@@ -928,12 +1032,14 @@ class WhatsAppService
         string  $lang           = 'es',
         ?string $docUrl         = null,
         ?string $docFilename    = null,
-        ?string $urlButtonParam = null   // sufijo dinámico del botón URL (ej: token del portal)
+        ?string $urlButtonParam = null,  // sufijo dinámico del botón URL (ej: token del portal)
+        ?string $fromPhoneId    = null,  // número de origen (default = notificaciones)
+        ?string $imgUrl         = null   // header de IMAGEN (ej: flyer de una promo). Excluyente con $docUrl.
     ): ?string {
         self::$lastError = null;
 
         $apiKey  = self::apiKey();
-        $phoneId = self::phoneId();
+        $phoneId = ($fromPhoneId !== null && $fromPhoneId !== '') ? $fromPhoneId : self::phoneId();
 
         if (!$apiKey || !$phoneId) {
             self::$lastError = 'Credenciales de WhatsApp (' . self::provider() . ') no configuradas en .env';
@@ -953,6 +1059,16 @@ class WhatsAppService
                         'link'     => $docUrl,
                         'filename' => $docFilename ?: basename($docUrl),
                     ]),
+                ]],
+            ];
+        } elseif ($imgUrl) {
+            // Header de IMAGEN: la plantilla se creó con header IMAGE y Meta exige
+            // la media en cada envío (aunque el flyer sea siempre el mismo).
+            $components[] = [
+                'type'       => 'header',
+                'parameters' => [[
+                    'type'  => 'image',
+                    'image' => ['link' => $imgUrl],
                 ]],
             ];
         }

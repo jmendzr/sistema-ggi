@@ -40,7 +40,7 @@ $pdo    = Database::get();
 // ── Módulos válidos (definición maestra) ────────────────────────────────────
 $MODULOS_VALIDOS = [
     'clientes','certificados','cotizaciones','envios','auditorias','documentos',
-    'pagos','bonos','metas','reportes','comunicaciones','notificaciones',
+    'pagos','facturas_emitir','bonos','metas','reportes','comunicaciones','notificaciones',
     'whatsapp','mantenimiento','clientes_ver',
 ];
 

@@ -2,7 +2,7 @@
 $page_title  = 'Seguimiento de propuestas';
 $active_menu = 'propuestas';
 require_once __DIR__ . '/../../templates/layout.php';
-require_role('gerente_general','gerente_operaciones','ejecutivo_ventas');
+require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial');
 
 $pdo  = Database::get();
 $uid  = $user['id'];

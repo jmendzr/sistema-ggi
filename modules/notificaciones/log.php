@@ -250,7 +250,7 @@ function wlRetry(btn, id) {
   .then(d => {
       const msg = d.msg || d.mensaje || (d.ok ? 'Reintentado.' : 'No se pudo reintentar.');
       if (typeof GGIToast !== 'undefined') GGIToast[d.ok ? 'success' : 'error'](msg);
-      else alert(msg);
+      else (window.showToast ? showToast(msg, 'error') : alert(msg));
       if (d.ok) {
           const row = btn.closest('tr');
           if (row) row.style.opacity = '.5';

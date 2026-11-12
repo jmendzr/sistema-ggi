@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../core/Database.php';
 require_once __DIR__ . '/../../core/envio_notificar.php';
 session_init();
 require_login();
-require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gestor_logistico','delivery');
+require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial','gestor_logistico','delivery','administracion_finanzas');
 // Evita que el modal/PWA sirva una versión cacheada del formulario (JS viejo).
 header('Cache-Control: no-store, no-cache, must-revalidate');
 header('Pragma: no-cache');
@@ -1191,13 +1191,19 @@ if (HAS_TRACKING && ID_ENTREGADO) {
   }
 }
 
-new GGIForm('form-envio-editar')
-  .selectRequired('cliente_id',      'Selecciona un cliente.')
-  .selectRequired('agencia_envio_id','Selecciona una agencia de envío.')
-  .selectRequired('estado_envio_id', 'Selecciona el estado del envío.')
-  .dateRequired('fecha_envio',       'La fecha de envío es requerida.')
-  .required('destinatario',          'El nombre del destinatario es requerido.')
-  .init();
+// validacion.js (define GGIForm) se carga vía layout_end, DESPUÉS de este inline →
+// diferir el init a DOMContentLoaded si GGIForm aún no existe. Sin esto, la validación
+// de cliente quedaba muerta. NO se exige 'destinatario' (el servidor tampoco lo exige).
+function initEnvioValidacion() {
+  new GGIForm('form-envio-editar')
+    .selectRequired('cliente_id',      'Selecciona un cliente.')
+    .selectRequired('agencia_envio_id','Selecciona una agencia de envío.')
+    .selectRequired('estado_envio_id', 'Selecciona el estado del envío.')
+    .dateRequired('fecha_envio',       'La fecha de envío es requerida.')
+    .init();
+}
+if (typeof GGIForm === 'undefined') document.addEventListener('DOMContentLoaded', initEnvioValidacion, { once: true });
+else initEnvioValidacion();
 
 // ── Sede searchable dropdown ──────────────────────────────────────────────────
 var _sedeAll = [];
@@ -1395,9 +1401,9 @@ function resetSedeDropdown() {
   // Geolocalización
   document.addEventListener('click', function(e){
     if (!e.target.closest('#dom-geo')) return;
-    if (!navigator.geolocation) { alert('Sin geolocalización'); return; }
+    if (!navigator.geolocation) { (window.showToast ? showToast('Sin geolocalización', 'error') : alert('Sin geolocalización')); return; }
     navigator.geolocation.getCurrentPosition(function(p){ domInitMapa(); setPunto(p.coords.latitude, p.coords.longitude, true); },
-      function(){ alert('No se pudo obtener la ubicación. Toca el mapa.'); }, { enableHighAccuracy:true, timeout:10000 });
+      function(){ (window.showToast ? showToast('No se pudo obtener la ubicación. Toca el mapa.', 'error') : alert('No se pudo obtener la ubicación. Toca el mapa.')); }, { enableHighAccuracy:true, timeout:10000 });
   });
   // Buscar dirección (Nominatim). Solo al tocar Enter o tras pausa (respeta el límite).
   function geocodificar(){

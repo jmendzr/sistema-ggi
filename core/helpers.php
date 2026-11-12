@@ -6,6 +6,12 @@
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/Database.php';
 
+// Habilitación pública de certificados por PAGO TOTAL: los certificados creados
+// DESDE esta fecha solo se verifican/descargan públicamente cuando todos los pagos
+// de su cotización están validados (misma condición que el bono al ejecutivo).
+// Los anteriores quedan grandfathered (siempre visibles) para no romper QRs en uso.
+if (!defined('GGI_GATE_PAGO_TOTAL_DESDE')) define('GGI_GATE_PAGO_TOTAL_DESDE', '2026-08-19');
+
 // --- SESIÓN ---
 
 function session_init(): void {
@@ -159,7 +165,7 @@ function can(string $modulo, string $accion = 'ver'): bool {
 
     // ── Fallback: permisos hardcodeados originales (tabla no instalada) ──
     static $_hc = [
-        'gerente_operaciones' => ['clientes','certificados','cotizaciones','envios','auditorias','documentos','reportes','comunicaciones','notificaciones','bonos','metas','pagos','whatsapp','inbox','mantenimiento'],
+        'gerente_operaciones' => ['clientes','certificados','cotizaciones','envios','auditorias','documentos','reportes','comunicaciones','notificaciones','bonos','metas','pagos','facturas_emitir','whatsapp','inbox','mantenimiento'],
         // 'inbox' (bandeja multiagente) sí lo tienen los ejecutivos; 'whatsapp'
         // (bandejas embebidas de Kapso) sigue siendo solo de gerencia.
         'ejecutivo_ventas'    => ['clientes','certificados','cotizaciones','envios','documentos','comunicaciones','notificaciones','bonos','metas','pagos','inbox'],
@@ -966,4 +972,57 @@ if (!function_exists('imagen_reducir')) {
             @unlink($tmp);
         }
     }
+}
+
+/**
+ * Vigencia (en meses) de una norma. Data-driven: se lee de normas_iso.meses_vigencia.
+ * Por defecto 36 (ciclo ISO de 3 años). BPL = 12 (1 año), etc.
+ * Resultado cacheado por proceso.
+ */
+/**
+ * ¿La norma se emite SOLO en español (sin certificado en inglés)?
+ * Por ahora aplica a BPL (Buenas Prácticas Laborales). Se usa para ocultar la carga
+ * del archivo EN al crear/editar y para no exponer descarga EN en el verificador.
+ */
+function cert_norma_solo_es(PDO $pdo, int $norma_iso_id): bool {
+    static $cache = [];
+    if ($norma_iso_id <= 0) return false;
+    if (!array_key_exists($norma_iso_id, $cache)) {
+        $st = $pdo->prepare("SELECT codigo FROM normas_iso WHERE id = ?");
+        $st->execute([$norma_iso_id]);
+        $cache[$norma_iso_id] = strtoupper(trim((string)$st->fetchColumn())) === 'BPL';
+    }
+    return $cache[$norma_iso_id];
+}
+
+function cert_meses_vigencia(PDO $pdo, int $norma_iso_id): int {
+    static $cache = [];
+    if ($norma_iso_id <= 0) return 36;
+    if (!array_key_exists($norma_iso_id, $cache)) {
+        $st = $pdo->prepare("SELECT meses_vigencia FROM normas_iso WHERE id = ?");
+        $st->execute([$norma_iso_id]);
+        $v = $st->fetchColumn();
+        $cache[$norma_iso_id] = ($v !== false && (int)$v > 0) ? (int)$v : 36;
+    }
+    return $cache[$norma_iso_id];
+}
+
+/**
+ * Calcula las fechas del certificado a partir de la emisión y la vigencia (meses).
+ * - Vencimiento = emisión + N meses − 1 día.
+ * - Auditorías de seguimiento (+1/+2 años) solo aplican a ciclos multianuales
+ *   (vigencia ≥ 24 meses); en ciclos de 1 año quedan en NULL.
+ * Devuelve ['fecha_vencimiento','fecha_auditoria_1','fecha_auditoria_2'] (o null c/u).
+ */
+function cert_calcular_fechas(?string $fecha_emision, int $meses_vigencia): array {
+    $out = ['fecha_vencimiento' => null, 'fecha_auditoria_1' => null, 'fecha_auditoria_2' => null];
+    $fecha_emision = trim((string)$fecha_emision);
+    if ($fecha_emision === '' || $fecha_emision === '0000-00-00') return $out;
+    if ($meses_vigencia <= 0) $meses_vigencia = 36;
+    $out['fecha_vencimiento'] = date('Y-m-d', strtotime("$fecha_emision +$meses_vigencia months -1 day"));
+    if ($meses_vigencia >= 24) {
+        $out['fecha_auditoria_1'] = date('Y-m-d', strtotime("$fecha_emision +1 year  -1 day"));
+        $out['fecha_auditoria_2'] = date('Y-m-d', strtotime("$fecha_emision +2 years -1 day"));
+    }
+    return $out;
 }

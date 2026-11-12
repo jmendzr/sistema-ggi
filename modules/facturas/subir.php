@@ -15,7 +15,7 @@ require_once __DIR__ . '/../../core/NotificationService.php';
 
 session_init();
 require_login();
-require_role('gerente_general', 'gerente_operaciones');
+require_role('gerente_general', 'gerente_operaciones', 'administracion_finanzas');
 
 header('Content-Type: application/json');
 

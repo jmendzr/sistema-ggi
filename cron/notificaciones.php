@@ -234,45 +234,10 @@ foreach ($cotizaciones as $cot) {
 }
 
 // ============================================================
-//  6. CERTIFICADOS REQUERIDOS — alerta al Gerente General 2 días antes
-//     de la fecha en que el cliente los necesita (push + in-app, 1 sola vez).
+//  6. CERTIFICADOS REQUERIDOS → movido a cron/recordatorio_certificados.php
+//     (recordatorio al Gerente General 1 día antes, a las 22:00 Lima, para
+//      GENERAR los certificados). Se sacó de aquí para no duplicar el aviso.
 // ============================================================
-$gerentes_gen = $pdo->query("SELECT id FROM usuarios WHERE activo = 1 AND rol = 'gerente_general'")
-    ->fetchAll(PDO::FETCH_COLUMN);
-
-// Ventana: fecha dentro de los PRÓXIMOS 2 días (hoy, mañana o en 2) y aún sin avisar.
-// (No solo "exactamente 2 días antes": eso se saltaba las aceptadas con < 2 días de
-//  anticipación. Cada una recibe una única alerta gracias a alerta_cert_at.)
-$cert_req = $pdo->query("
-    SELECT cot.id, cot.numero, cl.razon_social, cot.fecha_requerida_certificados,
-           DATEDIFF(cot.fecha_requerida_certificados, CURDATE()) AS dias
-    FROM cotizaciones cot
-    JOIN clientes cl ON cl.id = cot.cliente_id
-    WHERE cot.estado = 'aceptada'
-      AND cot.deleted_at IS NULL
-      AND cl.deleted_at IS NULL
-      AND cot.fecha_requerida_certificados BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 2 DAY)
-      AND cot.alerta_cert_at IS NULL
-")->fetchAll(PDO::FETCH_ASSOC);
-
-foreach ($cert_req as $cr) {
-    $dias    = (int)$cr['dias'];
-    $cuando  = $dias <= 0 ? 'HOY' : ($dias === 1 ? 'MAÑANA' : "en {$dias} días");
-    $f_fmt   = date('d/m/Y', strtotime($cr['fecha_requerida_certificados']));
-    $titulo  = "📅 Certificados a generar {$cuando}: {$cr['razon_social']}";
-    $mensaje = "El cliente {$cr['razon_social']} necesita sus certificados el {$f_fmt} ({$cuando}) — Propuesta {$cr['numero']}.";
-    $url     = APP_URL . '/modules/cotizaciones/ver.php?id=' . $cr['id'];
-
-    foreach ($gerentes_gen as $uid) {
-        crear_notificacion($pdo, (int)$uid, 'cert_requerido_proximo', $titulo, $mensaje, $url);
-        if (class_exists('PushService')) {
-            try { PushService::notify((int)$uid, $titulo, $mensaje, $url, 'cert-req-' . $cr['id']); } catch (\Throwable $e) {}
-        }
-    }
-    // Marcar como alertada → no se vuelve a disparar (una sola vez).
-    $pdo->prepare("UPDATE cotizaciones SET alerta_cert_at = NOW() WHERE id = ?")->execute([$cr['id']]);
-    $log[] = "  cert_requerido_proximo → propuesta {$cr['numero']} ({$cr['razon_social']}) para {$f_fmt}";
-}
 
 // ============================================================
 //  LOG DE EJECUCIÓN

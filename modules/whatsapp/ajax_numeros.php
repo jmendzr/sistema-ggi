@@ -82,6 +82,25 @@ if ($accion === 'lista') {
     salir(['ok' => true, 'items' => $filas, 'principal' => META_WA_PHONE_NUMBER_ID]);
 }
 
+// ══ Quién ve cada bandeja (LECTURA — se pide por GET, debe ir antes del guard POST) ══
+if ($accion === 'accesos') {
+    $id = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);
+    if (!$id) salir(['ok' => false, 'msg' => 'ID inválido']);
+
+    $u = $pdo->query(
+        "SELECT id, TRIM(CONCAT(nombre,' ',apellido)) nombre, rol
+           FROM usuarios
+          WHERE activo = 1 AND rol IN ('ejecutivo_ventas','gerente_operaciones','gerente_general')
+          ORDER BY rol = 'ejecutivo_ventas' DESC, nombre"
+    )->fetchAll(PDO::FETCH_ASSOC);
+
+    $q = $pdo->prepare("SELECT usuario_id FROM wa_numero_usuarios WHERE numero_id = ?");
+    $q->execute([$id]);
+
+    salir(['ok' => true, 'usuarios' => $u,
+           'con_acceso' => array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN) ?: [])]);
+}
+
 // ── Escritura ────────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') salir(['ok' => false, 'msg' => 'Método no permitido']);
 csrf_verify();
@@ -119,25 +138,6 @@ if ($accion === 'agregar') {
 
     salir(['ok' => true, 'numero' => $m['display_phone_number'] ?? $phoneId,
            'estado' => $m['status'] ?? '']);
-}
-
-// ══ Quién ve cada bandeja ════════════════════════════════════════════════════
-if ($accion === 'accesos') {
-    $id = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);
-    if (!$id) salir(['ok' => false, 'msg' => 'ID inválido']);
-
-    $u = $pdo->query(
-        "SELECT id, TRIM(CONCAT(nombre,' ',apellido)) nombre, rol
-           FROM usuarios
-          WHERE activo = 1 AND rol IN ('ejecutivo_ventas','gerente_operaciones','gerente_general')
-          ORDER BY rol = 'ejecutivo_ventas' DESC, nombre"
-    )->fetchAll(PDO::FETCH_ASSOC);
-
-    $q = $pdo->prepare("SELECT usuario_id FROM wa_numero_usuarios WHERE numero_id = ?");
-    $q->execute([$id]);
-
-    salir(['ok' => true, 'usuarios' => $u,
-           'con_acceso' => array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN) ?: [])]);
 }
 
 if ($accion === 'guardar_accesos') {

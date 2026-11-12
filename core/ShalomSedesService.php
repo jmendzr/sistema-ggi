@@ -7,12 +7,30 @@
  */
 class ShalomSedesService {
 
-    private const API_URL  = 'https://serviceswebapi.shalomcontrol.com/api/v1/web/agencias/listar';
-    private const HMAC_KEY = '.Ov3rsku112024l4r43l.';
+    // Hosts de la API Shalom. `newwebservices` NO exige las cabeceras de firma que
+    // `serviceswebapi` empezó a pedir (jun→2026, HTTP 401 SIGNATURE_HEADERS_MISSING)
+    // → se usa primero. post() itera y usa el primero que entregue data usable.
+    private const API_BASES = [
+        'https://newwebservices.shalomcontrol.com/api/v1/web/agencias/listar',
+        'https://serviceswebapi.shalomcontrol.com/api/v1/web/agencias/listar',
+    ];
+    private const HMAC_KEY  = '.Ov3rsku112024l4r43l.';
+    private const AES_KEY   = 'uQn/bQ94PXBEfId70zjN+VE1hSU7kh9VBXTOUd68Ssc='; // desencripta respuestas {encrypted:true}
     private const CACHE_TTL = 86400;
 
+    // Cache DURABLE (storage/cache/) — antes vivía en /tmp y se perdía al limpiarse
+    // el sistema, dejando el dropdown vacío cuando la API fallaba.
     private static function cacheFile(): string {
-        return sys_get_temp_dir() . '/shalom_sedes.json';
+        $dir = __DIR__ . '/../storage/cache';
+        if (!is_dir($dir)) @mkdir($dir, 0775, true);
+        return $dir . '/shalom_sedes.json';
+    }
+
+    private static function decrypt(string $b64): mixed {
+        $key = base64_decode(self::AES_KEY);
+        $raw = base64_decode($b64);
+        $dec = openssl_decrypt(substr($raw, 16), 'AES-256-CBC', $key, OPENSSL_RAW_DATA, substr($raw, 0, 16));
+        return $dec ? (json_decode($dec, true) ?? $dec) : null;
     }
 
     private static function buildToken(): string {
@@ -45,40 +63,41 @@ class ShalomSedesService {
             return $cacheData;
         }
 
-        $ch = curl_init(self::API_URL);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_CONNECTTIMEOUT => 8,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => '',
-            CURLOPT_HTTPHEADER     => [
-                'Authorization: Bearer ' . self::buildToken(),
-                'Content-Type: application/x-www-form-urlencoded',
-                'Origin: https://shalom.com.pe',
-                'Referer: https://shalom.com.pe/',
-            ],
-            CURLOPT_SSL_VERIFYPEER => true,
-        ]);
-        $body = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        // Descargar fresco: iterar hosts. `newwebservices` responde sin exigir las
+        // cabeceras de firma (serviceswebapi ahora da 401). Si llega encriptada
+        // ({encrypted:true,data:...}) se desencripta con AES.
+        $list = [];
+        foreach (self::API_BASES as $url) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 15,
+                CURLOPT_CONNECTTIMEOUT => 8,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => '',
+                CURLOPT_HTTPHEADER     => [
+                    'Authorization: Bearer ' . self::buildToken(),
+                    'Content-Type: application/x-www-form-urlencoded',
+                    'Origin: https://shalom.com.pe',
+                    'Referer: https://shalom.com.pe/',
+                ],
+                CURLOPT_SSL_VERIFYPEER => true,
+            ]);
+            $body = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($code !== 200 || !$body) continue;
 
-        // Si la API falla → respaldo con cache previo (aunque esté vencido).
-        if ($code !== 200 || !$body) {
-            if ($cacheData) @touch($cache); // evita reintentar en cada request por 24h
-            return $cacheData ?? [];
+            $decoded = json_decode($body, true);
+            if (!is_array($decoded)) continue;
+            if (!empty($decoded['encrypted'])) $decoded = self::decrypt($decoded['data'] ?? '');
+            $cand = is_array($decoded) ? ($decoded['data'] ?? $decoded) : [];
+            if (is_array($cand) && count($cand) > 10) { $list = $cand; break; }
         }
 
-        $decoded = json_decode($body, true);
-        // La API de Shalom ahora puede devolver la data ENCRIPTADA
-        // ({"encrypted":true,"data":"<base64>"}). En ese caso no podemos
-        // parsearla aquí → usar el cache previo como respaldo.
-        $list = (is_array($decoded) && empty($decoded['encrypted']))
-              ? ($decoded['data'] ?? [])
-              : [];
-        if (!is_array($list) || empty($list)) {
-            if ($cacheData) @touch($cache); // evita re-descargar ~3MB encriptados cada vez
+        // Si ningún host dio data usable → respaldo con el cache previo (aunque venza).
+        if (empty($list)) {
+            if ($cacheData) @touch($cache); // evita reintentar en cada request por 24h
             return $cacheData ?? [];
         }
 

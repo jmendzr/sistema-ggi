@@ -512,7 +512,7 @@ function marcarRevisado() {
       btn.disabled = false;
       btn.textContent = 'Marcar como revisado';
       if (typeof showToast === 'function') showToast(d.msg || 'Error al guardar.', 'error');
-      else alert(d.msg || 'Error al guardar.');
+      else showToast(d.msg || 'Error al guardar.', 'error');
     }
   })
   .catch(function(){
@@ -653,7 +653,7 @@ include __DIR__ . '/_llamada_modal.php';
     <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:-1px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
     Historial
   </button>
-  <?php if (has_role('gerente_general','gerente_operaciones','ejecutivo_ventas')): ?>
+  <?php if (has_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial')): ?>
   <button type="button" class="tab" data-tab="portal"               onclick="window.switchTab('portal')">
     <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:-1px;margin-right:4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
     Portal
@@ -859,7 +859,7 @@ include __DIR__ . '/_llamada_modal.php';
 
   <?php
   $es_ejecutivo    = ($user['rol'] === 'ejecutivo_ventas');
-  $puede_gestionar = has_role('gerente_general', 'gerente_operaciones');
+  $puede_gestionar = has_role('gerente_general', 'gerente_operaciones', 'gerente_comercial');
   $acta_confirmada = $doc_acta_vigente && $doc_acta_vigente['doc_confirmada'];
   $acta_es_legacy  = $doc_acta_vigente && !$doc_acta_vigente['doc_cot_id'];
   // Tratar legacy (sin cotizacion_id) como aprobada
@@ -1028,7 +1028,7 @@ include __DIR__ . '/_llamada_modal.php';
 <div style="text-align:center;padding:48px 20px;color:var(--gris-texto);"><svg style="animation:tab-spin .8s linear infinite;opacity:0.35;" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></div>
 </div>
 
-<?php if (has_role('gerente_general','gerente_operaciones','ejecutivo_ventas')): ?>
+<?php if (has_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial')): ?>
 <!-- Tab: Portal del cliente -->
 <div id="tab-portal" class="tab-panel" style="display:none">
   <div style="background:var(--bg-surface);border:1px solid var(--gris-borde);border-radius:12px;padding:22px;max-width:760px;">
@@ -2424,7 +2424,7 @@ window.solicitarCambiosActa = function(docId, msgId) {
   btnSaveCambios.addEventListener('click', function() {
     var cambios = cambiosTextarea.value.trim();
     if (!cambios) {
-      alert('Por favor, describe los cambios solicitados.');
+      showToast('Por favor, describe los cambios solicitados.', 'error');
       return;
     }
 

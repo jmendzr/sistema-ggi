@@ -9,7 +9,7 @@
  *   include __DIR__ . '/../../modules/facturas/_seccion.php';
  */
 
-if (!has_role('gerente_general', 'gerente_operaciones')) return;
+if (!has_role('gerente_general', 'gerente_operaciones', 'administracion_finanzas')) return;
 
 $_facturas = $pdo->prepare("
     SELECT f.*, u.nombre AS subido_nombre, u.apellido AS subido_apellido

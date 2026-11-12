@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../core/envio_notificar.php';
 session_init();
 require_login();
 // Ventas no puede cambiar el estado de envíos; lo gestionan operaciones y logística.
-require_role('gerente_general','gerente_operaciones','gestor_logistico','delivery');
+require_role('gerente_general','gerente_operaciones','gestor_logistico','delivery','administracion_finanzas');
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok'=>false]); exit; }

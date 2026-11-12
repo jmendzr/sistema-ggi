@@ -323,9 +323,16 @@
   };
 
   // Arranca el sondeo cuando la pestaña está visible.
+  // El SPA (spa-nav.js) re-ejecuta este script en cada montaje del inbox: se mata
+  // el sondeo anterior para no acumular pollers, y el nuevo se auto-detiene cuando
+  // el inbox (#ib) ya no está en pantalla (se navegó a otra sección).
   function iniciar() {
+    if (window._sfPoll) { clearInterval(window._sfPoll); window._sfPoll = null; }
     sondear();
-    setInterval(function () { if (!document.hidden) sondear(); }, 3000);
+    window._sfPoll = setInterval(function () {
+      if (!document.getElementById('ib')) { clearInterval(window._sfPoll); window._sfPoll = null; return; }
+      if (!document.hidden) sondear();
+    }, 3000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
   else iniciar();

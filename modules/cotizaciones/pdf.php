@@ -24,13 +24,13 @@ $_da=trim($cot['dir_empresa']??'');
 $_loc=array_unique(array_filter([$cot['dist_empresa'],$cot['prov_empresa'],$cot['dep_empresa']]));
 $_extra=[];foreach($_loc as $_p){if($_p&&stripos($_da,$_p)===false)$_extra[]=$_p;}
 $dir_full=implode(' - ',array_filter(array_merge([$_da],$_extra)))?:'—';
-$asesor=$cot['ej_nombre']?trim($cot['ej_nombre'].' '.$cot['ej_apellido']):'Andrés Salazar';
-$asesor_em=$cot['ej_email']??'andres.salazar@groupglobaliso.com';
-$asesor_tel=$cot['ej_telefono']??'961 399 268';
+$asesor=$cot['ej_nombre']?trim($cot['ej_nombre'].' '.$cot['ej_apellido']):'Área Comercial';
+$asesor_em=$cot['ej_email']??'contacto@groupglobaliso.com';
+$asesor_tel=$cot['ej_telefono']??'944 746 903';
 // Formatear teléfono: solo dígitos agrupados de a 3 (ej: 987654321 → 987 654 321)
 $asesor_tel=implode(' ',str_split(preg_replace('/\D/','',(string)$asesor_tel),3));
 // Foto dinámica del ejecutivo: busca archivo en assets/usuarios/fotos/{id}.{ext}
-$_ej_foto_b64=$IMG_ANDRES; // fallback
+$_ej_foto_b64=null; // fallback neutro (logo GGI se asigna tras cargar img_constants)
 if(!empty($cot['ej_foto'])){
   $_foto_path=__DIR__.'/../../assets/usuarios/fotos/'.basename($cot['ej_foto']);
   if(file_exists($_foto_path)){
@@ -82,6 +82,7 @@ if ($_regen) {
 }
 require_once $_cf;
 $IMG_FIRMA_GGI = $IMG_FIRMA_GGI ?? null;
+if(empty($_ej_foto_b64)) $_ej_foto_b64=$IMG_LOGO_GGI ?? null; // sin ejecutivo asignado → logo, no una persona
 // ISOs — imágenes reales del diseño Canva
 $isos_img = [
     'iso9001'  => $IMG_ISO9001  ?? null,
@@ -96,6 +97,13 @@ $_inline_pdf  = !empty($_GET['inline']);
 $_generar_pdf = !empty($_GET['dl']) || $_inline_pdf;
 $_pdf_disp    = $_inline_pdf ? 'inline' : 'attachment';
 if ($_generar_pdf) ob_start();
+
+$marca = (isset($_GET['marca']) && $_GET['marca'] === 'acreditta') ? 'acreditta' : 'ggi';
+$IMG_ACREDITTA = '';
+if ($marca === 'acreditta') {
+    $__al = __DIR__ . '/../../assets/img/acreditta-logo.png';
+    if (is_file($__al)) $IMG_ACREDITTA = 'data:image/png;base64,' . base64_encode(file_get_contents($__al));
+}
 ?><!DOCTYPE html>
 <html lang="es">
 <head>
@@ -240,6 +248,125 @@ function pg_hdr($num,$fecha,$pg=''){echo'
 <div id="pg-wrap">
 
 <!-- P1: PORTADA -->
+<?php if ($marca === 'acreditta'): ?>
+<!-- P1: PORTADA (ACREDITTA — clara) -->
+<div class="pg" style="background:#ffffff;overflow:hidden">
+  <!-- Acento naranja: borde izquierdo -->
+  <div style="position:absolute;top:0;left:0;width:4px;height:1123px;background:#F5851F;z-index:5"></div>
+  <!-- Decoración geométrica sutil -->
+  <div style="position:absolute;top:-130px;right:-120px;width:380px;height:380px;border-radius:50%;background:rgba(26,44,82,0.035);z-index:0"></div>
+  <div style="position:absolute;bottom:150px;left:-90px;width:240px;height:240px;border-radius:50%;border:2px solid rgba(245,133,31,0.10);z-index:0"></div>
+  <div style="position:absolute;bottom:-70px;right:-40px;width:200px;height:200px;border-radius:50%;background:rgba(245,133,31,0.05);z-index:0"></div>
+
+  <!-- Header bar -->
+  <div style="position:absolute;top:0;left:0;width:794px;height:56px;background:#1A1A1A;border-bottom:3px solid #F5851F;z-index:10">
+    <div style="position:absolute;top:14px;left:40px;width:500px;font-size:11.5px;font-weight:800;color:#fff;letter-spacing:.4px;line-height:1.2;white-space:nowrap">ACREDITTA ISO</div>
+    <div style="position:absolute;top:33px;left:40px;width:500px;font-size:8px;color:rgba(255,255,255,0.55);letter-spacing:.3px;line-height:1;white-space:nowrap">Certificaciones que generan confianza</div>
+    <div style="position:absolute;top:22px;left:0;width:754px;font-size:11px;font-weight:700;color:rgba(255,255,255,0.9);letter-spacing:.3px;line-height:1;text-align:right;white-space:nowrap"><?=sanitize($num)?></div>
+  </div>
+
+  <!-- Contenido principal -->
+  <div style="position:absolute;top:56px;left:0;right:0;bottom:50px;z-index:10;overflow:hidden;text-align:center">
+
+    <!-- Emblema + wordmark -->
+    <div style="margin-top:46px">
+      <img src="<?=$IMG_ACREDITTA?>" alt="Acreditta ISO" style="height:118px;width:auto;object-fit:contain;display:inline-block">
+    </div>
+    <div style="margin-top:10px;font-size:30px;font-weight:900;color:#1A1A1A;letter-spacing:3px;line-height:1">ACREDITTA <span style="color:#F5851F">ISO</span></div>
+    <div style="margin-top:5px;font-size:9px;color:#94a3b8;letter-spacing:2.5px;text-transform:uppercase">Certificaciones que generan confianza</div>
+
+    <!-- Separador decorativo -->
+    <div style="margin:16px 0 14px">
+      <table style="border-collapse:collapse;margin:0 auto"><tr>
+        <td style="vertical-align:middle"><div style="width:60px;height:1px;background:#e2e8f0"></div></td>
+        <td style="padding:0 10px;vertical-align:middle"><div style="width:6px;height:6px;border-radius:50%;background:#F5851F"></div></td>
+        <td style="vertical-align:middle"><div style="width:60px;height:1px;background:#e2e8f0"></div></td>
+      </tr></table>
+    </div>
+
+    <!-- Título + empresa + normas -->
+    <div style="padding:0 40px">
+      <div style="font-size:54px;font-weight:900;color:#1A1A1A;letter-spacing:-2px;line-height:1">PROPUESTA DE</div>
+      <div style="font-size:54px;font-weight:900;color:#F5851F;letter-spacing:-2px;line-height:1;margin-top:4px">CONSULTORÍA ISO</div>
+      <div style="height:1px;background:#e2e8f0;margin:16px 60px"></div>
+      <div style="font-size:8px;color:#94a3b8;letter-spacing:3.5px;text-transform:uppercase;margin-bottom:9px">Preparado exclusivamente para</div>
+      <div style="font-size:27px;font-weight:900;color:#1A1A1A;letter-spacing:-.5px;line-height:1.15"><?=sanitize(strtoupper($cot['nombre_empresa']))?></div>
+      <?php if(!empty($normas)):?>
+      <div style="margin-top:13px;display:inline-block">
+        <table style="border-collapse:collapse"><tr>
+          <td style="vertical-align:middle;padding-right:10px">
+            <div style="font-size:7.5px;color:#94a3b8;letter-spacing:2px;text-transform:uppercase;white-space:nowrap">Normas cotizadas</div>
+          </td>
+          <?php foreach($normas as $ni):?>
+          <td style="vertical-align:middle;padding:0 3px">
+            <div style="background:rgba(245,133,31,0.10);border:1px solid rgba(245,133,31,0.40);border-radius:4px;padding:4px 10px;font-size:10px;font-weight:800;color:#F5851F;letter-spacing:.3px;white-space:nowrap"><?=sanitize($ni['codigo'])?></div>
+          </td>
+          <?php endforeach?>
+        </tr></table>
+      </div>
+      <?php endif?>
+    </div>
+
+    <!-- Info card -->
+    <div style="margin:16px 72px 0">
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:2px solid #F5851F;border-radius:6px;padding:20px 28px">
+        <table style="width:100%;border-collapse:collapse"><tr>
+          <td style="width:50%;vertical-align:top;padding-right:24px;border-right:1px solid #e2e8f0">
+            <div style="font-size:7px;font-weight:700;color:#F5851F;letter-spacing:1.4px;text-transform:uppercase;margin-bottom:4px">FECHA DE EMISIÓN</div>
+            <div style="font-size:14px;font-weight:700;color:#1A1A1A;margin-bottom:16px"><?=$fecha_larga?></div>
+            <div style="font-size:7px;font-weight:700;color:#F5851F;letter-spacing:1.4px;text-transform:uppercase;margin-bottom:4px">ASESOR COMERCIAL</div>
+            <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:3px"><?=sanitize($asesor)?></div>
+            <div style="font-size:9px;color:#94a3b8"><?=sanitize($asesor_tel)?> · <?=sanitize($asesor_em)?></div>
+          </td>
+          <td style="width:50%;vertical-align:top;padding-left:24px">
+            <div style="font-size:7px;font-weight:700;color:#F5851F;letter-spacing:1.4px;text-transform:uppercase;margin-bottom:4px">N° DE COTIZACIÓN</div>
+            <div style="font-size:14px;font-weight:700;color:#1A1A1A;margin-bottom:16px"><?=sanitize($num)?></div>
+            <div style="font-size:7px;font-weight:700;color:#F5851F;letter-spacing:1.4px;text-transform:uppercase;margin-bottom:4px">OFERTA VENCE EL</div>
+            <div style="font-size:14px;font-weight:800;color:#1A1A1A"><?=$fecha_vence?></div>
+            <div style="font-size:8.5px;color:#94a3b8;margin-top:3px">Válida por <?=$dias_validez_txt?></div>
+          </td>
+        </tr></table>
+      </div>
+    </div>
+
+    <!-- Respaldo (IAF + diferencial + organismos) -->
+    <div style="margin:14px 40px 0">
+      <div style="font-size:8.5px;font-weight:700;color:#94a3b8;letter-spacing:2px;text-transform:uppercase;text-align:center;margin-bottom:10px">Acreditación y Respaldo</div>
+      <table style="width:100%;border-collapse:collapse"><tr>
+        <td style="width:40%;vertical-align:middle;padding-right:14px;border-right:1px solid #e2e8f0">
+          <table style="border-collapse:collapse"><tr>
+            <td style="vertical-align:middle;padding-right:12px"><img src="<?=$IMG_IAF?>" alt="IAF" style="height:44px;width:auto;object-fit:contain;display:block"></td>
+            <td style="vertical-align:middle"><div style="font-size:9.5px;color:#475569;line-height:1.5">Miembro del <strong style="color:#1A1A1A">IAF</strong></div></td>
+          </tr></table>
+        </td>
+        <td style="vertical-align:middle;padding-left:14px">
+          <table style="width:100%;border-collapse:collapse"><tr>
+            <td style="text-align:center;padding:0 6px"><div style="font-size:16px;font-weight:900;color:#F5851F;line-height:1">3 días</div><div style="font-size:8px;color:#94a3b8;margin-top:2px;letter-spacing:.5px">Certificación</div></td>
+            <td style="text-align:center;padding:0 6px;border-left:1px solid #e2e8f0"><div style="font-size:16px;font-weight:900;color:#1A1A1A;line-height:1">100%</div><div style="font-size:8px;color:#94a3b8;margin-top:2px;letter-spacing:.5px">Llave en mano</div></td>
+            <td style="text-align:center;padding:0 6px;border-left:1px solid #e2e8f0"><div style="font-size:16px;font-weight:900;color:#F5851F;line-height:1">IAF</div><div style="font-size:8px;color:#94a3b8;margin-top:2px;letter-spacing:.5px">Reconocido</div></td>
+          </tr></table>
+        </td>
+      </tr></table>
+      <div style="margin-top:11px">
+        <div style="font-size:7.5px;font-weight:700;color:#94a3b8;letter-spacing:1.6px;text-transform:uppercase;text-align:center;margin-bottom:7px">Organismos de Acreditación</div>
+        <table style="width:100%;border-collapse:collapse"><tr>
+          <td style="padding:0 3px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 6px;text-align:center"><img src="<?=$IMG_UAF?>" alt="UAF" style="height:24px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle"></div></td>
+          <td style="padding:0 3px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 6px;text-align:center"><img src="<?=$IMG_IAS?>" alt="IAS" style="height:24px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle"></div></td>
+          <td style="padding:0 3px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 6px;text-align:center"><img src="<?=$IMG_EUROPEAN?>" alt="EA" style="height:24px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle"></div></td>
+          <td style="padding:0 3px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 6px;text-align:center"><img src="<?=$IMG_EGAC?>" alt="EGAC" style="height:24px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle"></div></td>
+        </tr></table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer bar -->
+  <div style="position:absolute;top:1073px;left:0;width:794px;height:50px;background:#1A1A1A;border-top:2px solid #F5851F;z-index:10">
+    <div style="position:absolute;top:19px;left:40px;width:355px;font-size:8.5px;font-weight:600;color:rgba(255,255,255,0.7);line-height:1;white-space:nowrap">www.acredittaiso.pe</div>
+    <div style="position:absolute;top:19px;left:0;width:754px;font-size:8.5px;font-weight:600;color:rgba(255,255,255,0.7);line-height:1;text-align:right;white-space:nowrap">1 / 4</div>
+  </div>
+</div>
+<?php else: ?>
 <div class="pg" style="background:#060d1c;overflow:hidden">
   <!-- Foto corporativa: fondo completo -->
   <img src="<?=$IMG_FOTO_CORP?>" alt="" style="position:absolute;top:0;left:0;width:794px;height:1123px;object-fit:cover;object-position:center 30%;z-index:0">
@@ -262,7 +389,7 @@ function pg_hdr($num,$fecha,$pg=''){echo'
   <div style="position:absolute;top:56px;left:0;right:0;bottom:50px;z-index:10;overflow:hidden;text-align:center">
 
     <!-- Logo GGI -->
-    <div style="margin-top:52px">
+    <div style="margin-top:34px">
       <img src="<?=$IMG_LOGO_COTI?>" alt="GGI" style="height:96px;width:auto;object-fit:contain;display:inline-block;filter:brightness(0) invert(1);opacity:.92">
     </div>
 
@@ -299,7 +426,7 @@ function pg_hdr($num,$fecha,$pg=''){echo'
     </div>
 
     <!-- Info card -->
-    <div style="margin:18px 72px 0">
+    <div style="margin:12px 72px 0">
       <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-top:2px solid rgba(45,177,64,0.5);border-radius:6px;padding:22px 28px">
         <table style="width:100%;border-collapse:collapse"><tr>
           <td style="width:50%;vertical-align:top;padding-right:24px;border-right:1px solid rgba(255,255,255,0.08)">
@@ -320,41 +447,33 @@ function pg_hdr($num,$fecha,$pg=''){echo'
       </div>
     </div>
 
-    <!-- Certificadoras acreditadas -->
-    <div style="margin:16px 40px 0">
-      <div style="font-size:8.5px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:2px;text-transform:uppercase;text-align:center;margin-bottom:12px">Certificadoras Acreditadas</div>
+        <!-- Respaldo (fusionado desde P2) -->
+    <div style="margin:14px 40px 0">
+      <div style="font-size:8.5px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:2px;text-transform:uppercase;text-align:center;margin-bottom:10px">Acreditación y Respaldo</div>
       <table style="width:100%;border-collapse:collapse"><tr>
-        <td style="padding:0 4px">
-          <div style="background:#fff;border-radius:8px;padding:14px 8px;text-align:center;box-shadow:0 3px 12px rgba(0,0,0,0.45)">
-            <img src="<?=$IMG_QRO?>" alt="QRO" style="height:44px;width:auto;object-fit:contain;display:block;margin:0 auto">
-          </div>
+        <td style="width:40%;vertical-align:middle;padding-right:14px;border-right:1px solid rgba(255,255,255,0.1)">
+          <table style="border-collapse:collapse"><tr>
+            <td style="vertical-align:middle;padding-right:14px"><img src="<?=$IMG_IAF?>" alt="IAF" style="height:50px;width:auto;object-fit:contain;display:block"></td>
+            <td style="vertical-align:middle"><div style="font-size:9.5px;color:rgba(255,255,255,0.72);line-height:1.5">Miembro del <strong style="color:#fff">IAF</strong></div></td>
+          </tr></table>
         </td>
-        <td style="padding:0 4px">
-          <div style="background:#fff;border-radius:8px;padding:14px 8px;text-align:center;box-shadow:0 3px 12px rgba(0,0,0,0.45)">
-            <img src="<?=$IMG_HAWKEYE?>" alt="Hawk Eye" style="height:44px;width:auto;object-fit:contain;display:block;margin:0 auto">
-          </div>
-        </td>
-        <td style="padding:0 4px">
-          <div style="background:#fff;border-radius:8px;padding:14px 8px;text-align:center;box-shadow:0 3px 12px rgba(0,0,0,0.45)">
-            <img src="<?=$IMG_QFS?>" alt="QFS" style="height:44px;width:auto;object-fit:contain;display:block;margin:0 auto">
-          </div>
-        </td>
-        <td style="padding:0 4px">
-          <div style="background:#fff;border-radius:8px;padding:14px 8px;text-align:center;box-shadow:0 3px 12px rgba(0,0,0,0.45)">
-            <img src="<?=$IMG_INGRAIN?>" alt="Ingrain" style="height:44px;width:auto;object-fit:contain;display:block;margin:0 auto">
-          </div>
-        </td>
-        <td style="padding:0 4px">
-          <div style="background:#fff;border-radius:8px;padding:14px 8px;text-align:center;box-shadow:0 3px 12px rgba(0,0,0,0.45)">
-            <img src="<?=$IMG_SQC?>" alt="SQC" style="height:44px;width:auto;object-fit:contain;display:block;margin:0 auto">
-          </div>
-        </td>
-        <td style="padding:0 4px">
-          <div style="background:#fff;border-radius:8px;padding:14px 8px;text-align:center;box-shadow:0 3px 12px rgba(0,0,0,0.45)">
-            <img src="<?=$IMG_UKS?>" alt="UKS" style="height:44px;width:auto;object-fit:contain;display:block;margin:0 auto">
-          </div>
+        <td style="vertical-align:middle;padding-left:14px">
+          <table style="width:100%;border-collapse:collapse"><tr>
+            <td style="text-align:center;padding:0 6px"><div style="font-size:16px;font-weight:900;color:#2DB140;line-height:1">3 días</div><div style="font-size:8px;color:rgba(255,255,255,0.5);margin-top:2px;letter-spacing:.5px">Certificación</div></td>
+            <td style="text-align:center;padding:0 6px;border-left:1px solid rgba(255,255,255,0.1)"><div style="font-size:16px;font-weight:900;color:#fff;line-height:1">100%</div><div style="font-size:8px;color:rgba(255,255,255,0.5);margin-top:2px;letter-spacing:.5px">Llave en mano</div></td>
+            <td style="text-align:center;padding:0 6px;border-left:1px solid rgba(255,255,255,0.1)"><div style="font-size:16px;font-weight:900;color:#2DB140;line-height:1">IAF</div><div style="font-size:8px;color:rgba(255,255,255,0.5);margin-top:2px;letter-spacing:.5px">Reconocido</div></td>
+          </tr></table>
         </td>
       </tr></table>
+      <div style="margin-top:11px">
+        <div style="font-size:7.5px;font-weight:700;color:rgba(255,255,255,0.35);letter-spacing:1.6px;text-transform:uppercase;text-align:center;margin-bottom:7px">Organismos de Acreditación</div>
+        <table style="width:100%;border-collapse:collapse"><tr>
+          <td style="padding:0 3px"><div style="background:#fff;border-radius:6px;padding:7px 6px;text-align:center"><img src="<?=$IMG_UAF?>" alt="UAF" style="height:24px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle"></div></td>
+          <td style="padding:0 3px"><div style="background:#fff;border-radius:6px;padding:7px 6px;text-align:center"><img src="<?=$IMG_IAS?>" alt="IAS" style="height:24px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle"></div></td>
+          <td style="padding:0 3px"><div style="background:#fff;border-radius:6px;padding:7px 6px;text-align:center"><img src="<?=$IMG_EUROPEAN?>" alt="EA" style="height:24px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle"></div></td>
+          <td style="padding:0 3px"><div style="background:#fff;border-radius:6px;padding:7px 6px;text-align:center"><img src="<?=$IMG_EGAC?>" alt="EGAC" style="height:24px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle"></div></td>
+        </tr></table>
+      </div>
     </div>
 
   </div>
@@ -362,253 +481,11 @@ function pg_hdr($num,$fecha,$pg=''){echo'
   <!-- Footer bar (absolute, alineado a 40px del body) -->
   <div style="position:absolute;top:1073px;left:0;width:794px;height:50px;background:rgba(0,0,0,0.45);border-top:1px solid rgba(255,255,255,0.07);z-index:10">
     <div style="position:absolute;top:19px;left:40px;width:355px;font-size:8.5px;font-weight:600;color:rgba(255,255,255,0.6);line-height:1;white-space:nowrap">www.groupglobaliso.com</div>
-    <div style="position:absolute;top:19px;left:0;width:754px;font-size:8.5px;font-weight:600;color:rgba(255,255,255,0.6);line-height:1;text-align:right;white-space:nowrap">1 / 6</div>
+    <div style="position:absolute;top:19px;left:0;width:754px;font-size:8.5px;font-weight:600;color:rgba(255,255,255,0.6);line-height:1;text-align:right;white-space:nowrap">1 / 4</div>
   </div>
 </div>
 
-<!-- P2: ACREDITACIÓN Y RESPALDO -->
-<div class="pg pg-inner" style="background:#fff">
-<div style="position:absolute;top:0;left:0;width:3px;height:1123px;background:#2DB140;z-index:5"></div>
-<div style="position:absolute;top:0;left:3px;right:0;height:56px;overflow:hidden"><?php pg_hdr($num,$fecha,'2 / 6')?></div>
-<div style="position:absolute;top:56px;left:3px;right:0;height:1021px;overflow:hidden">
-  <div style="position:absolute;top:0;left:0;right:0;height:1021px;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between">
-
-    <!-- Hero -->
-    <div style="padding:44px 40px 34px;border-bottom:1px solid #e2e8f0">
-      <div style="font-size:46px;font-weight:900;line-height:.95;letter-spacing:-1.5px;color:#1e293b">ACREDITACIÓN</div>
-      <div style="font-size:46px;font-weight:900;line-height:.95;letter-spacing:-1.5px;color:#2DB140;margin-top:4px">Y RESPALDO</div>
-      <table style="margin-top:20px;border-collapse:collapse"><tr>
-        <td style="vertical-align:middle;padding-right:14px">
-          <img src="<?=$IMG_IAF?>" alt="IAF" style="height:40px;width:auto;object-fit:contain;display:block">
-        </td>
-        <td style="vertical-align:middle;border-left:1px solid #e2e8f0;padding-left:14px">
-          <div style="font-size:12px;color:#475569;line-height:1.65">Miembro activo del <strong style="color:#1e293b">International Accreditation Forum (IAF)</strong></div>
-        </td>
-      </tr></table>
-    </div>
-
-    <!-- Texto de respaldo -->
-    <div style="padding:16px 40px 10px">
-      <p style="font-size:13px;color:#475569;line-height:1.7;text-align:justify;margin-bottom:10px"><strong style="color:#1e293b">Partners oficiales de organismos de certificación acreditados internacionalmente</strong>, lo que nos permite ofrecer <strong style="color:#1e293b">certificaciones ISO válidas, reconocidas y aceptadas</strong> en auditorías, licitaciones públicas y procesos comerciales a nivel nacional e internacional.</p>
-      <p style="font-size:13px;color:#475569;line-height:1.7;text-align:justify">Este respaldo nos posiciona como un <strong style="color:#1e293b">aliado estratégico confiable</strong>, garantizando certificaciones verificables y alineadas a estándares globales, generando total seguridad para tu empresa.</p>
-    </div>
-
-    <!-- 4 beneficios -->
-    <div style="padding:14px 40px 10px">
-      <div style="font-size:9px;font-weight:700;color:#2DB140;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:10px">Respaldo que marca la diferencia</div>
-      <table style="width:100%;border-collapse:separate;border-spacing:0 7px">
-        <?php
-        $bens=[
-          ['num'=>'01','color'=>'#1A3A8F','title'=>'Acreditación Internacional','desc'=>'Certificado reconocido por <strong style="color:#1e293b">OSCE</strong> y todas las entidades del Estado peruano.'],
-          ['num'=>'02','color'=>'#2DB140','title'=>'Válido en Licitaciones','desc'=>'Aceptado en todos los procesos de <strong style="color:#1e293b">contratación pública</strong> a nivel nacional.'],
-          ['num'=>'03','color'=>'#1A3A8F','title'=>'Reconocido Internacionalmente','desc'=>'Avalado por el <strong style="color:#1e293b">IAF</strong> y aceptado en auditorías y procesos comerciales globales.'],
-          ['num'=>'04','color'=>'#2DB140','title'=>'Verificable en Línea','desc'=>'Consulta pública en <strong style="color:#1e293b">bases de datos IAF</strong> verificable por cualquier organismo.'],
-        ];
-        foreach($bens as $b):?>
-        <tr>
-          <td style="vertical-align:middle;width:44px;padding-right:0">
-            <div style="background:<?=$b['color']?>;border-radius:6px 0 0 6px;width:44px;padding:10px 0;text-align:center">
-              <div style="font-size:9px;font-weight:900;color:rgba(255,255,255,0.6);line-height:1"><?=$b['num']?></div>
-            </div>
-          </td>
-          <td style="vertical-align:middle;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;border-radius:0 6px 6px 0;padding:9px 14px">
-            <div style="font-size:11.5px;font-weight:800;color:#1e293b;margin-bottom:2px"><?=$b['title']?></div>
-            <div style="font-size:10px;color:#475569;line-height:1.5"><?=$b['desc']?></div>
-          </td>
-        </tr>
-        <?php endforeach?>
-      </table>
-    </div>
-
-    <!-- Organismos de acreditación -->
-    <div style="padding:10px 40px 10px">
-      <div style="font-size:9px;font-weight:700;color:#2DB140;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:12px">Organismos de Acreditación</div>
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:6px 0">
-        <table style="width:100%;border-collapse:collapse"><tr>
-          <td style="text-align:center;padding:10px 8px;border-right:1px solid #e2e8f0">
-            <img src="<?=$IMG_OECE?>" alt="OECE" style="height:38px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle">
-          </td>
-          <td style="text-align:center;padding:10px 8px;border-right:1px solid #e2e8f0">
-            <img src="<?=$IMG_UAF?>" alt="UAF" style="height:38px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle">
-          </td>
-          <td style="text-align:center;padding:10px 8px;border-right:1px solid #e2e8f0">
-            <img src="<?=$IMG_IAS?>" alt="IAS" style="height:38px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle">
-          </td>
-          <td style="text-align:center;padding:10px 8px;border-right:1px solid #e2e8f0">
-            <img src="<?=$IMG_EUROPEAN?>" alt="EA" style="height:38px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle">
-          </td>
-          <td style="text-align:center;padding:10px 8px">
-            <img src="<?=$IMG_EGAC?>" alt="EGAC" style="height:38px;width:auto;object-fit:contain;display:inline-block;vertical-align:middle">
-          </td>
-        </tr></table>
-      </div>
-    </div>
-
-    <!-- Beneficios clave -->
-    <div style="padding:10px 40px 30px">
-      <div style="font-size:9px;font-weight:700;color:#2DB140;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:10px">Nuestro Diferencial</div>
-      <table style="width:100%;border-collapse:collapse">
-        <tr>
-          <td style="vertical-align:top;padding-right:6px;width:33%">
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid #2DB140;border-radius:0 0 6px 6px;padding:10px 12px 8px">
-              <div style="font-size:18px;font-weight:900;color:#2DB140;line-height:1">3 días</div>
-              <div style="font-size:11px;font-weight:700;color:#1e293b;margin-top:3px">Tiempo de certificación</div>
-              <div style="font-size:9.5px;color:#64748b;line-height:1.5;margin-top:4px">Desde el pago inicial hasta la emisión del certificado oficial.</div>
-            </div>
-          </td>
-          <td style="vertical-align:top;padding:0 3px;width:33%">
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid #1A3A8F;border-radius:0 0 6px 6px;padding:10px 12px 8px">
-              <div style="font-size:18px;font-weight:900;color:#1A3A8F;line-height:1">100%</div>
-              <div style="font-size:11px;font-weight:700;color:#1e293b;margin-top:3px">Servicio Llave en Mano</div>
-              <div style="font-size:9.5px;color:#64748b;line-height:1.5;margin-top:4px">GGI gestiona todo el proceso sin que usted tenga que hacerlo.</div>
-            </div>
-          </td>
-          <td style="vertical-align:top;padding-left:6px;width:33%">
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid #2DB140;border-radius:0 0 6px 6px;padding:10px 12px 8px">
-              <div style="font-size:18px;font-weight:900;color:#2DB140;line-height:1">IAF</div>
-              <div style="font-size:11px;font-weight:700;color:#1e293b;margin-top:3px">Certificado reconocido</div>
-              <div style="font-size:9.5px;color:#64748b;line-height:1.5;margin-top:4px">Aceptado en licitaciones, OSCE y organismos internacionales.</div>
-            </div>
-          </td>
-        </tr>
-      </table>
-    </div>
-
-  </div>
-</div>
-<?php pftr($num,'2 / 6')?>
-</div>
-
-<!-- P3: EXPERIENCIA & RESULTADOS -->
-<div class="pg pg-inner" style="background:#fff">
-<div style="position:absolute;top:0;left:0;width:3px;height:1123px;background:#2DB140;z-index:5"></div>
-<div style="position:absolute;top:0;left:3px;right:0;height:56px;overflow:hidden"><?php pg_hdr($num,$fecha,'3 / 6')?></div>
-<div style="position:absolute;top:56px;left:3px;right:0;height:1021px;overflow:hidden">
-  <div style="position:absolute;top:0;left:0;right:0;height:1021px;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between">
-
-    <!-- Hero -->
-    <div style="padding:30px 40px 22px;border-bottom:1px solid #e2e8f0">
-      <div style="font-size:46px;font-weight:900;line-height:.95;letter-spacing:-1.5px;color:#1e293b">EXPERIENCIA</div>
-      <div style="font-size:46px;font-weight:900;line-height:.95;letter-spacing:-1.5px;color:#2DB140;margin-top:4px">& RESULTADOS</div>
-      <div style="margin-top:8px;font-size:11px;color:#475569;line-height:1.5">Trayectoria comprobada respaldando a empresas de todo el Perú en sus procesos de certificación ISO</div>
-    </div>
-
-    <!-- Estadísticas -->
-    <div style="padding:20px 40px 14px">
-      <div style="font-size:9px;font-weight:700;color:#2DB140;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:14px">Nuestros Números</div>
-      <table style="width:100%;border-collapse:collapse">
-        <tr>
-          <td style="padding-right:6px">
-            <div style="background:#1e293b;border-radius:6px;padding:20px 8px;text-align:center;position:relative;overflow:hidden">
-              <div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:#2DB140"></div>
-              <div style="font-size:48px;font-weight:900;color:#2DB140;line-height:1;letter-spacing:-1px">542<span style="font-size:28px">+</span></div>
-              <div style="font-size:9.5px;font-weight:700;color:#fff;margin-top:7px;text-transform:uppercase;letter-spacing:.5px">Certificaciones ISO</div>
-              <div style="font-size:8.5px;color:rgba(255,255,255,.35);margin-top:2px">emitidas a nivel nacional</div>
-            </div>
-          </td>
-          <td style="padding:0 3px">
-            <div style="background:#1e293b;border-radius:6px;padding:20px 8px;text-align:center;position:relative;overflow:hidden">
-              <div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:#2DB140"></div>
-              <div style="font-size:48px;font-weight:900;color:#2DB140;line-height:1;letter-spacing:-1px">488<span style="font-size:28px">+</span></div>
-              <div style="font-size:9.5px;font-weight:700;color:#fff;margin-top:7px;text-transform:uppercase;letter-spacing:.5px">Empresas Certificadas</div>
-              <div style="font-size:8.5px;color:rgba(255,255,255,.35);margin-top:2px">en todos los sectores</div>
-            </div>
-          </td>
-          <td style="padding:0 3px">
-            <div style="background:#1e293b;border-radius:6px;padding:20px 8px;text-align:center;position:relative;overflow:hidden">
-              <div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:#2DB140"></div>
-              <div style="font-size:48px;font-weight:900;color:#2DB140;line-height:1;letter-spacing:-1px">18<span style="font-size:28px">+</span></div>
-              <div style="font-size:9.5px;font-weight:700;color:#fff;margin-top:7px;text-transform:uppercase;letter-spacing:.5px">Departamentos</div>
-              <div style="font-size:8.5px;color:rgba(255,255,255,.35);margin-top:2px">con presencia activa</div>
-            </div>
-          </td>
-          <td style="padding-left:6px">
-            <div style="background:#1e293b;border-radius:6px;padding:20px 8px;text-align:center;position:relative;overflow:hidden">
-              <div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:#2DB140"></div>
-              <div style="font-size:48px;font-weight:900;color:#2DB140;line-height:1;letter-spacing:-1px">100<span style="font-size:28px">%</span></div>
-              <div style="font-size:9.5px;font-weight:700;color:#fff;margin-top:7px;text-transform:uppercase;letter-spacing:.5px">Soporte Incluido</div>
-              <div style="font-size:8.5px;color:rgba(255,255,255,.35);margin-top:2px">acompañamiento integral</div>
-            </div>
-          </td>
-        </tr>
-      </table>
-    </div>
-
-    <!-- Sectores atendidos -->
-    <div style="padding:14px 40px 14px">
-      <div style="font-size:9px;font-weight:700;color:#2DB140;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:12px">Sectores que hemos certificado</div>
-      <table style="width:100%;border-collapse:collapse">
-        <tr>
-          <td style="padding:0 5px 7px 0"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Construcción</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 45001</div></div></td>
-          <td style="padding:0 5px 7px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Manufactura</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 14001</div></div></td>
-          <td style="padding:0 5px 7px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Servicios</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 37001</div></div></td>
-          <td style="padding:0 0 7px 5px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Minería</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 14001 · ISO 45001</div></div></td>
-        </tr>
-        <tr>
-          <td style="padding:0 5px 7px 0"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Salud</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 45001</div></div></td>
-          <td style="padding:0 5px 7px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Logística</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 14001</div></div></td>
-          <td style="padding:0 5px 7px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Tecnología</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 37001</div></div></td>
-          <td style="padding:0 0 7px 5px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Comercio</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 37001</div></div></td>
-        </tr>
-        <tr>
-          <td style="padding:0 5px 7px 0"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Educación</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 50001</div></div></td>
-          <td style="padding:0 5px 7px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Transporte</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 14001</div></div></td>
-          <td style="padding:0 5px 7px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Energía</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 14001 · ISO 50001</div></div></td>
-          <td style="padding:0 0 7px 5px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Alimentos</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 14001</div></div></td>
-        </tr>
-        <tr>
-          <td style="padding:0 5px 0 0"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Agricultura</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 14001 · ISO 9001</div></div></td>
-          <td style="padding:0 5px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Seguridad</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 45001 · ISO 37001</div></div></td>
-          <td style="padding:0 5px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Consultoría</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 37001</div></div></td>
-          <td style="padding:0 0 0 5px"><div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #2DB140;border-radius:0 4px 4px 0;padding:10px 12px"><div style="font-size:11.5px;font-weight:800;color:#1e293b">Ingeniería</div><div style="font-size:9.5px;color:#64748b;margin-top:2px">ISO 9001 · ISO 45001</div></div></td>
-        </tr>
-      </table>
-    </div>
-
-    <!-- Preguntas Frecuentes -->
-    <div style="padding:14px 40px 14px">
-      <div style="font-size:9px;font-weight:700;color:#2DB140;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:12px">Preguntas Frecuentes</div>
-      <table style="width:100%;border-collapse:collapse">
-        <tr>
-          <td style="width:50%;vertical-align:top;padding-right:10px">
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:12px 14px;margin-bottom:8px">
-              <div style="font-size:11.5px;font-weight:800;color:#1e293b;margin-bottom:5px">¿El certificado es válido para licitaciones del Estado?</div>
-              <div style="font-size:10.5px;color:#475569;line-height:1.6">Sí. Nuestros certificados son reconocidos por el OSCE y aceptados en todos los procesos de contratación pública a nivel nacional.</div>
-            </div>
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:12px 14px">
-              <div style="font-size:11.5px;font-weight:800;color:#1e293b;margin-bottom:5px">¿Cuánto tiempo tarda el proceso?</div>
-              <div style="font-size:10.5px;color:#475569;line-height:1.6">El certificado se emite en 3 días útiles desde la firma del contrato y el pago inicial, con acompañamiento completo de nuestro equipo especializado.</div>
-            </div>
-          </td>
-          <td style="width:50%;vertical-align:top;padding-left:10px">
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:12px 14px;margin-bottom:8px">
-              <div style="font-size:11.5px;font-weight:800;color:#1e293b;margin-bottom:5px">¿Qué garantía tienen de obtener el certificado?</div>
-              <div style="font-size:10.5px;color:#475569;line-height:1.6">Nuestra alianza directa con organismos certificadores acreditados internacionalmente nos permite gestionar y coordinar todo el proceso en nombre de su empresa, garantizando la emisión del certificado en el plazo acordado.</div>
-            </div>
-            <div style="background:#1e293b;border-radius:4px;padding:12px 14px">
-              <div style="font-size:10.5px;font-weight:700;color:rgba(255,255,255,0.75);line-height:1.7;margin-bottom:6px">"Nos comprometemos a que su empresa obtenga la certificación ISO de forma eficiente, con el máximo respaldo técnico y en el menor tiempo posible."</div>
-              <div style="font-size:9px;color:#2DB140;font-weight:700;letter-spacing:.5px">GROUP GLOBAL ISO S.A.C.</div>
-            </div>
-          </td>
-        </tr>
-      </table>
-    </div>
-
-    <!-- Normas ISO -->
-    <div style="padding:14px 40px 30px">
-      <table style="width:100%;border-collapse:collapse"><tr>
-        <?php foreach($isos_img as $key=>$url): if($url):?>
-        <td style="text-align:center;padding:4px 2px">
-          <img src="<?=$url?>" alt="<?=$key?>" style="width:90px;height:90px;object-fit:contain;display:block;margin:0 auto">
-        </td>
-        <?php endif; endforeach?>
-      </tr></table>
-    </div>
-
-  </div>
-</div>
-<?php pftr($num,'3 / 6')?>
-</div>
+<?php endif; ?>
 
 <!-- P5: PROPUESTA ECONÓMICA – diseño factura -->
 <?php
@@ -619,7 +496,7 @@ $lbl_a2=$meses_es[(int)date('n',$ts_base)].' '.date('Y',strtotime('+2 years',$ts
 ?>
 <div class="pg pg-inner" style="background:#fff">
 <div style="position:absolute;top:0;left:0;width:3px;height:1123px;background:#2DB140;z-index:5"></div>
-<div style="position:absolute;top:0;left:3px;right:0;height:56px;overflow:hidden"><?php pg_hdr($num,$fecha,'4 / 6')?></div>
+<div style="position:absolute;top:0;left:3px;right:0;height:56px;overflow:hidden"><?php pg_hdr($num,$fecha,'2 / 4')?></div>
 <div style="position:absolute;top:56px;left:3px;right:0;height:1021px;overflow:hidden">
   <!-- Contenido -->
   <div style="position:absolute;top:0;left:0;right:0;height:1021px;overflow:hidden;display:flex;flex-direction:column">
@@ -760,13 +637,13 @@ $lbl_a2=$meses_es[(int)date('n',$ts_base)].' '.date('Y',strtotime('+2 years',$ts
   </div>
 
 </div>
-<?php pftr($num,'4 / 6')?>
+<?php pftr($num,'2 / 4')?>
 </div>
 
 <!-- P5: CONDICIONES COMERCIALES + CUENTAS BANCARIAS -->
 <div class="pg pg-inner" style="background:#fff">
 <div style="position:absolute;top:0;left:0;width:3px;height:1123px;background:#2DB140;z-index:5"></div>
-<div style="position:absolute;top:0;left:3px;right:0;height:56px;overflow:hidden"><?php pg_hdr($num,$fecha,'5 / 6')?></div>
+<div style="position:absolute;top:0;left:3px;right:0;height:56px;overflow:hidden"><?php pg_hdr($num,$fecha,'3 / 4')?></div>
 <div style="position:absolute;top:56px;left:3px;right:0;height:1021px;overflow:hidden">
   <div style="position:absolute;top:0;left:0;right:0;height:1021px;overflow:hidden;display:flex;flex-direction:column">
 
@@ -885,13 +762,13 @@ $lbl_a2=$meses_es[(int)date('n',$ts_base)].' '.date('Y',strtotime('+2 years',$ts
     </div><!-- /padding wrapper -->
   </div>
 </div>
-<?php pftr($num,'5 / 6')?>
+<?php pftr($num,'3 / 4')?>
 </div>
 
 <!-- P6: ACEPTACIÓN DE PROPUESTA -->
 <div class="pg pg-inner" style="background:#fff">
 <div style="position:absolute;top:0;left:0;width:3px;height:1123px;background:#2DB140;z-index:5"></div>
-<div style="position:absolute;top:0;left:3px;right:0;height:56px;overflow:hidden"><?php pg_hdr($num,$fecha,'6 / 6')?></div>
+<div style="position:absolute;top:0;left:3px;right:0;height:56px;overflow:hidden"><?php pg_hdr($num,$fecha,'4 / 4')?></div>
 <div style="position:absolute;top:56px;left:3px;right:0;height:1021px;overflow:hidden">
   <div style="position:absolute;top:0;left:0;right:0;height:1021px;overflow:hidden;display:flex;flex-direction:column">
 
@@ -1009,7 +886,7 @@ $lbl_a2=$meses_es[(int)date('n',$ts_base)].' '.date('Y',strtotime('+2 years',$ts
     </div><!-- /content -->
   </div>
 </div>
-<?php pftr($num,'6 / 6')?>
+<?php pftr($num,'4 / 4')?>
 </div>
 </div><!-- /#pg-wrap -->
 
@@ -1039,6 +916,14 @@ document.addEventListener('DOMContentLoaded',scalePdf);
 <?php
 if ($_generar_pdf) {
     $html = ob_get_clean();
+
+    if ($marca === 'acreditta') {
+        $html = str_replace(
+            ['#2DB140', 'rgba(45,177,64', '#1A3A8F', '#1e293b', '>GROUP GLOBAL ISO<', 'www.groupglobaliso.com', 'Consultor&iacute;a y Certificaci&oacute;n ISO'],
+            ['#F5851F', 'rgba(245,133,31', '#1A1A1A', '#1A1A1A', '>ACREDITTA ISO<', 'www.acredittaiso.pe', 'Certificaciones que generan confianza'],
+            $html
+        );
+    }
 
     require_once __DIR__ . '/../../vendor/autoload.php';
 

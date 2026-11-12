@@ -12,7 +12,7 @@ require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
 $user = auth_user();
-require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas', 'gestor_logistico', 'delivery');
+require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas','gerente_comercial', 'gestor_logistico', 'delivery', 'administracion_finanzas');
 
 $courier = strtolower($_GET['courier'] ?? '');
 if (!in_array($courier, ['olva', 'shalom'], true)) {

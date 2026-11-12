@@ -327,7 +327,7 @@ $tipo_map = [
 <div class="panel">
   <div class="panel-header">
     <div class="panel-title">Envíos de este certificado</div>
-    <?php if (has_role('gerente_general','gerente_operaciones','gestor_logistico','delivery')): ?>
+    <?php if (has_role('gerente_general','gerente_operaciones','gestor_logistico','delivery','administracion_finanzas')): ?>
     <a href="<?= APP_URL ?>/modules/envios/crear.php?certificado_id=<?= $id ?>&cliente_id=<?= $cert['cliente_id'] ?>&from=ficha" class="btn btn-outline btn-sm">+ Registrar envío</a>
     <?php endif; ?>
   </div>

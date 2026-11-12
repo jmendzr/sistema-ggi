@@ -1433,3 +1433,104 @@ th.ggi-num-right, td.ggi-num-right { text-align: right; }
 .ggi-pill-muted { background:var(--bg-hover);  color:var(--tx2); }
 :root[data-tema="oscuro"] .ggi-pill-err   { background:#450a0a !important; color:#fca5a5 !important; }
 :root[data-tema="oscuro"] .ggi-pill-info  { background:#1e293b !important; color:#94a3b8 !important; }
+
+/* ── Checkbox / radio global moderno ─────────────────────────────────────────
+   Aplica a TODOS los checkbox/radio del sistema por defecto (de marca, accesible,
+   con tema claro/oscuro y check centrado por SVG que se ve bien a cualquier tamaño).
+   Opt-out: class="no-ggi" o role="switch" conservan el aspecto nativo.
+   La clase .ggi-check queda como alias explícito para markup nuevo.            */
+input[type="checkbox"]:not(.no-ggi):not([role="switch"]),
+input[type="radio"]:not(.no-ggi),
+.ggi-check{
+  appearance:none; -webkit-appearance:none; -moz-appearance:none;
+  width:18px; height:18px; flex-shrink:0; margin:0;
+  border:2px solid var(--brd,#E2E8F0); border-radius:5px;
+  background-color:var(--bg-surface,#fff);
+  background-repeat:no-repeat; background-position:center;
+  cursor:pointer; position:relative; display:inline-block; vertical-align:middle;
+  transition:background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+input[type="radio"]:not(.no-ggi), .ggi-check.ggi-radio{ border-radius:50%; }
+
+input[type="checkbox"]:not(.no-ggi):not([role="switch"]):hover:not(:disabled),
+input[type="radio"]:not(.no-ggi):hover:not(:disabled),
+.ggi-check:hover:not(:disabled){ border-color:var(--ac,#1D4ED8); }
+
+input[type="checkbox"]:not(.no-ggi):not([role="switch"]):focus-visible,
+input[type="radio"]:not(.no-ggi):focus-visible,
+.ggi-check:focus-visible{ outline:none; box-shadow:0 0 0 3px var(--ac-soft,#DBEAFE); }
+
+input[type="checkbox"]:not(.no-ggi):not([role="switch"]):checked,
+.ggi-check:not(.ggi-radio):checked{
+  background-color:var(--ac,#1D4ED8); border-color:var(--ac,#1D4ED8);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'><path d='M5 12.5l4.5 4.5L19 7'/></svg>");
+  background-size:70%;
+}
+input[type="checkbox"]:not(.no-ggi):not([role="switch"]):indeterminate,
+.ggi-check:indeterminate{
+  background-color:var(--ac,#1D4ED8); border-color:var(--ac,#1D4ED8);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round'><path d='M6 12h12'/></svg>");
+  background-size:66%;
+}
+input[type="radio"]:not(.no-ggi):checked,
+.ggi-check.ggi-radio:checked{
+  border-color:var(--ac,#1D4ED8);
+  background-image:radial-gradient(circle at center, var(--ac,#1D4ED8) 0 40%, transparent 44%);
+}
+
+input[type="checkbox"]:not(.no-ggi):not([role="switch"]):disabled,
+input[type="radio"]:not(.no-ggi):disabled,
+.ggi-check:disabled{ opacity:.5; cursor:not-allowed; }
+
+/* Controles con toggle/switch/radio propios: su <input> va OCULTO y el visual lo
+   pinta un hermano (.toggle roles, .sw reglas, .pl-sw plantillas, .tema-option cuenta).
+   Se restaura su ocultamiento para que el estilo global de arriba no los muestre. */
+.toggle input, .pl-sw input{
+  appearance:none; -webkit-appearance:none;
+  width:0 !important; height:0 !important; position:absolute !important;
+  opacity:0 !important; margin:0 !important; border:0 !important;
+  background:none !important; box-shadow:none !important;
+}
+.sw input, .tema-option input[type="radio"]{ display:none !important; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ADJUNTAR ARCHIVO — input[type=file] global y modernizado
+   Estiliza el input y su botón nativo (::file-selector-button) sin tocar el
+   markup: cualquier <input type="file"> del sistema se ve igual y moderno.
+   Opt-out con la clase .no-ggi. Tema claro/oscuro vía tokens.
+   ══════════════════════════════════════════════════════════════════════════ */
+input[type="file"]:not(.no-ggi){
+  /* Sin forzar display/width: un input oculto por un uploader propio (display:none,
+     opacity:0, etc.) sigue oculto y no captura clics. */
+  max-width:100%; box-sizing:border-box;
+  font:inherit; font-size:13px; color:var(--tx2);
+  background:var(--bg-surface);
+  border:1.5px dashed var(--brd); border-radius:10px;
+  padding:7px 12px 7px 7px; cursor:pointer;
+  transition:border-color .15s, background .15s, box-shadow .15s;
+}
+input[type="file"]:not(.no-ggi):hover{
+  border-color:var(--ac,#1D4ED8); background:var(--bg-hover);
+}
+input[type="file"]:not(.no-ggi):focus,
+input[type="file"]:not(.no-ggi):focus-visible{
+  outline:none; border-color:var(--ac,#1D4ED8);
+  box-shadow:0 0 0 3px rgba(29,78,216,.18);
+}
+input[type="file"]:not(.no-ggi)::file-selector-button{
+  font:inherit; font-weight:700; font-size:12.5px; letter-spacing:.2px;
+  margin-right:12px; padding:8px 15px;
+  border:0; border-radius:8px; cursor:pointer;
+  background:var(--ac,#1D4ED8); color:#fff;
+  transition:filter .15s, transform .05s;
+}
+input[type="file"]:not(.no-ggi)::file-selector-button:hover{ filter:brightness(1.08); }
+input[type="file"]:not(.no-ggi)::file-selector-button:active{ transform:translateY(1px); }
+input[type="file"]:not(.no-ggi):disabled{ opacity:.55; cursor:not-allowed; border-style:solid; }
+input[type="file"]:not(.no-ggi):disabled::file-selector-button{ cursor:not-allowed; }
+/* Fallback WebKit antiguo (Safari < 16.4) */
+input[type="file"]:not(.no-ggi)::-webkit-file-upload-button{
+  font:inherit; font-weight:700; font-size:12.5px; letter-spacing:.2px;
+  margin-right:12px; padding:8px 15px; border:0; border-radius:8px;
+  background:var(--ac,#1D4ED8); color:#fff; cursor:pointer;
+}

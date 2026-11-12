@@ -43,6 +43,24 @@ const GGIConfirm = (() => {
   return { show, close };
 })();
 
+/**
+ * ggiConfirmForm(form, message, opts) — confirmar con el modal canónico y, si
+ * el usuario acepta, enviar el formulario. Reemplaza el patrón feo
+ * `onsubmit="return confirm('…')"`. Uso: onsubmit="return ggiConfirmForm(this,'¿Borrar?')".
+ * Devuelve false SIEMPRE (frena el submit inmediato; el modal lo reenvía al aceptar).
+ */
+window.ggiConfirmForm = function (form, message, opts) {
+  opts = opts || {};
+  GGIConfirm.show({
+    icon: opts.icon || 'danger',
+    title: opts.title || 'Confirmar',
+    message: message || '¿Confirmar esta acción?',
+    confirmText: opts.confirmText || 'Sí, continuar',
+    onConfirm: function () { if (form && typeof form.submit === 'function') form.submit(); }
+  });
+  return false;
+};
+
 /* ╔════════════════════════════════════════════════════════════════════════╗
    ║ 2. STATECHANGE                                                         ║
    ╚════════════════════════════════════════════════════════════════════════╝ */

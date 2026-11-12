@@ -104,6 +104,13 @@ class WaCampanas
                 ->execute([$campanaId]);
         }
 
+        // Flyer de header (si la plantilla se creó con header IMAGE). Se busca una
+        // sola vez por lote: Meta exige la media en cada envío aunque sea la misma.
+        $imgHeader = null;
+        $th = $pdo->prepare("SELECT header_media_url FROM whatsapp_templates WHERE template_name = ? LIMIT 1");
+        $th->execute([$camp['template_name']]);
+        $imgHeader = $th->fetchColumn() ?: null;
+
         $q = $pdo->prepare(
             "SELECT id, cliente_id, telefono, params_json, intentos
                FROM wa_campana_destinatarios
@@ -124,7 +131,8 @@ class WaCampanas
             $params = json_decode($f['params_json'] ?? '[]', true) ?: [];
 
             $waId = WhatsAppService::sendTemplate(
-                $f['telefono'], $camp['template_name'], $params, $camp['template_lang'] ?: 'es'
+                $f['telefono'], $camp['template_name'], $params, $camp['template_lang'] ?: 'es',
+                null, null, null, null, $imgHeader
             );
 
             if ($waId) {
@@ -195,8 +203,29 @@ class WaCampanas
         $m = ['pendiente' => 0, 'enviado' => 0, 'entregado' => 0, 'leido' => 0, 'fallido' => 0];
         foreach ($q as $r) $m[$r['estado']] = (int) $r['n'];
         $m['total'] = array_sum($m);
+        // 'respondido' es una métrica superpuesta (no un estado de entrega): no suma al total.
+        $m['respondido'] = self::respondidos($pdo, $campanaId);
 
         return $m;
+    }
+
+    /**
+     * Cuántos destinatarios RESPONDIERON tras recibir la campaña: existe un
+     * mensaje entrante suyo posterior a su envío. Se cruza por los últimos 9
+     * dígitos (móvil Perú) para tolerar formatos distintos del teléfono.
+     */
+    public static function respondidos(\PDO $pdo, int $campanaId): int
+    {
+        $q = $pdo->prepare(
+            "SELECT COUNT(DISTINCT d.id)
+               FROM wa_campana_destinatarios d
+               JOIN whatsapp_inbound wi
+                 ON RIGHT(wi.telefono, 9) = RIGHT(d.telefono, 9)
+                AND wi.created_at >= d.enviado_at
+              WHERE d.campana_id = ? AND d.enviado_at IS NOT NULL"
+        );
+        $q->execute([$campanaId]);
+        return (int) $q->fetchColumn();
     }
 
     /**

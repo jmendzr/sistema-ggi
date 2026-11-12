@@ -32,6 +32,13 @@
 :root[data-tema="oscuro"] .mant-modal-box.mant-modal-lg { background: #111927 !important; }
 :root[data-tema="oscuro"] #ggi-spin { background: #111927 !important; color: #8893A8 !important; }
 @keyframes ggiSpin { to { transform: rotate(360deg); } }
+/* U-05: spinner inline para el estado de carga de botones (window.ggiBtnLoading). */
+.ggi-spin {
+  display: inline-block; width: 13px; height: 13px; margin-right: 7px;
+  vertical-align: -2px; border: 2px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: ggiSpin .7s linear infinite; flex-shrink: 0;
+}
+button[aria-busy="true"], .btn[aria-busy="true"] { cursor: progress; opacity: .85; }
 
 /* ── Contenedor ── */
 .pagination {
@@ -1390,40 +1397,68 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none !impo
    input[type="date"] usa el picker nativo del navegador.
    Le damos el mismo look que el resto de los campos del sistema.
    ─────────────────────────────────────────────────────────────────────────── */
-input[type="date"] {
-  font-family: 'Inter', 'Inter', sans-serif;
+/* Aplica al campo VISIBLE: input nativo (date/month/time) y el altInput de
+   flatpickr (clase .flatpickr-input, que es el que ve el usuario en desktop). */
+input[type="date"]:not(.no-ggi),
+input[type="month"]:not(.no-ggi),
+input[type="time"]:not(.no-ggi),
+input[type="datetime-local"]:not(.no-ggi),
+input.ggi-fp:not(.no-ggi) {
+  font-family: 'Inter', sans-serif;
   font-size: 13px;
   color: var(--tx, #1E2739);
   background: var(--bg-surface, #fff);
   border: 1.5px solid var(--brd, #dce3ee);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: 9px;
+  padding: 8px 12px;
   cursor: pointer;
-  min-width: 140px;
-  transition: border-color .15s, box-shadow .15s;
+  min-width: 150px;
+  transition: border-color .15s, box-shadow .15s, background .15s;
 }
-input[type="date"]:hover  { border-color: var(--ac, #1d4ed8); }
-input[type="date"]:focus  {
+input[type="date"]:not(.no-ggi):hover,
+input[type="month"]:not(.no-ggi):hover,
+input[type="time"]:not(.no-ggi):hover,
+input[type="datetime-local"]:not(.no-ggi):hover,
+input.ggi-fp:not(.no-ggi):hover { border-color: var(--ac, #1d4ed8); }
+input[type="date"]:not(.no-ggi):focus,
+input[type="month"]:not(.no-ggi):focus,
+input[type="time"]:not(.no-ggi):focus,
+input[type="datetime-local"]:not(.no-ggi):focus,
+input.ggi-fp:not(.no-ggi):focus,
+input.ggi-fp:not(.no-ggi).active {
   outline: none;
   border-color: var(--ac, #1d4ed8);
-  box-shadow: 0 0 0 3px rgba(29,78,216,.09);
+  box-shadow: 0 0 0 3px rgba(29,78,216,.13);
 }
-input[type="date"][readonly] { opacity:.75; cursor:default; background:var(--bg-th,#f7f9fc); }
-/* Icono calendario: chromium-only, otros navegadores lo ignoran */
-input[type="date"]::-webkit-calendar-picker-indicator {
-  opacity: .6;
-  cursor: pointer;
-  filter: var(--date-cal-filter, none); /* invertido en dark mode */
+input[type="date"]:not(.no-ggi)[readonly] { opacity:.75; cursor:default; background:var(--bg-th,#f7f9fc); }
+
+/* Ícono de calendario moderno en el campo del datepicker (flatpickr altInput) */
+input.ggi-fp:not(.no-ggi) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  padding-right: 36px;
 }
-input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+/* Icono nativo (chromium) del input[type=date] cuando no hay flatpickr (móvil) */
+input[type="date"]:not(.no-ggi)::-webkit-calendar-picker-indicator,
+input[type="month"]:not(.no-ggi)::-webkit-calendar-picker-indicator {
+  opacity: .55; cursor: pointer; filter: var(--date-cal-filter, none);
+}
+input[type="date"]:not(.no-ggi)::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+
 /* Dark mode */
-:root[data-tema="oscuro"] input[type="date"] {
-  background: var(--bg-surface) !important;
-  border-color: var(--brd) !important;
-  color: var(--tx) !important;
+:root[data-tema="oscuro"] input[type="date"]:not(.no-ggi),
+:root[data-tema="oscuro"] input[type="month"]:not(.no-ggi),
+:root[data-tema="oscuro"] input[type="time"]:not(.no-ggi),
+:root[data-tema="oscuro"] input[type="datetime-local"]:not(.no-ggi),
+:root[data-tema="oscuro"] input.ggi-fp:not(.no-ggi) {
   --date-cal-filter: invert(1) brightness(.8);
 }
-:root[data-tema="oscuro"] input[type="date"]:focus {
+:root[data-tema="oscuro"] input.ggi-fp:not(.no-ggi) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
+}
+:root[data-tema="oscuro"] input[type="date"]:not(.no-ggi):focus,
+:root[data-tema="oscuro"] input.ggi-fp:not(.no-ggi):focus {
   border-color: var(--ac) !important;
   box-shadow: 0 0 0 3px rgba(99,139,255,.12) !important;
 }

@@ -48,6 +48,7 @@ $modulos = [
     'auditorias'     => ['label' => 'Auditorías',           'grupo' => 'Operativo'],
     'documentos'     => ['label' => 'Documentos',           'grupo' => 'Operativo'],
     'pagos'          => ['label' => 'Pagos',                'grupo' => 'Comercial'],
+    'facturas_emitir'=> ['label' => 'Emitir facturas',      'grupo' => 'Comercial'],
     'bonos'          => ['label' => 'Bonos',                'grupo' => 'Comercial'],
     'metas'          => ['label' => 'Metas',                'grupo' => 'Comercial'],
     'reportes'       => ['label' => 'Reportes',             'grupo' => 'Análisis'],

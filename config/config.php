@@ -44,6 +44,9 @@ define('APP_TIMEZONE','America/Lima');
 // --- Entorno (production | development) ---
 define('APP_ENV', env('APP_ENV', 'production'));
 
+// --- Módulos activables (flip para activar/desactivar sin borrar código) ---
+define('MODULO_PLANILLA_ACTIVO', true); // Planilla activa
+
 // --- Mostrar errores solo en desarrollo ---
 if (APP_ENV === 'development') {
     ini_set('display_errors', 1);
@@ -108,6 +111,9 @@ define('META_WA_VERSION',         env('META_WA_VERSION',         'v21.0'));
 define('META_WA_PHONE_NUMBER_ID', env('META_WA_PHONE_NUMBER_ID', ''));
 define('META_WA_TOKEN',           env('META_WA_TOKEN',           ''));
 define('META_WA_WABA_ID',         env('META_WA_WABA_ID',         ''));
+// PIN de verificación en dos pasos (6 díg.) para registrar números NATIVOS en Cloud API
+// (POST /{phone_id}/register). Para números nuevos, este valor QUEDA como su PIN.
+define('META_WA_REGISTER_PIN',    env('META_WA_REGISTER_PIN',    ''));
 define('META_APP_SECRET',         env('META_APP_SECRET',         '')); // firma de webhooks
 define('META_APP_ID',             env('META_APP_ID',             '1486329949910978')); // público; usado en el resumable upload del perfil
 
@@ -117,6 +123,12 @@ define('META_APP_ID',             env('META_APP_ID',             '14863299499109
 //  del click-to-WhatsApp. Ambos viven en .env (nunca en el código).
 define('META_DATASET_ID',        env('META_DATASET_ID',        ''));
 define('META_CAPI_ACCESS_TOKEN', env('META_CAPI_ACCESS_TOKEN', ''));
+
+// ── Meta Marketing API (gasto en anuncios / insights) ────────────────────────
+//  Token de usuario del sistema con permiso ads_read + ID de la cuenta
+//  publicitaria (formato act_XXXX). Solo lectura del gasto/rendimiento. .env.
+define('META_ADS_TOKEN',      env('META_ADS_TOKEN',      ''));
+define('META_AD_ACCOUNT_ID',  env('META_AD_ACCOUNT_ID',  ''));
 
 // ── Agente IA (copiloto del inbox) ────────────────────────────────────────────
 //  Conmutable por IA_PROVIDER: 'claude' (Anthropic) u 'openai'. Las llaves viven
@@ -141,6 +153,9 @@ define('ALEGRA_API',   'https://api.alegra.com/api/v1');
 // Interruptor maestro: '0' = solo BORRADOR (prueba, no va a SUNAT) · '1' = emisión REAL.
 // Mientras esté en '0', el botón "Emitir factura" crea borradores en Alegra.
 define('ALEGRA_EMITIR_REAL', env('ALEGRA_STAMP', '0') === '1');
+// Interruptor independiente para NOTAS DE CRÉDITO: '0' = BORRADOR (default) · '1' = REAL a SUNAT.
+// Se mantiene en borrador hasta que el usuario ponga ALEGRA_NC_STAMP=1 en .env.
+define('ALEGRA_NC_REAL', env('ALEGRA_NC_STAMP', '0') === '1');
 // Cuenta de detracción (Banco de la Nación) — obligatoria para "Operación sujeta a
 // detracción" (cliente deposita). Editable en .env si cambia.
 define('ALEGRA_DETRACCION_CUENTA', env('ALEGRA_DETRACCION_CUENTA', '00-059-203142'));

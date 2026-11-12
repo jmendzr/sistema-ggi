@@ -12,7 +12,7 @@ require_once __DIR__ . '/../../core/WhatsAppService.php';
 require_once __DIR__ . '/../../core/WaPlantillas.php';
 session_init();
 require_login();
-require_role('gerente_general', 'gerente_operaciones');
+require_role('gerente_general', 'gerente_operaciones','gerente_comercial');
 header('Content-Type: application/json; charset=utf-8');
 
 $pdo    = Database::get();
@@ -41,7 +41,39 @@ if ($accion === 'sincronizar') {
         $n += $upd->rowCount();
     }
 
-    salir(['ok' => true, 'actualizadas' => $n, 'total_meta' => count($meta)]
+    // ── Autogestión: importar las APROBADAS que aún no están en la config, para
+    //    que aparezcan en la lista y el equipo pueda activarlas con el switch
+    //    (sin depender de un registro manual en la base). Entran APAGADAS. El
+    //    nº de variables se deduce de los {{n}} del cuerpo. event_code = nombre.
+    $existentes = array_flip($pdo->query("SELECT template_name FROM whatsapp_templates")->fetchAll(PDO::FETCH_COLUMN));
+    $ins = $pdo->prepare("INSERT INTO whatsapp_templates
+                            (event_code, template_name, language_code, param_keys, body_text, estado_meta, categoria, activo, notas)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)");
+    $importadas = 0;
+    foreach ($meta as $t) {
+        if (($t['status'] ?? '') !== 'APPROVED') continue;
+        if (isset($existentes[$t['name']])) continue;
+        $body = '';
+        foreach ($t['components'] ?? [] as $c) {
+            if (($c['type'] ?? '') === 'BODY') $body = $c['text'] ?? '';
+        }
+        preg_match_all('/\{\{(\d+)\}\}/', $body, $mm);
+        $nvar   = $mm[1] ? max(array_map('intval', $mm[1])) : 0;
+        $claves = [];
+        for ($i = 1; $i <= $nvar; $i++) $claves[] = 'Variable ' . $i;
+        $ec = mb_substr($t['name'], 0, 100);
+        try {
+            $ins->execute([$ec, $t['name'], $t['language'] ?? 'es', json_encode($claves, JSON_UNESCAPED_UNICODE),
+                           $body, $t['status'], $t['category'] ?? null,
+                           'Importada automáticamente desde Meta. Actívala con el switch para poder enviarla.']);
+            $importadas += $ins->rowCount();
+            $existentes[$t['name']] = 1;
+        } catch (\Throwable $e) {
+            // Colisión de event_code (mismo nombre ya usado por otro evento) → se omite
+        }
+    }
+
+    salir(['ok' => true, 'actualizadas' => $n, 'importadas' => $importadas, 'total_meta' => count($meta)]
         + WaPlantillas::diagnostico($pdo, $meta));
 }
 

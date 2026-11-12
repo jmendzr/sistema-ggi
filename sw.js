@@ -11,7 +11,7 @@
  * el SW antiguo elimina automáticamente los cachés obsoletos en 'activate'.
  */
 
-const CACHE_VERSION  = 'ggi-v98';
+const CACHE_VERSION  = 'ggi-v99';
 const CACHE_STATIC   = CACHE_VERSION + '-static';
 const CACHE_PAGES    = CACHE_VERSION + '-pages';
 
@@ -108,13 +108,13 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Navegación de página completa (arranque del PWA, recarga, escribir URL) →
-  // Stale-While-Revalidate: muestra al instante la última versión cacheada y
-  // refresca en segundo plano. Hace que el PWA abra sin esperar la red.
-  // OJO: solo aplica a mode 'navigate'; los fetch de la navegación SPA (mode
-  // 'cors'/'same-origin') siguen Network-First → datos frescos al navegar.
+  // Navegación de página completa (arranque del PWA, recarga, redirect tras POST) →
+  // Network-First con timeout. Con red normal SIEMPRE sirve fresco (clave: tras
+  // guardar/registrar el server redirige [PRG] a la lista/ficha y esa navegación
+  // debe traer los datos nuevos, no la versión cacheada). Solo si la red tarda
+  // más de NAV_NET_TIMEOUT o está offline se sirve la caché (arranque rápido).
   if (req.mode === 'navigate') {
-    event.respondWith(staleWhileRevalidateHTML(req));
+    event.respondWith(networkFirstNav(req));
     return;
   }
 
@@ -122,10 +122,11 @@ self.addEventListener('fetch', event => {
   event.respondWith(networkFirst(req));
 });
 
-// ── Stale-While-Revalidate para HTML de navegación ─────────────────────────
-async function staleWhileRevalidateHTML(req) {
+// ── Network-First con timeout para HTML de navegación ──────────────────────
+const NAV_NET_TIMEOUT = 3000; // ms antes de caer a caché cuando hay red lenta
+async function networkFirstNav(req) {
   const cache = await caches.open(CACHE_PAGES);
-  const cached = await cache.match(req);
+  // Lanzar la red y cachear la respuesta HTML fresca para la próxima.
   const network = fetch(req).then(res => {
     if (res && res.ok && res.status < 400) {
       const ct = res.headers.get('content-type') || '';
@@ -133,8 +134,17 @@ async function staleWhileRevalidateHTML(req) {
     }
     return res;
   }).catch(() => null);
-  // Con caché → responder YA (arranque instantáneo); la red actualiza para la próxima.
-  if (cached) return cached;
+
+  const cached = await cache.match(req);
+  if (cached) {
+    // Hay caché: dar prioridad a la red pero con límite. Si responde a tiempo →
+    // FRESCO; si tarda demasiado → servir caché (y la red sigue actualizando en bg).
+    const timeout = new Promise(resolve => setTimeout(() => resolve('__timeout__'), NAV_NET_TIMEOUT));
+    const winner = await Promise.race([network, timeout]);
+    if (winner && winner !== '__timeout__') return winner;
+    return cached;
+  }
+
   // Sin caché → esperar la red; si falla, página offline.
   const res = await network;
   if (res) return res;

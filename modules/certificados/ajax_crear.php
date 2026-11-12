@@ -45,15 +45,12 @@ if (!$norma_iso_id) {
 $estados_validos = ['en_proceso', 'vigente', 'por_vencer', 'suspendido'];
 if (!in_array($estado, $estados_validos)) $estado = 'en_proceso';
 
-// Calcular fechas automáticamente si se provee fecha de emisión
-$fecha_venc = null;
-$fecha_aud1 = null;
-$fecha_aud2 = null;
-if (!empty($fecha_em)) {
-    $fecha_venc = date('Y-m-d', strtotime($fecha_em . ' +3 years'));
-    $fecha_aud1 = date('Y-m-d', strtotime($fecha_em . ' +1 year'));
-    $fecha_aud2 = date('Y-m-d', strtotime($fecha_em . ' +2 years'));
-}
+// Calcular fechas según la vigencia de la norma (BPL=1 año, ISO=3 años).
+// Las auditorías de seguimiento solo aplican a ciclos multianuales (helper → NULL en 1 año).
+$fechas     = cert_calcular_fechas($fecha_em, cert_meses_vigencia($pdo, $norma_iso_id));
+$fecha_venc = $fechas['fecha_vencimiento'];
+$fecha_aud1 = $fechas['fecha_auditoria_1'];
+$fecha_aud2 = $fechas['fecha_auditoria_2'];
 
 $stmt = $pdo->prepare("
     INSERT INTO certificados

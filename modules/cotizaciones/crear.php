@@ -5,6 +5,10 @@ session_init();
 require_login();
 $user = auth_user();
 
+// Solo gerencia y el Gerente Comercial pueden generar la propuesta a nombre de
+// OTRO ejecutivo. Los ejecutivos de ventas quedan fijados a sí mismos.
+$_puede_elegir_ejecutivo = has_role('gerente_general', 'gerente_operaciones', 'gerente_comercial');
+
 $_ggi_embed = !empty($_GET['embed']) || !empty($_POST['_embed']);
 $from     = $_GET['from'] ?? 'listado';
 $_edit_id = (int)($_GET['edit'] ?? 0);
@@ -118,7 +122,7 @@ $data   = [
     'observaciones'     => '',
     'notas'             => '',
     'estado'            => 'enviada',
-    'ejecutivo_id'      => ($user['rol'] === 'ejecutivo_ventas' ? $user['id'] : null),
+    'ejecutivo_id'      => (in_array($user['rol'], ['ejecutivo_ventas','gerente_comercial'], true) ? $user['id'] : null),
     'normas'            => [],
     'precios'           => [],
     'descuentos'        => [],
@@ -176,7 +180,7 @@ if (!empty($_GET['duplicar']) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
             'observaciones'     => $dup_row['observaciones'] ?? '',
             'notas'             => $dup_row['notas'] ?? '',
             'estado'            => 'enviada',
-            'ejecutivo_id'      => ($user['rol'] === 'ejecutivo_ventas' ? $user['id'] : $dup_row['ejecutivo_id']),
+            'ejecutivo_id'      => $dup_row['ejecutivo_id'],
             'normas'            => $dup_norma_ids,
             'precios'           => $dup_precios_map,
             'casas'             => $dup_casas_map,
@@ -210,7 +214,7 @@ if ($_edit_id && $_cot_edit && $_SERVER['REQUEST_METHOD'] !== 'POST') {
         'observaciones'     => $_cot_edit['observaciones'] ?? '',
         'notas'             => $_cot_edit['notas'] ?? '',
         'estado'            => $_cot_edit['estado'],
-        'ejecutivo_id'      => ($user['rol'] === 'ejecutivo_ventas' ? $user['id'] : $_cot_edit['ejecutivo_id']),
+        'ejecutivo_id'      => $_cot_edit['ejecutivo_id'],
         'normas'            => array_keys($_edit_normas),
         'precios'           => $_edit_normas,
         'casas'             => $_edit_casas,
@@ -258,7 +262,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'observaciones'    => trim($_POST['observaciones'] ?? ''),
         'notas'            => trim($_POST['notas'] ?? ''),
         'estado'           => $_edit_id ? ($_cot_edit['estado'] ?? 'enviada') : 'enviada',
-        'ejecutivo_id'     => ($user['rol'] === 'ejecutivo_ventas' ? $user['id'] : ((int)($_POST['ejecutivo_id'] ?? 0) ?: null)),
+        // Solo gerencia/Gerente Comercial eligen a nombre de qué ejecutivo sale.
+        // Un ejecutivo de ventas queda siempre atribuido a sí mismo (no puede
+        // reasignar la propuesta ni la comisión a un colega).
+        'ejecutivo_id'     => $_puede_elegir_ejecutivo
+                                ? ((int)($_POST['ejecutivo_id'] ?? 0) ?: null)
+                                : ($user['rol'] === 'ejecutivo_ventas' ? (int)$user['id'] : null),
         'normas'           => $_POST['normas'] ?? [],
         'casas'            => $_POST['casas'] ?? [],
         'precios'          => $_POST['precios'] ?? [],
@@ -574,7 +583,7 @@ $page_title  = $_edit_id ? 'Editar Propuesta' : ($_cert_renovar ? 'Renovar Certi
 $active_menu = 'propuestas';
 
 // Ejecutivos para el select
-$ejecutivos = $pdo->query("SELECT id, nombre, apellido FROM usuarios WHERE activo=1 AND rol='ejecutivo_ventas' ORDER BY nombre")->fetchAll();
+$ejecutivos = $pdo->query("SELECT id, nombre, apellido FROM usuarios WHERE activo=1 AND rol IN ('ejecutivo_ventas','gerente_comercial') ORDER BY nombre")->fetchAll();
 
 // Pre-fetch empresa card data + datos del cliente para autocompletar (sin pre-cargar todos los clientes)
 $prefill_empresa    = null;
@@ -1065,15 +1074,7 @@ $_form_action = APP_URL . '/modules/cotizaciones/crear.php' . ($_form_qs ? '?' .
     <div class="fields-grid">
       <div class="field">
         <label>Ejecutivo comercial asignado</label>
-        <?php if ($user['rol'] === 'ejecutivo_ventas'): ?>
-          <?php
-            $ej_propio = array_filter($ejecutivos, fn($e) => $e['id'] == $user['id']);
-            $ej_propio = reset($ej_propio);
-          ?>
-          <input type="hidden" name="ejecutivo_id" value="<?= $user['id'] ?>">
-          <input type="text" value="<?= $ej_propio ? sanitize($ej_propio['nombre'].' '.$ej_propio['apellido']) : 'Asignado automáticamente' ?>" disabled style="background:var(--s-ok-bg);border-color:#b7e4c0;color:#229133;font-weight:600;width:100%;padding:10px 13px;border:1.5px solid;border-radius:9px;font-size:13px;font-family:'Inter',sans-serif;">
-          <span style="font-size:11px;color:var(--gris-texto);">Se asigna automáticamente.</span>
-        <?php else: ?>
+        <?php if ($_puede_elegir_ejecutivo): ?>
           <select name="ejecutivo_id" id="ejecutivo_id" style="width:100%;padding:10px 36px 10px 13px;border:1.5px solid var(--gris-borde);border-radius:9px;font-size:13px;font-family:'Inter',sans-serif;background-color:var(--bg-surface2);outline:none;cursor:pointer;transition:border-color .2s;color:var(--gris-dark);">
             <option value="">— Sin asignar —</option>
             <?php foreach ($ejecutivos as $ej): ?>
@@ -1082,8 +1083,16 @@ $_form_action = APP_URL . '/modules/cotizaciones/crear.php' . ($_form_qs ? '?' .
             </option>
             <?php endforeach; ?>
           </select>
+          <span style="font-size:11px;color:var(--gris-texto);">A nombre de este ejecutivo saldrá la propuesta (sus datos en el PDF) y se le atribuirá la comisión.</span>
+        <?php else: ?>
+          <?php
+            $ej_propio = array_filter($ejecutivos, fn($e) => $e['id'] == $user['id']);
+            $ej_propio = reset($ej_propio);
+          ?>
+          <input type="hidden" name="ejecutivo_id" value="<?= (int)$user['id'] ?>">
+          <input type="text" value="<?= $ej_propio ? sanitize($ej_propio['nombre'].' '.$ej_propio['apellido']) : 'Asignado automáticamente' ?>" disabled style="background:var(--s-ok-bg);border-color:#b7e4c0;color:#229133;font-weight:600;width:100%;padding:10px 13px;border:1.5px solid;border-radius:9px;font-size:13px;font-family:'Inter',sans-serif;">
+          <span style="font-size:11px;color:var(--gris-texto);">Se asigna automáticamente a tu nombre.</span>
         <?php endif; ?>
-        <span style="font-size:11px;color:var(--gris-texto);">Se carga automáticamente si la empresa ya tiene ejecutivo asignado.</span>
       </div>
       <input type="hidden" name="estado" value="<?= sanitize($data['estado'] ?? 'enviada') ?>">
       <div class="field">

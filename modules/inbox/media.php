@@ -15,7 +15,7 @@ require_once __DIR__ . '/../../core/Database.php';
 require_once __DIR__ . '/../../core/WhatsAppService.php';
 session_init();
 require_login();
-require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
+require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas','gerente_comercial');
 
 $id = (int) ($_GET['id'] ?? 0);
 if (!$id) { http_response_code(400); exit('ID inválido'); }
@@ -31,10 +31,28 @@ if (!$m || (!$m['media_id'] && !$m['media_path'])) { http_response_code(404); ex
 $dir = __DIR__ . '/../../storage/wa_media';
 if (!is_dir($dir)) @mkdir($dir, 0755, true);
 
-$ruta = $m['media_path'] ? $dir . '/' . basename($m['media_path']) : null;
+$ruta = null;
 
-// Descargar solo si aún no está en disco
-if (!$ruta || !is_file($ruta)) {
+// (A) Adjunto SALIENTE con archivo local (p. ej. la factura PDF en
+//     documentaciones_clientes/): media_path es una ruta relativa al web root.
+//     Se sirve directo — la sesión y el rol ya se validaron arriba.
+if (!empty($m['media_path']) && strpos($m['media_path'], '/') !== false) {
+    $root = realpath(__DIR__ . '/../../');
+    $cand = realpath($root . '/' . ltrim($m['media_path'], '/'));
+    if ($cand && strpos($cand, $root . DIRECTORY_SEPARATOR) === 0 && is_file($cand)) {
+        $ruta = $cand;
+    }
+}
+
+// (B) Media de WhatsApp ya cacheada en wa_media (media_path = nombre simple).
+if (!$ruta && !empty($m['media_path'])) {
+    $r2 = $dir . '/' . basename($m['media_path']);
+    if (is_file($r2)) $ruta = $r2;
+}
+
+// (C) Descargar de Meta por media_id la primera vez (media entrante).
+if (!$ruta) {
+    if (empty($m['media_id'])) { http_response_code(404); exit('Adjunto no disponible'); }
     $bin = WhatsAppService::fetchMedia((string) $m['media_id']);
     if (!$bin) {
         http_response_code(502);

@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../core/Database.php';
 require_once __DIR__ . '/../../core/NotificationService.php';
 session_init();
 require_login();
-require_role('gerente_general','gerente_operaciones','gestor_logistico','delivery');
+require_role('gerente_general','gerente_operaciones','gestor_logistico','delivery','administracion_finanzas');
 
 $pdo    = Database::get();
 $errors = [];
@@ -1137,12 +1137,19 @@ function resetSedeDropdown() {
 }
 </script>
 <script>
-new GGIForm('form-envio-crear')
-  .selectRequired('cliente_id',      'Selecciona un cliente.')
-  .selectRequired('agencia_envio_id','Selecciona una agencia de envío.')
-  .selectRequired('estado_envio_id', 'Selecciona el estado del envío.')
-  .dateRequired('fecha_envio',       'La fecha de envío es requerida.')
-  .required('destinatario',          'El nombre del destinatario es requerido.')
-  .init();
+// validacion.js (define GGIForm) se carga vía layout_end, DESPUÉS de este inline →
+// diferir el init a DOMContentLoaded si GGIForm aún no existe. Sin esto, la validación
+// de cliente quedaba muerta (ReferenceError silencioso). Nota: NO se exige 'destinatario'
+// (el servidor tampoco lo exige: hay envíos "a domicilio"/"por asignar" sin destinatario).
+function initEnvioValidacion() {
+  new GGIForm('form-envio-crear')
+    .selectRequired('cliente_id',      'Selecciona un cliente.')
+    .selectRequired('agencia_envio_id','Selecciona una agencia de envío.')
+    .selectRequired('estado_envio_id', 'Selecciona el estado del envío.')
+    .dateRequired('fecha_envio',       'La fecha de envío es requerida.')
+    .init();
+}
+if (typeof GGIForm === 'undefined') document.addEventListener('DOMContentLoaded', initEnvioValidacion, { once: true });
+else initEnvioValidacion();
 </script>
 <?php require_once __DIR__ . '/../../templates/layout_end.php'; ?>

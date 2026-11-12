@@ -58,11 +58,50 @@ if ($accion === 'finalizar') {
             . '(puede tardar unos minutos, o requiere que la Revisión de Meta esté aprobada).']); exit;
     }
 
+    // 2.5) REGISTRAR el número en Cloud API. Un número NATIVO recién agregado queda
+    //      "Pendiente" (no CONNECTED) y NO envía/recibe hasta registrarlo con el PIN
+    //      de verificación en dos pasos. Los de COEXISTENCIA ya vienen conectados →
+    //      se omiten. Best-effort: si falla, no se aborta el alta pero se informa.
+    $registro  = null;
+    $estadoNum = strtoupper((string)($num['status'] ?? ''));
+    // Registrar SIEMPRE que el número no esté ya CONNECTED. Los de coexistencia
+    // llegan como CONNECTED → se omiten solos. Un número NATIVO recién agregado
+    // llega PENDING (platform_type "NOT_APPLICABLE" / "CLOUD_API") y necesita
+    // /register. Best-effort: si falla, no aborta el alta pero se informa.
+    if ($estadoNum !== 'CONNECTED') {
+        $pin = defined('META_WA_REGISTER_PIN') ? preg_replace('/\D/', '', (string)META_WA_REGISTER_PIN) : '';
+        if (strlen($pin) === 6) {
+            [$rc, $rr] = gg_api('POST', "https://graph.facebook.com/{$ver}/{$phoneId}/register", $tok, [
+                'messaging_product' => 'whatsapp',
+                'pin'               => $pin,
+            ]);
+            if ($rc >= 200 && $rc < 300 && !empty($rr['success'])) {
+                $registro = 'ok';
+                // Releer el estado ya CONNECTED tras registrar.
+                [$nc2, $num2] = gg_api('GET', "https://graph.facebook.com/{$ver}/{$phoneId}?fields=status", $tok);
+                if ($nc2 === 200 && !empty($num2['status'])) $num['status'] = $num2['status'];
+            } else {
+                $registro = 'error: ' . ($rr['error']['message'] ?? ('HTTP ' . $rc));
+            }
+        } else {
+            $registro = 'sin_pin';
+        }
+    }
+
+    // Mensaje según el resultado del registro.
+    $regMsg = '';
+    if ($registro === 'sin_pin')                 $regMsg = ' Falta registrarlo en Cloud API: define META_WA_REGISTER_PIN (6 dígitos) en .env y vuelve a conectar.';
+    elseif (is_string($registro) && strpos($registro, 'error') === 0) $regMsg = ' No se pudo registrar en Cloud API (' . substr($registro, 7) . '); revisa el PIN de verificación en dos pasos.';
+
     // 3) Alta en wa_numeros (idempotente).
     $ya = $pdo->prepare("SELECT id FROM wa_numeros WHERE phone_number_id = ?");
     $ya->execute([$phoneId]);
     if ($ya->fetchColumn()) {
-        echo json_encode(['ok' => true, 'numero' => $num['display_phone_number'] ?? $phoneId, 'ya' => true]); exit;
+        // Actualizar el estado (pudo pasar a CONNECTED tras registrar).
+        $pdo->prepare("UPDATE wa_numeros SET estado = ? WHERE phone_number_id = ?")
+            ->execute([$num['status'] ?? null, $phoneId]);
+        echo json_encode(['ok' => true, 'numero' => $num['display_phone_number'] ?? $phoneId, 'ya' => true,
+                          'registro' => $registro, 'msg_extra' => $regMsg]); exit;
     }
     $pdo->prepare(
         "INSERT INTO wa_numeros
@@ -74,7 +113,8 @@ if ($accion === 'finalizar') {
     ]);
 
     echo json_encode(['ok' => true, 'numero' => $num['display_phone_number'] ?? $phoneId,
-                      'nombre' => $num['verified_name'] ?? '', 'coex' => ($num['platform_type'] ?? '')]);
+                      'nombre' => $num['verified_name'] ?? '', 'coex' => ($num['platform_type'] ?? ''),
+                      'registro' => $registro, 'msg_extra' => $regMsg]);
     exit;
 }
 

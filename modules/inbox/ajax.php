@@ -13,7 +13,7 @@ require_once __DIR__ . '/../../core/Database.php';
 require_once __DIR__ . '/../../core/WaInbox.php';
 session_init();
 require_login();
-require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
+require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas','gerente_comercial');
 // Liberar el lock de sesión de inmediato: este endpoint solo LEE $_SESSION
 // (id/rol del usuario), nunca escribe. Sin esto, PHP serializa las peticiones
 // AJAX concurrentes (lista + hilo + media + refrescar) y el inbox se siente
@@ -24,7 +24,7 @@ header('Content-Type: application/json; charset=utf-8');
 $pdo    = Database::get();
 $yo     = (int) ($_SESSION['usuario']['id'] ?? 0);
 $rol    = $_SESSION['usuario']['rol'] ?? '';
-$esJefe = in_array($rol, ['gerente_general', 'gerente_operaciones'], true);
+$esJefe = in_array($rol, ['gerente_general', 'gerente_operaciones', 'gerente_comercial'], true);
 $accion = $_REQUEST['accion'] ?? 'lista';
 
 function wa_estado_label(?string $e): string
@@ -393,7 +393,7 @@ if ($accion === 'enviar_plantilla') {
         exit;
     }
 
-    $t = $pdo->prepare("SELECT template_name, language_code, param_keys, body_text, url_button_key
+    $t = $pdo->prepare("SELECT template_name, language_code, param_keys, body_text, url_button_key, header_media_url
                           FROM whatsapp_templates WHERE template_name = ? AND activo = 1");
     $t->execute([$nombre]);
     $tpl = $t->fetch(PDO::FETCH_ASSOC);
@@ -418,9 +418,20 @@ if ($accion === 'enviar_plantilla') {
         exit;
     }
 
+    // OJO: las plantillas SOLO existen en la WABA de notificaciones (Frank/Andrés
+    // tienen 0). Por eso las plantillas se envían desde el número de notificaciones,
+    // NO desde el número conversacional (si no, error 132001 "template does not exist").
+    // Si la plantilla lleva cabecera (imagen/PDF), Meta exige la media en cada
+    // envío. Detectamos por extensión: .pdf → documento; si no, imagen.
+    $hdr   = trim((string) ($tpl['header_media_url'] ?? ''));
+    $esPdf = $hdr !== '' && preg_match('/\.pdf($|\?)/i', $hdr);
     $waId = WhatsAppService::sendTemplate(
         $conv['telefono'], $tpl['template_name'], $vals, $tpl['language_code'],
-        null, null, $boton !== '' ? $boton : null
+        $esPdf ? $hdr : null,                       // docUrl (cabecera documento)
+        null,                                       // docFilename
+        $boton !== '' ? $boton : null,              // parámetro del botón URL
+        null,                                       // desde el número de notificaciones
+        (!$esPdf && $hdr !== '') ? $hdr : null       // imgUrl (cabecera imagen)
     );
 
     // Texto tal como lo verá el cliente, para que quede legible en el hilo
@@ -483,7 +494,7 @@ if ($accion === 'enviar_sticker') {
     $mediaId = $s->fetchColumn();
     if (!$mediaId) { echo json_encode(['ok' => false, 'msg' => 'Sticker no disponible']); exit; }
 
-    $waId = WhatsAppService::sendMedia($conv['telefono'], 'sticker', (string) $mediaId);
+    $waId = WhatsAppService::sendMedia($conv['telefono'], 'sticker', (string) $mediaId, null, null, $conv['phone_number_id']);
 
     WaInbox::registrarSaliente(
         $pdo, $conv['telefono'], $waId, 'sticker', null,
@@ -602,7 +613,7 @@ if ($accion === 'adjuntar') {
 
     // Los stickers no admiten pie de foto: si se manda, Meta rechaza el envío
     $pie  = $tipo === 'sticker' ? '' : trim($_POST['texto'] ?? '');
-    $waId = WhatsAppService::sendMedia($conv['telefono'], $tipo, $mediaId, $pie ?: null, $nombre);
+    $waId = WhatsAppService::sendMedia($conv['telefono'], $tipo, $mediaId, $pie ?: null, $nombre, $conv['phone_number_id']);
 
     $convId = WaInbox::registrarSaliente(
         $pdo, $conv['telefono'], $waId, $tipo, $pie ?: null,
@@ -711,7 +722,7 @@ if ($accion === 'enviar_documento') {
     if (!$mediaId) { echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo subir el archivo']); exit; }
 
     $pie  = trim($_POST['texto'] ?? '') ?: null;
-    $waId = WhatsAppService::sendMedia($conv['telefono'], 'document', $mediaId, $pie, $nombre);
+    $waId = WhatsAppService::sendMedia($conv['telefono'], 'document', $mediaId, $pie, $nombre, $conv['phone_number_id']);
 
     WaInbox::registrarSaliente(
         $pdo, $conv['telefono'], $waId, 'document', $pie,
@@ -757,6 +768,21 @@ if ($accion === 'conv_flag') {
     // Solo columnas de la lista blanca llegan a la consulta (no es interpolación de usuario)
     $pdo->prepare("UPDATE wa_conversaciones SET {$campo} = ? WHERE id = ?")->execute([$valor, $id]);
     echo json_encode(['ok' => true, 'campo' => $campo, 'valor' => $valor]);
+    exit;
+}
+
+// ══ Quitar la marca 🔥 Lead caliente ═════════════════════════════════════════
+// El cliente pasa a "lead caliente" (lead_caliente_at) al pulsar "Quiero
+// aprovecharlo" (WaInbox::marcarLeadCaliente), lo que además fija la conversación.
+// Esta acción permite retirar esa marca cuando ya se atendió: limpia lead_caliente_at
+// y desfija (la fijación fue automática al marcar el lead). No borra el historial.
+if ($accion === 'quitar_lead') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    $id = (int) ($_POST['id'] ?? 0);
+    if (!$id) { echo json_encode(['ok' => false, 'msg' => 'ID inválido']); exit; }
+    $pdo->prepare("UPDATE wa_conversaciones SET lead_caliente_at = NULL, fijada = 0 WHERE id = ?")->execute([$id]);
+    echo json_encode(['ok' => true]);
     exit;
 }
 
@@ -834,7 +860,7 @@ if ($accion === 'llamada_permiso') {
     if (!$convId) { echo json_encode(['ok' => false, 'msg' => 'Datos inválidos']); exit; }
     if ($texto === '') $texto = 'Nos gustaría llamarte para ayudarte con tu certificación. ¿Nos autorizas la llamada?';
 
-    $c = $pdo->prepare("SELECT telefono FROM wa_conversaciones WHERE id = ?");
+    $c = $pdo->prepare("SELECT telefono, phone_number_id FROM wa_conversaciones WHERE id = ?");
     $c->execute([$convId]);
     $conv = $c->fetch(PDO::FETCH_ASSOC);
     if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
@@ -843,11 +869,11 @@ if ($accion === 'llamada_permiso') {
         'type'   => 'call_permission_request',
         'action' => ['name' => 'call_permission_request'],
         'body'   => ['text' => mb_substr($texto, 0, 1024)],
-    ]);
+    ], $conv['phone_number_id']);
     if (!$waId) { echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar la solicitud']); exit; }
 
     WaInbox::registrarSaliente($pdo, $conv['telefono'], $waId, 'text',
-        '🔔 Solicitud de permiso para llamar enviada', null, $yo, 'sent', null, null);
+        '🔔 Solicitud de permiso para llamar enviada', null, $yo, 'sent', null, $conv['phone_number_id']);
     echo json_encode(['ok' => true]);
     exit;
 }
@@ -1018,7 +1044,7 @@ if ($accion === 'enviar_interactivo') {
         $emp = trim($_POST['ct_empresa'] ?? '');
         if ($nom === '' || $tel === '') { echo json_encode(['ok' => false, 'msg' => 'Nombre y teléfono son obligatorios']); exit; }
 
-        $waId = WhatsAppService::sendContacto($conv['telefono'], $nom, $tel, $emp);
+        $waId = WhatsAppService::sendContacto($conv['telefono'], $nom, $tel, $emp, $conv['phone_number_id']);
         WaInbox::registrarSaliente(
             $pdo, $conv['telefono'], $waId, 'contacts', '👤 ' . $nom . ' · ' . $tel,
             null, $yo, $waId ? 'sent' : 'failed',
@@ -1032,7 +1058,7 @@ if ($accion === 'enviar_interactivo') {
         echo json_encode(['ok' => false, 'msg' => 'Tipo de mensaje inválido']); exit;
     }
 
-    $waId = WhatsAppService::sendInteractive($conv['telefono'], $interactive);
+    $waId = WhatsAppService::sendInteractive($conv['telefono'], $interactive, $conv['phone_number_id']);
 
     WaInbox::registrarSaliente(
         $pdo, $conv['telefono'], $waId, 'interactive', $resumen,
@@ -1043,6 +1069,44 @@ if ($accion === 'enviar_interactivo') {
     echo $waId
         ? json_encode(['ok' => true])
         : json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar']);
+    exit;
+}
+
+// ══ Enviar una UBICACIÓN (pin en el mapa) ════════════════════════════════════
+if ($accion === 'enviar_ubicacion') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit; }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $id   = (int) ($_POST['id'] ?? 0);
+    $lat  = isset($_POST['lat']) ? (float) $_POST['lat'] : null;
+    $lng  = isset($_POST['lng']) ? (float) $_POST['lng'] : null;
+    $nom  = trim($_POST['nombre'] ?? '');
+    $dir  = trim($_POST['direccion'] ?? '');
+
+    if (!$id || $lat === null || $lng === null) { echo json_encode(['ok' => false, 'msg' => 'Faltan las coordenadas']); exit; }
+    if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+        echo json_encode(['ok' => false, 'msg' => 'Coordenadas fuera de rango']); exit;
+    }
+
+    $c = $pdo->prepare("SELECT telefono, asignado_a, ventana_expira_at, phone_number_id FROM wa_conversaciones WHERE id = ?");
+    $c->execute([$id]);
+    $conv = $c->fetch(PDO::FETCH_ASSOC);
+    if (!$conv) { echo json_encode(['ok' => false, 'msg' => 'Conversación no encontrada']); exit; }
+    if ((int) $conv['asignado_a'] !== $yo) { echo json_encode(['ok' => false, 'msg' => 'Toma la conversación primero']); exit; }
+    if (!WaInbox::ventanaAbierta($conv['ventana_expira_at'])) {
+        echo json_encode(['ok' => false, 'msg' => 'La ventana de 24 h venció: solo se pueden enviar plantillas']); exit;
+    }
+
+    $waId = WhatsAppService::sendLocation($conv['telefono'], $lat, $lng, $nom, $dir, $conv['phone_number_id']);
+    $preview = '📍 ' . ($nom !== '' ? $nom : ($dir !== '' ? $dir : 'Ubicación'));
+    WaInbox::registrarSaliente(
+        $pdo, $conv['telefono'], $waId, 'location', $preview,
+        null, $yo, $waId ? 'sent' : 'failed',
+        $waId ? null : WhatsAppService::lastError(), $conv['phone_number_id']
+    );
+    echo $waId ? json_encode(['ok' => true])
+               : json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo enviar']);
     exit;
 }
 
@@ -1222,7 +1286,7 @@ if ($accion === 'enviar') {
         $respWaId = $rq->fetchColumn() ?: null;
     }
 
-    $waId = WhatsAppService::sendText($conv['telefono'], $texto, $respWaId);
+    $waId = WhatsAppService::sendText($conv['telefono'], $texto, $respWaId, $conv['phone_number_id']);
 
     $nuevoId = WaInbox::registrarSaliente(
         $pdo, $conv['telefono'], $waId, 'text', $texto,
@@ -1245,6 +1309,179 @@ if ($accion === 'enviar') {
     exit;
 }
 
+// ══ Reenviar un mensaje a OTRA conversación ══════════════════════════════════
+if ($accion === 'reenviar') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['ok' => false, 'msg' => 'Método no permitido']); exit;
+    }
+    csrf_verify();
+    require_once __DIR__ . '/../../core/WhatsAppService.php';
+
+    $mid     = (int) ($_POST['mensaje_id'] ?? 0);
+    $destino = (int) ($_POST['destino'] ?? 0);
+    if (!$mid || !$destino) { echo json_encode(['ok' => false, 'msg' => 'Faltan datos']); exit; }
+
+    // Mensaje origen + bandeja a la que pertenece (para validar acceso)
+    $sq = $pdo->prepare(
+        "SELECT m.id, m.tipo, m.texto, m.media_id, m.media_path, m.media_mime, m.media_nombre,
+                c.phone_number_id AS src_pnid
+           FROM wa_mensajes m
+           JOIN wa_conversaciones c ON c.id = m.conversacion_id
+          WHERE m.id = ?"
+    );
+    $sq->execute([$mid]);
+    $src = $sq->fetch(PDO::FETCH_ASSOC);
+    if (!$src) { echo json_encode(['ok' => false, 'msg' => 'Mensaje no encontrado']); exit; }
+
+    $vis = WaInbox::numerosVisibles($pdo, $yo, $esJefe);
+    if ($vis !== null && !in_array($src['src_pnid'], $vis, true)) {
+        echo json_encode(['ok' => false, 'msg' => 'Sin acceso a ese mensaje']); exit;
+    }
+
+    // Conversación destino
+    $tq = $pdo->prepare("SELECT telefono, asignado_a, ventana_expira_at, phone_number_id
+                           FROM wa_conversaciones WHERE id = ?");
+    $tq->execute([$destino]);
+    $dst = $tq->fetch(PDO::FETCH_ASSOC);
+    if (!$dst) { echo json_encode(['ok' => false, 'msg' => 'Conversación destino no encontrada']); exit; }
+    if ($vis !== null && !in_array($dst['phone_number_id'], $vis, true)) {
+        echo json_encode(['ok' => false, 'msg' => 'Sin acceso a esa bandeja']); exit;
+    }
+    // Mismo candado que al responder: solo escribe quien la tiene asignada.
+    if ((int) $dst['asignado_a'] !== $yo) {
+        echo json_encode(['ok' => false, 'msg' => $dst['asignado_a']
+            ? 'La conversación destino está asignada a otro ejecutivo'
+            : 'Asígnate la conversación destino para reenviar']);
+        exit;
+    }
+    if (!WaInbox::ventanaAbierta($dst['ventana_expira_at'])) {
+        echo json_encode(['ok' => false, 'msg' => 'La ventana de 24 h del destino venció: solo se pueden enviar plantillas']);
+        exit;
+    }
+
+    $tipo  = $src['tipo'] ?: 'text';
+    $texto = (string) ($src['texto'] ?? '');
+    $mediaTipos = ['image', 'video', 'audio', 'document', 'sticker'];
+
+    $waId = null; $regTipo = 'text'; $regTexto = null; $regMedia = null; $nuevoMediaId = null;
+
+    if (in_array($tipo, $mediaTipos, true)) {
+        // Recuperar el archivo original en disco (igual que media.php: A/B/C)
+        $dir  = __DIR__ . '/../../storage/wa_media';
+        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        $ruta = null; $relPath = null;
+        $root = realpath(__DIR__ . '/../../');
+        if (!empty($src['media_path']) && strpos($src['media_path'], '/') !== false) {
+            $cand = realpath($root . '/' . ltrim($src['media_path'], '/'));
+            if ($cand && strpos($cand, $root . DIRECTORY_SEPARATOR) === 0 && is_file($cand)) {
+                $ruta = $cand; $relPath = $src['media_path'];
+            }
+        }
+        if (!$ruta && !empty($src['media_path'])) {
+            $r2 = $dir . '/' . basename($src['media_path']);
+            if (is_file($r2)) { $ruta = $r2; $relPath = basename($src['media_path']); }
+        }
+        if (!$ruta && !empty($src['media_id'])) {
+            $bin = WhatsAppService::fetchMedia((string) $src['media_id']);
+            if ($bin) {
+                $ext = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/gif'=>'gif',
+                        'video/mp4'=>'mp4','audio/ogg'=>'ogg','audio/mpeg'=>'mp3','application/pdf'=>'pdf'][$bin['mime']] ?? 'bin';
+                $nombreArch = 'wa_' . $src['id'] . '_' . substr(sha1((string) $src['media_id']), 0, 10) . '.' . $ext;
+                if (@file_put_contents($dir . '/' . $nombreArch, $bin['contenido']) !== false) {
+                    $ruta = $dir . '/' . $nombreArch; $relPath = $nombreArch;
+                    if (empty($src['media_mime'])) $src['media_mime'] = $bin['mime'];
+                    // cachear en el mensaje origen para la próxima
+                    $pdo->prepare("UPDATE wa_mensajes SET media_path = ? WHERE id = ?")->execute([$nombreArch, $src['id']]);
+                }
+            }
+        }
+        if (!$ruta) { echo json_encode(['ok' => false, 'msg' => 'No se pudo recuperar el archivo original']); exit; }
+
+        $mime   = $src['media_mime'] ?: (mime_content_type($ruta) ?: 'application/octet-stream');
+        $nombre = $src['media_nombre'] ?: basename($ruta);
+        $nuevoMediaId = WhatsAppService::uploadMedia($ruta, $mime);
+        if (!$nuevoMediaId) {
+            echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo subir el archivo']); exit;
+        }
+        $pie  = $tipo === 'sticker' ? '' : (trim($texto) !== '' ? $texto : null);
+        $waId = WhatsAppService::sendMedia($dst['telefono'], $tipo, $nuevoMediaId, $pie ?: null, $nombre, $dst['phone_number_id']);
+        $regTipo = $tipo; $regTexto = $pie ?: null;
+        $regMedia = ['path' => $relPath, 'mime' => $mime, 'nombre' => $nombre];
+    } else {
+        // Texto (o cualquier tipo sin media pero con texto: se reenvía el texto)
+        if (trim($texto) === '') { echo json_encode(['ok' => false, 'msg' => 'Este mensaje no se puede reenviar']); exit; }
+        if (mb_strlen($texto) > 4096) $texto = mb_substr($texto, 0, 4096);
+        $waId = WhatsAppService::sendText($dst['telefono'], $texto, null, $dst['phone_number_id']);
+        $regTipo = 'text'; $regTexto = $texto;
+    }
+
+    $nuevoId = WaInbox::registrarSaliente(
+        $pdo, $dst['telefono'], $waId, $regTipo, $regTexto,
+        null, $yo, $waId ? 'sent' : 'failed',
+        $waId ? null : WhatsAppService::lastError(), $dst['phone_number_id'], $regMedia
+    );
+
+    if ($waId) {
+        // Marcar como reenviado y guardar el media_id para renderizarlo en el hilo
+        $pdo->prepare("UPDATE wa_mensajes SET reenviado = 1" . ($nuevoMediaId ? ", media_id = ?" : "") . " WHERE wa_message_id = ?")
+            ->execute($nuevoMediaId ? [$nuevoMediaId, $waId] : [$waId]);
+    } else {
+        echo json_encode(['ok' => false, 'msg' => WhatsAppService::lastError() ?: 'No se pudo reenviar']); exit;
+    }
+
+    echo json_encode(['ok' => true, 'destino' => $destino]);
+    exit;
+}
+
+// ══ Ping de mensajes nuevos (para notificar en vivo) ═════════════════════════
+// Devuelve los mensajes ENTRANTES con id > since dentro de las bandejas visibles.
+// Muy barato: filtra por PK (id) indexada. Sin `since` → solo el max id actual
+// (línea base al abrir el inbox, para no notificar todo el historial).
+if ($accion === 'ping') {
+    $vis = WaInbox::numerosVisibles($pdo, $yo, $esJefe);
+    if ($vis !== null && !$vis) { echo json_encode(['ok' => true, 'nuevos' => [], 'max_id' => 0]); exit; }
+    $visWhere = ''; $visArgs = [];
+    if ($vis !== null) {
+        $visWhere = ' AND c.phone_number_id IN (' . implode(',', array_fill(0, count($vis), '?')) . ')';
+        $visArgs  = $vis;
+    }
+    $since = (isset($_GET['since']) && $_GET['since'] !== '') ? (int) $_GET['since'] : null;
+
+    if ($since === null) {
+        $q = $pdo->prepare("SELECT COALESCE(MAX(m.id),0) FROM wa_mensajes m
+                             JOIN wa_conversaciones c ON c.id = m.conversacion_id
+                            WHERE m.direccion = 'in'$visWhere");
+        $q->execute($visArgs);
+        echo json_encode(['ok' => true, 'nuevos' => [], 'max_id' => (int) $q->fetchColumn()]);
+        exit;
+    }
+
+    $st = $pdo->prepare(
+        "SELECT m.id, m.conversacion_id AS conv_id, m.texto, m.tipo, c.telefono,
+                COALESCE(cl.razon_social, CONCAT('+', c.telefono)) AS contacto
+           FROM wa_mensajes m
+           JOIN wa_conversaciones c ON c.id = m.conversacion_id
+           LEFT JOIN clientes cl ON cl.id = c.cliente_id
+          WHERE m.id > ? AND m.direccion = 'in'$visWhere
+          ORDER BY m.id ASC LIMIT 20"
+    );
+    $st->execute(array_merge([$since], $visArgs));
+
+    $ico = ['image' => '🖼️ Imagen', 'audio' => '🎤 Audio', 'voice' => '🎤 Audio',
+            'video' => '🎬 Video', 'document' => '📎 Documento', 'sticker' => 'Sticker',
+            'location' => '📍 Ubicación'];
+    $nuevos = []; $maxId = $since;
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $maxId = max($maxId, (int) $r['id']);
+        $txt = trim((string) $r['texto']);
+        $prev = $txt !== '' ? mb_substr($txt, 0, 80) : ($ico[$r['tipo']] ?? 'Nuevo mensaje');
+        $nuevos[] = ['id' => (int) $r['id'], 'conv_id' => (int) $r['conv_id'],
+                     'tel' => $r['telefono'], 'contacto' => $r['contacto'], 'preview' => $prev];
+    }
+    echo json_encode(['ok' => true, 'nuevos' => $nuevos, 'max_id' => $maxId], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // ══ Listado ══════════════════════════════════════════════════════════════════
 if ($accion === 'lista') {
     $filtro = $_GET['filtro'] ?? 'todas';
@@ -1260,6 +1497,11 @@ if ($accion === 'lista') {
         $where[] = 'c.phone_number_id IN (' . implode(',', array_fill(0, count($vis), '?')) . ')';
         $args    = array_merge($args, $vis);
     }
+
+    // Depurar bandejas fantasma: ocultar conversaciones de números que ya no
+    // existen en el módulo de números (wa_numeros). Aplica a todos (gerencia
+    // incluida, que de otro modo veía el phone_number_id crudo como bandeja).
+    $where[] = 'EXISTS (SELECT 1 FROM wa_numeros wn WHERE wn.phone_number_id = c.phone_number_id)';
 
     // Bandeja elegida: dividir el inbox por número. '' = todas las visibles.
     $bandeja = trim($_GET['bandeja'] ?? '');
@@ -1312,7 +1554,7 @@ if ($accion === 'lista') {
 
     $st = $pdo->prepare(
         "SELECT c.id, c.telefono, c.cliente_id, c.asignado_a, c.asignado_at, c.no_leidos, c.sin_leer_manual,
-                c.fijada, c.archivada, c.silenciada,
+                c.fijada, c.archivada, c.silenciada, c.lead_caliente_at,
                 c.ventana_expira_at, c.ultimo_mensaje_at, c.ultimo_mensaje_preview, c.estado, cl.razon_social,
                 (SELECT m.direccion FROM wa_mensajes m WHERE m.conversacion_id = c.id ORDER BY m.id DESC LIMIT 1) AS ultima_dir,
                 " . gg_etapa_case('c.cliente_id') . " AS etapa,
@@ -1321,7 +1563,7 @@ if ($accion === 'lista') {
            LEFT JOIN clientes cl ON cl.id = c.cliente_id
            LEFT JOIN usuarios u  ON u.id  = c.asignado_a
           WHERE " . implode(' AND ', $where) . "
-          ORDER BY c.fijada DESC, c.ultimo_mensaje_at DESC LIMIT 100"
+          ORDER BY (c.lead_caliente_at IS NOT NULL) DESC, c.fijada DESC, c.ultimo_mensaje_at DESC LIMIT 100"
     );
     $st->execute($args);
 
@@ -1355,6 +1597,7 @@ if ($accion === 'lista') {
             'fijada'     => (bool) $r['fijada'],
             'archivada'  => (bool) $r['archivada'],
             'silenciada' => (bool) $r['silenciada'],
+            'lead'       => !empty($r['lead_caliente_at']),  // 🔥 pulsó "Quiero aprovecharlo"
             'asignado_a'      => $r['asignado_a'] ? (int) $r['asignado_a'] : null,
             'asignado_nombre' => $r['asignado_nombre'] ?: null,
             'es_mia'          => ((int) $r['asignado_a']) === $yo,
@@ -1377,6 +1620,9 @@ if ($accion === 'lista') {
         $wCont .= ' AND phone_number_id IN (' . implode(',', array_fill(0, count($vis), '?')) . ')';
         $aCont  = array_merge($aCont, $vis);
     }
+    // Mismo depurado que el listado: excluir números que ya no existen en wa_numeros
+    // (forma IN por subconsulta: válida tanto con la tabla sin alias como con alias 'c').
+    $wCont .= ' AND phone_number_id IN (SELECT phone_number_id FROM wa_numeros)';
     $c = $pdo->prepare(
         "SELECT COUNT(*) todas, SUM(asignado_a = ?) mias,
                 SUM(asignado_a IS NULL) sin_asignar, SUM(cliente_id IS NULL) sin_persona,
@@ -1411,11 +1657,13 @@ if ($accion === 'lista') {
         $bArgs    = array_merge($bArgs, $vis);
     }
     $bq = $pdo->prepare(
+        // INNER JOIN: solo bandejas de números que existen en wa_numeros. Las de
+        // números eliminados (huérfanas) no se ofrecen en el selector.
         "SELECT c.phone_number_id, COUNT(*) n,
                 COALESCE(NULLIF(n.etiqueta,''), n.telefono, c.phone_number_id) etiqueta,
                 n.telefono
            FROM wa_conversaciones c
-           LEFT JOIN wa_numeros n ON n.phone_number_id = c.phone_number_id
+           JOIN wa_numeros n ON n.phone_number_id = c.phone_number_id
           WHERE " . implode(' AND ', $bWhere) . "
           GROUP BY c.phone_number_id
           ORDER BY n DESC"
@@ -1434,6 +1682,66 @@ if ($accion === 'lista') {
 }
 
 // ══ Hilo + contexto ══════════════════════════════════════════════════════════
+// ══ Marcar leído en WhatsApp (tildes azules) + "escribiendo…" ════════════════
+// Fire-and-forget desde el frontend: al abrir un chat (sin typing) y al redactar
+// (typing=1). Envía el read-receipt/typing del ÚLTIMO mensaje entrante a Meta.
+if ($accion === 'leido') {
+    $id     = (int) ($_GET['id'] ?? 0);
+    $typing = !empty($_GET['typing']);
+    if ($id) {
+        $q = $pdo->prepare(
+            "SELECT c.phone_number_id,
+                    (SELECT m.wa_message_id FROM wa_mensajes m
+                      WHERE m.conversacion_id = c.id AND m.direccion = 'in' AND m.wa_message_id IS NOT NULL
+                      ORDER BY m.id DESC LIMIT 1) AS ult_in
+               FROM wa_conversaciones c WHERE c.id = ?"
+        );
+        $q->execute([$id]);
+        $r = $q->fetch(PDO::FETCH_ASSOC);
+        if ($r && !empty($r['ult_in'])) {
+            $vis = WaInbox::numerosVisibles($pdo, $yo, $esJefe);
+            if ($vis === null || in_array($r['phone_number_id'], $vis, true)) {
+                require_once __DIR__ . '/../../core/WhatsAppService.php';
+                try { WhatsAppService::markRead((string) $r['ult_in'], $typing, (string) $r['phone_number_id']); }
+                catch (\Throwable $e) { /* best-effort */ }
+            }
+        }
+    }
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+// ══ Buscar DENTRO de una conversación ════════════════════════════════════════
+if ($accion === 'buscar_hilo') {
+    $id = (int) ($_GET['id'] ?? 0);
+    $q  = trim($_GET['q'] ?? '');
+    if (!$id || mb_strlen($q) < 2) { echo json_encode(['ok' => true, 'resultados' => []]); exit; }
+
+    // Visibilidad: solo si el usuario puede ver esa bandeja.
+    $cq = $pdo->prepare("SELECT phone_number_id FROM wa_conversaciones WHERE id = ?");
+    $cq->execute([$id]);
+    $pnid = $cq->fetchColumn();
+    $vis  = WaInbox::numerosVisibles($pdo, $yo, $esJefe);
+    if ($pnid === false || ($vis !== null && !in_array($pnid, $vis, true))) {
+        echo json_encode(['ok' => false, 'msg' => 'Sin acceso']); exit;
+    }
+
+    $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q) . '%';
+    $s = $pdo->prepare(
+        "SELECT m.id, m.direccion AS dir, m.created_at, LEFT(m.texto, 140) AS snippet
+           FROM wa_mensajes m
+          WHERE m.conversacion_id = ? AND m.texto LIKE ? ESCAPE '\\\\'
+          ORDER BY m.id DESC LIMIT 50"
+    );
+    $s->execute([$id, $like]);
+    $res = [];
+    foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $res[] = ['id' => (int) $r['id'], 'dir' => $r['dir'], 'cuando' => $r['created_at'], 'texto' => $r['snippet']];
+    }
+    echo json_encode(['ok' => true, 'resultados' => $res], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if ($accion === 'hilo') {
     $id = (int) ($_GET['id'] ?? 0);
     if (!$id) { echo json_encode(['ok' => false, 'msg' => 'ID inválido']); exit; }
@@ -1458,20 +1766,38 @@ if ($accion === 'hilo') {
         echo json_encode(['ok' => false, 'msg' => 'No tienes acceso a esa bandeja']); exit;
     }
 
+    // Cargar los mensajes MÁS RECIENTES (no los más antiguos) y paginar hacia
+    // atrás con `antes` (id del más viejo ya cargado). Antes se traían los 300
+    // más ANTIGUOS en ASC → conversaciones largas (>300) ocultaban lo reciente.
+    $antes = (int) ($_GET['antes'] ?? 0);
+    $LIM_MSG = 300;
     $ms = $pdo->prepare(
         "SELECT m.id, m.wa_message_id, m.direccion, m.tipo, m.reenviado, m.reaccion, m.responde_a, m.texto, m.referral_json,
                 (SELECT LEFT(r.texto, 90) FROM wa_mensajes r WHERE r.wa_message_id = m.responde_a LIMIT 1) AS cita_texto,
                 (SELECT r.direccion FROM wa_mensajes r WHERE r.wa_message_id = m.responde_a LIMIT 1) AS cita_dir,
                 m.template_name, m.estado, m.error_msg,
-                m.enviado_por, m.created_at, m.media_id, m.media_path, m.media_mime, m.media_nombre,
+                m.enviado_por, m.desde_app, m.created_at, m.media_id, m.media_path, m.media_mime, m.media_nombre,
                 TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS autor
            FROM wa_mensajes m LEFT JOIN usuarios u ON u.id = m.enviado_por
-          WHERE m.conversacion_id = ? ORDER BY m.id ASC LIMIT 300"
+          WHERE m.conversacion_id = ?" . ($antes > 0 ? " AND m.id < ?" : "") . "
+          ORDER BY m.id DESC LIMIT " . ($LIM_MSG + 1)
     );
-    $ms->execute([$id]);
+    $ms->execute($antes > 0 ? [$id, $antes] : [$id]);
+    $rowsMsg  = $ms->fetchAll(PDO::FETCH_ASSOC);
+    $hay_mas  = count($rowsMsg) > $LIM_MSG;        // ¿quedan mensajes más antiguos?
+    if ($hay_mas) $rowsMsg = array_slice($rowsMsg, 0, $LIM_MSG);
+    $rowsMsg  = array_reverse($rowsMsg);           // volver a ASC (viejo→nuevo) para render
+
+    // Nombre del número (para atribuir los ecos de coexistencia enviados desde su app)
+    $numLabel = '';
+    if (!empty($conv['phone_number_id'])) {
+        $nq = $pdo->prepare("SELECT COALESCE(NULLIF(etiqueta,''), telefono) FROM wa_numeros WHERE phone_number_id = ? LIMIT 1");
+        $nq->execute([$conv['phone_number_id']]);
+        $numLabel = (string) $nq->fetchColumn();
+    }
 
     $mensajes = [];
-    foreach ($ms as $m) {
+    foreach ($rowsMsg as $m) {
         $mensajes[] = [
             'id'         => (int) $m['id'],
             'wa_id'      => $m['wa_message_id'],
@@ -1491,9 +1817,22 @@ if ($accion === 'hilo') {
             'estado'     => $m['estado'],
             'estado_txt' => wa_estado_label($m['estado']),
             'error'      => $m['error_msg'],
-            'autor'      => $m['enviado_por'] ? ($m['autor'] ?: 'Ejecutivo') : null,
+            // desde_app = eco de coexistencia (Frank/Andrés responden desde la app):
+            // se atribuye al nombre del número, no a "Sistema · automático".
+            'autor'      => !empty($m['desde_app'])
+                                ? ($numLabel ?: 'Enviado desde WhatsApp')
+                                : ($m['enviado_por'] ? ($m['autor'] ?: 'Ejecutivo') : null),
             'cuando'     => $m['created_at'],
         ];
+    }
+
+    $primer_id = $rowsMsg ? (int) $rowsMsg[0]['id'] : null; // id del más antiguo cargado
+
+    // Paginación hacia atrás: al pedir mensajes más viejos solo se devuelven ellos
+    // (sin recalcular contexto/notas, que no cambian). El frontend los antepone.
+    if ($antes > 0) {
+        echo json_encode(['ok' => true, 'mensajes' => $mensajes, 'hay_mas' => $hay_mas, 'primer_id' => $primer_id], JSON_UNESCAPED_UNICODE);
+        exit;
     }
 
     $ctx = ['propuestas' => [], 'envios' => [], 'certificados' => [], 'saldo' => null, 'fecha_requerida' => null, 'agenda' => []];
@@ -1581,7 +1920,7 @@ if ($accion === 'hilo') {
         'ventana_expira'  => $conv['ventana_expira_at'],
         'estado'          => $conv['estado'],
         'etapa'           => $conv['etapa'],
-    ], 'mensajes' => $mensajes, 'contexto' => $ctx, 'etiquetas' => $etiquetas]);
+    ], 'mensajes' => $mensajes, 'hay_mas' => $hay_mas, 'primer_id' => $primer_id, 'contexto' => $ctx, 'etiquetas' => $etiquetas]);
     exit;
 }
 

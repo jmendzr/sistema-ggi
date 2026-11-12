@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
 $user = auth_user();
-require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gestor_logistico','delivery');
+require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial','gestor_logistico','delivery','administracion_finanzas');
 
 $pdo    = Database::get();
 $buscar      = trim($_GET['q'] ?? '');
@@ -172,7 +172,7 @@ require_once __DIR__ . '/../../templates/layout.php';
       <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Exportar
     </a>
-    <?php if (has_role('gerente_general','gerente_operaciones','gestor_logistico','delivery')):
+    <?php if (has_role('gerente_general','gerente_operaciones','gestor_logistico','delivery','administracion_finanzas')):
       $_exp_c = 'q='.urlencode($buscar); foreach ($estados_sel as $_es) $_exp_c .= '&estado[]='.urlencode($_es); ?>
     <a href="<?= APP_URL ?>/modules/envios/exportar_courier.php?courier=olva&descargar=1&<?= $_exp_c ?>"
        class="btn btn-outline btn-sm" title="Exportar formato de carga Olva">
@@ -185,7 +185,7 @@ require_once __DIR__ . '/../../templates/layout.php';
       Shalom
     </a>
     <?php endif; ?>
-    <?php if (has_role('gerente_general','gerente_operaciones','gestor_logistico','delivery')): ?>
+    <?php if (has_role('gerente_general','gerente_operaciones','gestor_logistico','delivery','administracion_finanzas')): ?>
     <button type="button" class="btn btn-primary" onclick="ggiOpenForm('<?= APP_URL ?>/modules/envios/crear.php','Registrar envío')">
       <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Registrar envío
@@ -258,7 +258,7 @@ require_once __DIR__ . '/../../templates/layout.php';
     <p style="font-size:13px;"><?= ($buscar||!empty($estados_sel)||$gestor_activo||$agencia_sel)?'Prueba con otros filtros.':'Registra el primer envío.' ?></p>
     <?php if ($buscar || !empty($estados_sel) || $gestor_activo || $agencia_sel): ?>
     <a href="<?= APP_URL ?>/modules/envios/index.php" class="btn btn-outline" style="margin-top:16px;">Limpiar filtros</a>
-    <?php elseif (has_role('gerente_general','gerente_operaciones','gestor_logistico','delivery')): ?>
+    <?php elseif (has_role('gerente_general','gerente_operaciones','gestor_logistico','delivery','administracion_finanzas')): ?>
     <button type="button" class="btn btn-primary" style="margin-top:16px;" onclick="ggiOpenForm('<?= APP_URL ?>/modules/envios/crear.php','Registrar envío')">Registrar envío</button>
     <?php endif; ?>
   </div>
@@ -420,7 +420,7 @@ require_once __DIR__ . '/../../templates/layout.php';
             <button type="button" onclick="ggiOpenForm('<?= APP_URL ?>/modules/envios/editar.php?id=<?= $e['id'] ?>&from=listado','Editar envío')" class="btn-ic btn-ic-blue" title="Editar">
               <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </button>
-            <?php if (has_role('gerente_general','gerente_operaciones')): ?>
+            <?php if (has_role('gerente_general','gerente_operaciones','administracion_finanzas')): ?>
             <div class="ggi-row-menu-wrap">
               <button type="button" class="ggi-row-menu-btn" title="Más acciones" aria-label="Más acciones" aria-haspopup="true" aria-expanded="false">
                 <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>

@@ -100,3 +100,39 @@ span.flatpickr-weekday {
 .flatpickr-time input,
 .flatpickr-time .flatpickr-time-separator { color: var(--tx, #0f172a); }
 .flatpickr-time input:hover, .flatpickr-time input:focus { background: var(--bg-hover, #f1f5f9); }
+
+/* ── Selector de MES (plugin monthSelect) alineado al design system ────────── */
+.flatpickr-monthSelect-months { margin: 6px 6px 8px; }
+.flatpickr-monthSelect-month {
+  color: var(--tx, #0f172a);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 8px 2px;
+  margin: 2px;
+  width: calc(33.333% - 4px);
+  transition: background .12s, color .12s, border-color .12s;
+}
+.flatpickr-monthSelect-month:hover,
+.flatpickr-monthSelect-month:focus,
+.flatpickr-monthSelect-month.inRange {
+  background: var(--bg-hover, #f1f5f9) !important;
+  border-color: var(--bg-hover, #f1f5f9) !important;
+  box-shadow: none !important;
+}
+.flatpickr-monthSelect-month.today {
+  border-color: var(--ac, #1d4ed8);
+  color: var(--ac, #1d4ed8);
+  font-weight: 700;
+}
+.flatpickr-monthSelect-month.selected,
+.flatpickr-monthSelect-month.selected:hover {
+  background: var(--ac, #1d4ed8) !important;
+  border-color: var(--ac, #1d4ed8) !important;
+  color: #fff !important;
+}
+.flatpickr-monthSelect-month.flatpickr-disabled,
+.flatpickr-monthSelect-month.flatpickr-disabled:hover {
+  color: var(--tx3, #cbd5e1); background: transparent; cursor: default;
+}

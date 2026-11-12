@@ -9,6 +9,13 @@
   var barTimer      = null;
   var pending         = null;   // AbortController del fetch en curso
   var cache           = {};     // href → html(string) | Promise | null(error)
+  var cacheTime       = {};     // href → timestamp (ms) de cuándo se cacheó
+  // Al navegar HACIA ADELANTE, la caché en memoria solo se reutiliza si es muy
+  // reciente (≈ un prefetch por hover); si es más vieja, se refresca desde el
+  // servidor. Así, ir a un módulo (p. ej. Pagos) tras recibir un aviso muestra
+  // datos frescos, no la copia de la visita anterior. El botón atrás/adelante
+  // (popstate) sí usa la caché siempre → retroceso instantáneo.
+  var CACHE_TTL       = 4000;   // ms
   var __ggiNavDepth   = 0;      // cuántos navigate() hacia adelante se hicieron
   var _focusRestore   = null;   // {id, name} del input a re-enfocar tras swap de búsqueda
 
@@ -72,18 +79,26 @@
         // Opt-out de caché SPA: páginas con datos que cambian por acciones en
         // OTRAS páginas (p. ej. el calendario de llamadas) se marcan con
         // data-spa-nocache para servirse siempre frescas.
-        if (html.indexOf('data-spa-nocache') !== -1) { delete cache[href]; }
-        else { cache[href] = html; }
+        if (html.indexOf('data-spa-nocache') !== -1) { delete cache[href]; delete cacheTime[href]; }
+        else { cache[href] = html; cacheTime[href] = Date.now(); }
         return html;
       })
-      .catch(function (err) { cache[href] = null; throw err; });
-    if (!forceRefresh) cache[href] = p;
+      .catch(function (err) { cache[href] = null; delete cacheTime[href]; throw err; });
+    if (!forceRefresh) { cache[href] = p; cacheTime[href] = Date.now(); }
     return p;
+  }
+
+  /* ── ¿La caché de este href es lo bastante reciente para reutilizarla al ir
+     hacia adelante? (un prefetch por hover cuenta como reciente). ── */
+  function _cacheFresh(href) {
+    return !!cacheTime[href] && (Date.now() - cacheTime[href] < CACHE_TTL);
   }
 
   /* ── Exponer invalidación de caché (llamar tras mutaciones AJAX) ── */
   window.invalidatePageCache = function(href) {
-    delete cache[href || location.href];
+    var h = href || location.href;
+    delete cache[h];
+    delete cacheTime[h];
   };
 
   /* ── Navegar atrás respetando el historial AJAX ── */
@@ -170,8 +185,18 @@
     }, delay !== undefined ? delay : 600);
   };
 
+  /* ── Refrescar la página actual en el sitio (sin apilar historial, sin saltar
+     el scroll). Usado por el polling cuando llegan novedades (nuevo pago,
+     notificación) para que el contenido se actualice solo. ── */
+  window.ggiRefreshCurrent = function () {
+    var y = window.scrollY || document.documentElement.scrollTop || 0;
+    delete cache[location.href];
+    delete cacheTime[location.href];
+    navigate(location.href, false, true, y);
+  };
+
   /* ── Navegar ── */
-  function navigate(href, isPop, replace) {
+  function navigate(href, isPop, replace, keepScrollY) {
     if (!mainEl) { location.href = href; return; }
     if (pending) { pending.abort(); }
     // Liberar botones congelados antes de cada navegación SPA
@@ -184,9 +209,11 @@
     startBar();
 
     // Atrás/adelante (popstate): servir de caché → retroceso instantáneo como el
-    // nativo (evita pantalla en blanco/atascada por refetch de red en móvil). Las
-    // páginas data-spa-nocache no se cachean, así que igual llegan frescas.
-    getPage(href, ac.signal, false)
+    // nativo (evita pantalla en blanco/atascada por refetch de red en móvil).
+    // Hacia adelante: refrescar desde el servidor salvo que la caché sea muy
+    // reciente (prefetch por hover) → los módulos muestran datos frescos.
+    var _force = !isPop && !_cacheFresh(href);
+    getPage(href, ac.signal, _force)
       .then(function (html) {
         if (ac !== pending) return; // superado por navegación posterior (también en pop)
         pending = null;
@@ -276,6 +303,9 @@
           /* Atrás/adelante: restaurar el scroll guardado de esa entrada (no saltar al tope) */
           var _y = (history.state && history.state.ggiScroll) || 0;
           window.scrollTo(0, _y);
+        } else if (typeof keepScrollY === 'number') {
+          /* Refresco en sitio (ggiRefreshCurrent): conservar la posición actual */
+          window.scrollTo(0, keepScrollY);
         } else {
           /* Navegación hacia adelante: ir al tope */
           window.scrollTo(0, 0);
@@ -355,25 +385,31 @@
   /* ── Botones atrás / adelante ── */
   window.addEventListener('popstate', function () { navigate(location.href, true); });
 
-  /* ── Prefetch al pasar el cursor ── */
-  document.addEventListener('mouseover', function (e) {
-    var a = e.target.closest('a[href]');
+  /* ── Prefetch: al pasar el cursor Y al presionar (captura clics rápidos y touch) ──
+     mouseover precarga cuando el usuario apunta; mousedown/touchstart adelantan la
+     descarga ~100-150 ms antes de que se complete el clic (y en móvil, que no tiene
+     hover). Reutiliza la promesa en vuelo, así la navegación no vuelve a pedir. */
+  function _prefetch(a) {
     if (!a || a.hasAttribute('download') || a.target === '_blank' || a.hasAttribute('data-ggi-preview')) return;
     var href = a.getAttribute('href');
     if (!canAjax(href) || cache[href] != null) return;
     try {
       var url = new URL(href, location.href);
       if (cache[url.href] != null) return;
+      cacheTime[url.href] = Date.now(); // el prefetch cuenta como "reciente" para la navegación inmediata
       cache[url.href] = fetch(url.href, { credentials: 'same-origin', cache: 'no-cache' })
         .then(function (r) { return r.text(); })
         .then(function (html) {
-          if (html.indexOf('data-spa-nocache') !== -1) { delete cache[url.href]; }
-          else { cache[url.href] = html; }
+          if (html.indexOf('data-spa-nocache') !== -1) { delete cache[url.href]; delete cacheTime[url.href]; }
+          else { cache[url.href] = html; cacheTime[url.href] = Date.now(); }
           return html;
         })
-        .catch(function () { cache[url.href] = null; });
+        .catch(function () { cache[url.href] = null; delete cacheTime[url.href]; });
     } catch (x) {}
-  }, { passive: true });
+  }
+  document.addEventListener('mouseover',  function (e) { _prefetch(e.target.closest('a[href]')); }, { passive: true });
+  document.addEventListener('mousedown',  function (e) { if (e.button === 0) _prefetch(e.target.closest('a[href]')); }, { passive: true });
+  document.addEventListener('touchstart', function (e) { _prefetch(e.target.closest('a[href]')); }, { passive: true });
 
   /* ── Forms GET: interceptar para enrutar por SPA y preservar foco ── */
   document.addEventListener('submit', function (e) {

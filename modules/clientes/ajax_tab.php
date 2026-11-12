@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../core/helpers.php';
 require_once __DIR__ . '/../../core/Database.php';
+require_once __DIR__ . '/../../core/AlegraService.php';
 session_init();
 require_login();
 // Libera el lock de sesión: solo LEE $_SESSION. Sin esto, las pestañas del
@@ -68,7 +69,7 @@ if ($tab === 'pagos') {
     ?>
     <?php
         $es_gerente = has_role('gerente_general', 'gerente_operaciones');
-        $_esGG      = has_role('gerente_general'); // emitir factura Alegra: solo GG
+        $_puedeFacturar = can('facturas_emitir'); // emitir factura/nota de crédito Alegra (permiso configurable)
         $_alegraOn  = defined('ALEGRA_EMAIL') && ALEGRA_EMAIL !== '';
     ?>
     <?php if ($cnt_rechazados > 0): ?>
@@ -181,11 +182,56 @@ if ($tab === 'pagos') {
         ");
         $fact_stmt->execute([$id, $cot_id_g]);
         $cot_facturas = $fact_stmt->fetchAll(\PDO::FETCH_ASSOC);
+        // Notas de crédito de estas facturas, indexadas por factura_id (última válida).
+        $_cot_notas = [];
+        if ($cot_facturas) {
+            $_facIds = array_column($cot_facturas, 'id');
+            $_in = implode(',', array_fill(0, count($_facIds), '?'));
+            $nc_stmt = $pdo->prepare("
+                SELECT factura_id, numero, tipo, motivo, monto_total, archivo_path, archivo_nombre, estado_timbrado
+                FROM notas_credito_cliente
+                WHERE factura_id IN ($_in) AND (estado_timbrado IS NULL OR estado_timbrado <> 'error')
+                ORDER BY id DESC
+            ");
+            $nc_stmt->execute($_facIds);
+            foreach ($nc_stmt->fetchAll(\PDO::FETCH_ASSOC) as $_ncRow) {
+                if (!isset($_cot_notas[$_ncRow['factura_id']])) $_cot_notas[$_ncRow['factura_id']] = $_ncRow;
+            }
+        }
         // Tipos de factura Alegra ya emitidos (para que el modal deshabilite opciones inválidas)
         $_alegraTipos = [];
+        $_tieneManual = false; // ¿ya se cargó una factura manual (fuera de Alegra) en esta cotización?
         foreach ($cot_facturas as $_cf) {
             if (($_cf['origen'] ?? 'manual') === 'alegra' && ($_cf['estado_timbrado'] ?? '') !== 'error' && !empty($_cf['tipo_factura'])) {
                 $_alegraTipos[] = $_cf['tipo_factura'];
+            }
+            if (($_cf['origen'] ?? 'manual') === 'manual') $_tieneManual = true;
+        }
+
+        // ── ¿Facturación cerrada? → no ofrecer cargar ni emitir más ──────────────
+        //  Regla del negocio: una factura en el PAGO INICIAL es un anticipo (falta el
+        //  saldo); una factura en el PAGO FINAL cierra la facturación (sea el "total"
+        //  único, o el "saldo" que completa el par). La factura puede ser MANUAL
+        //  (cargada) o REGISTRADA EN EL SISTEMA (Alegra). Se cierra cuando existe una
+        //  factura de la etapa FINAL:
+        //    · Alegra con tipo 'total' o 'saldo' (tipo explícito), o
+        //    · cualquier factura (manual o del sistema) que NO sea explícitamente
+        //      'anticipo' y que se creó cuando el pago final ya estaba validado
+        //      (una creada ANTES del pago final = anticipo → aún falta el saldo).
+        $_pf = $pdo->prepare("SELECT fecha_validacion FROM pagos_cliente WHERE cotizacion_id=? AND tipo='final' AND estado='validado' AND deleted_at IS NULL ORDER BY fecha_validacion DESC LIMIT 1");
+        $_pf->execute([$cot_id_g]);
+        $_pagoFinalAt = $_pf->fetchColumn() ?: null;
+
+        $_facturadoTotal = false;
+        if (in_array('total', $_alegraTipos, true) || in_array('saldo', $_alegraTipos, true)) {
+            $_facturadoTotal = true;
+        } elseif ($_pagoFinalAt) {
+            foreach ($cot_facturas as $_cf) {
+                if (($_cf['tipo_factura'] ?? null) === 'anticipo') continue; // el anticipo nunca cierra
+                if (!empty($_cf['created_at']) && strtotime($_cf['created_at']) >= strtotime($_pagoFinalAt)) {
+                    $_facturadoTotal = true;
+                    break;
+                }
             }
         }
       ?>
@@ -198,10 +244,12 @@ if ($tab === 'pagos') {
               Facturas
             </span>
             <?php
-              // Emitir (Alegra): visible mientras quede algo por facturar (no 'total' ni 'saldo' ya emitidos).
-              $_puedeEmitir = $_esGG && $_alegraOn && !in_array('total', $_alegraTipos, true) && !in_array('saldo', $_alegraTipos, true);
-              // Cargar (manual): límite histórico de 2 facturas por cotización.
-              $_puedeCargar = $es_gerente && count($cot_facturas) < 2;
+              // Emitir (Alegra): visible mientras quede algo por facturar (no 'total' ni 'saldo' ya emitidos),
+              // que no exista factura cargada a mano (no duplicar lo facturado fuera del sistema) y que no
+              // esté ya facturado por el total.
+              $_puedeEmitir = $_puedeFacturar && $_alegraOn && !$_tieneManual && !$_facturadoTotal && !in_array('total', $_alegraTipos, true) && !in_array('saldo', $_alegraTipos, true);
+              // Cargar (manual): límite de 2 facturas y no cuando ya está facturado por el total.
+              $_puedeCargar = $es_gerente && count($cot_facturas) < 2 && !$_facturadoTotal;
             ?>
             <?php if ($_puedeEmitir || $_puedeCargar): ?>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -226,12 +274,25 @@ if ($tab === 'pagos') {
           </div>
           <?php else: ?>
           <div style="display:flex;flex-direction:column;gap:7px;">
-            <?php foreach ($cot_facturas as $_fac): ?>
+            <?php foreach ($cot_facturas as $_fac):
+              $_esAlegra = (($_fac['origen'] ?? 'manual') === 'alegra') && !empty($_fac['alegra_id']);
+              $_nc       = $_cot_notas[$_fac['id']] ?? null;   // nota de crédito de esta factura
+              // Estado de timbrado SUNAT (asíncrono).
+              $_timb       = strtoupper((string)($_fac['estado_timbrado'] ?? ''));
+              $_esAceptada = ($_esAlegra && $_timb === 'STAMPED_AND_ACCEPTED');
+              $_esRechazada= ($_esAlegra && strpos($_timb, 'REJECTED') !== false);
+              $_esEnEspera = ($_esAlegra && !$_esAceptada && !$_esRechazada && $_timb !== '' && $_timb !== 'DRAFT');
+              // Botón "Nota de crédito": solo con permiso, sobre facturas Alegra ya ACEPTADAS por SUNAT y no rectificadas.
+              $_puedeNC  = $_puedeFacturar && $_alegraOn && $_esAlegra && !$_nc && $_esAceptada;
+            ?>
             <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-surface);border:1px solid var(--gris-borde);border-radius:8px;">
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="#EF4444" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <?php $_fac_nombre = sanitize($_fac['archivo_nombre'] ?: ($_fac['numero_factura'] ?? 'Factura')); ?>
               <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:600;color:var(--gris-dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= $_fac_nombre ?>"><?= $_fac_nombre ?></div>
+                <div style="font-size:12px;font-weight:600;color:var(--gris-dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= $_fac_nombre ?>">
+                  <?= $_fac_nombre ?>
+                  <?php if ($_nc): ?><span style="font-size:9px;font-weight:700;color:var(--s-warn-tx);background:var(--s-warn-bg);border-radius:5px;padding:2px 6px;margin-left:4px;letter-spacing:.3px;">RECTIFICADA</span><?php endif; ?>
+                </div>
                 <div style="font-size:11px;color:var(--gris-texto);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                   <?= date('d/m/Y', strtotime($_fac['created_at'])) ?><?php $_subido = sanitize(trim(($_fac['subido_nombre'] ?? '') . ' ' . ($_fac['subido_apellido'] ?? ''))); if ($_subido): ?> · <?= $_subido ?><?php endif; ?>
                 </div>
@@ -245,8 +306,18 @@ if ($tab === 'pagos') {
                    target="_blank" data-ggi-preview data-title="Factura — <?= sanitize($_fac['archivo_nombre']) ?>" class="btn-ic btn-ic-blue" title="Ver factura">
                   <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </a>
+                <?php elseif ($_esEnEspera): ?>
+                <span style="font-size:9px;font-weight:700;color:var(--s-warn-tx);background:var(--s-warn-bg);border-radius:5px;padding:2px 7px;letter-spacing:.2px;" title="Emitida; esperando la aceptación de SUNAT. Al aceptarse se descarga el PDF y se envía al cliente.">EN SUNAT…</span>
+                <?php elseif ($_esRechazada): ?>
+                <span style="font-size:9px;font-weight:700;color:var(--s-err-tx);background:var(--s-err-bg);border-radius:5px;padding:2px 7px;letter-spacing:.2px;" title="SUNAT rechazó el comprobante. Revísalo en Alegra.">RECHAZADA</span>
                 <?php else: ?>
                 <span style="font-size:10px;color:var(--gris-texto);">sin PDF</span>
+                <?php endif; ?>
+                <?php if ($_puedeNC): ?>
+                <button type="button" class="btn-ic btn-ic-gray" title="Emitir nota de crédito"
+                        onclick='ggiAbrirNota(<?= (int)$_fac['id'] ?>, <?= json_encode($_fac['numero_factura'] ?: ('#'.$_fac['alegra_id']), JSON_HEX_APOS|JSON_HEX_QUOT) ?>, <?= json_encode($_fac['razon_social'] ?? '', JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
+                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 3h18v6H3z"/><path d="M3 15h18v6H3z"/><path d="M8 12h8"/></svg>
+                </button>
                 <?php endif; ?>
                 <?php if ($es_gerente): ?>
                 <button type="button" class="btn-ic btn-ic-gray" title="Actualizar PDF"
@@ -256,6 +327,22 @@ if ($tab === 'pagos') {
                 <?php endif; ?>
               </div>
             </div>
+            <?php if ($_nc): ?>
+            <div style="display:flex;align-items:center;gap:9px;padding:7px 10px 7px 22px;margin-top:-3px;background:var(--bg-surface);border:1px solid var(--gris-borde);border-top:none;border-radius:0 0 8px 8px;">
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="var(--s-warn-tx)" stroke-width="2" style="flex-shrink:0;"><path d="M9 14l6-6"/><circle cx="9" cy="9" r="1.5"/><circle cx="15" cy="15" r="1.5"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:11.5px;font-weight:600;color:var(--gris-dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                  Nota de crédito <?= sanitize($_nc['numero'] ?: '') ?> · <?= sanitize(AlegraService::NOTA_CR_TIPOS[$_nc['tipo']] ?? $_nc['tipo']) ?>
+                </div>
+                <?php if (!empty($_nc['motivo'])): ?><div style="font-size:10.5px;color:var(--gris-texto);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= sanitize($_nc['motivo']) ?>"><?= sanitize($_nc['motivo']) ?></div><?php endif; ?>
+              </div>
+              <?php if (!empty($_nc['archivo_path'])): ?>
+              <a href="<?= APP_URL ?>/<?= sanitize($_nc['archivo_path']) ?>" target="_blank" data-ggi-preview data-title="Nota de crédito <?= sanitize($_nc['numero']) ?>" class="btn-ic btn-ic-blue" title="Ver nota de crédito">
+                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </a>
+              <?php endif; ?>
+            </div>
+            <?php endif; ?>
             <?php endforeach; ?>
           </div>
           <?php endif; ?>
@@ -328,7 +415,7 @@ if ($tab === 'pagos') {
       </div>
     </div>
 
-    <?php if ($_esGG && $_alegraOn): ?>
+    <?php if ($_puedeFacturar && $_alegraOn): ?>
     <!-- Modal emitir factura (Alegra) — solo Gerente General -->
     <div id="modal-emitir-alegra" class="modal-overlay" style="z-index:9999;">
       <div style="background:var(--bg-surface);border-radius:16px;padding:24px;width:100%;max-width:470px;margin:20px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:90vh;overflow-y:auto;">
@@ -466,6 +553,99 @@ if ($tab === 'pagos') {
     }
     document.addEventListener('change', function(e){ if (e.target && (e.target.name==='al-tipo' || e.target.name==='al-det')) { var b=document.getElementById('al-btn-emitir'); if (b) b.disabled = true; } });
     </script>
+
+    <!-- Modal nota de crédito (Alegra) — requiere permiso facturas_emitir -->
+    <div id="modal-nota-credito" class="modal-overlay" style="z-index:9999;">
+      <div style="background:var(--bg-surface);border-radius:16px;padding:24px;width:100%;max-width:470px;margin:20px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:90vh;overflow-y:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div>
+            <h3 style="margin:0;font-size:16px;font-weight:700;">Nota de crédito</h3>
+            <p id="nc-fac-label" style="margin:2px 0 0;font-size:12px;color:var(--gris-texto);"></p>
+          </div>
+          <button type="button" onclick="ggiCerrarNota()" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--gris-texto);font-size:16px;">✕</button>
+        </div>
+        <input type="hidden" id="nc-fac" value="">
+        <div style="margin-bottom:14px;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:700;text-align:center;background:<?= ALEGRA_NC_REAL ? 'var(--s-err-bg)' : 'var(--s-warn-bg)' ?>;color:<?= ALEGRA_NC_REAL ? 'var(--s-err-tx)' : 'var(--s-warn-tx)' ?>;">
+          <?= ALEGRA_NC_REAL ? 'MODO EMISIÓN REAL — VA A SUNAT' : 'MODO BORRADOR — no va a SUNAT (prueba)' ?>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--gris-dark);margin-bottom:6px;">Tipo (motivo SUNAT)</label>
+          <select id="nc-tipo" style="width:100%;padding:9px 34px 9px 12px;border:1.5px solid var(--gris-borde);border-radius:9px;font-size:13px;font-family:inherit;color:var(--gris-dark);background-color:var(--bg-surface);appearance:none;-webkit-appearance:none;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23667085' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E&quot;);background-repeat:no-repeat;background-position:right 12px center;cursor:pointer;outline:none;">
+            <?php foreach (AlegraService::NOTA_CR_TIPOS as $_k => $_lbl): ?>
+            <option value="<?= $_k ?>"><?= sanitize($_lbl) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--gris-dark);margin-bottom:6px;">Motivo de emisión</label>
+          <textarea id="nc-motivo" rows="2" maxlength="500" style="width:100%;padding:9px 12px;border:1.5px solid var(--gris-borde);border-radius:9px;font-size:13px;font-family:inherit;color:var(--gris-dark);background-color:var(--bg-surface);resize:vertical;outline:none;" placeholder="Ej.: Anulación por error en el monto facturado"></textarea>
+        </div>
+        <div id="nc-resumen"></div>
+        <div id="nc-msg" style="display:none;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+          <button type="button" onclick="ggiCerrarNota()" class="btn btn-outline btn-sm">Cancelar</button>
+          <button type="button" id="nc-btn-preview" onclick="ggiNotaPreview()" class="btn btn-outline btn-sm">Ver resumen</button>
+          <button type="button" id="nc-btn-emitir" onclick="ggiNotaEmitir()" class="btn btn-primary btn-sm" disabled><?= ALEGRA_NC_REAL ? 'Emitir a SUNAT' : 'Generar borrador' ?></button>
+        </div>
+      </div>
+    </div>
+    <script>
+    var NC_EMIT_LABEL = <?= ALEGRA_NC_REAL ? "'Emitir a SUNAT'" : "'Generar borrador'" ?>;
+    function ggiAbrirNota(facId, facNum, cliente){
+      document.getElementById('nc-fac').value = facId;
+      document.getElementById('nc-fac-label').textContent = 'Factura ' + (facNum||'') + (cliente ? ' · ' + cliente : '');
+      document.getElementById('nc-motivo').value = '';
+      document.getElementById('nc-resumen').innerHTML = '';
+      document.getElementById('nc-msg').style.display = 'none';
+      var be = document.getElementById('nc-btn-emitir'); be.disabled = true; be.textContent = NC_EMIT_LABEL;
+      document.getElementById('modal-nota-credito').classList.add('open');
+    }
+    function ggiCerrarNota(){ document.getElementById('modal-nota-credito').classList.remove('open'); }
+    function _ncData(accion){
+      var fd = new FormData();
+      fd.append('_csrf', AL_CSRF);
+      fd.append('accion', accion);
+      fd.append('factura_id', document.getElementById('nc-fac').value);
+      fd.append('tipo', document.getElementById('nc-tipo').value);
+      fd.append('motivo', document.getElementById('nc-motivo').value);
+      return fd;
+    }
+    function _ncMsg(t, ok){
+      var m = document.getElementById('nc-msg');
+      m.style.cssText = 'display:block;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:12.5px;background:'+(ok?'var(--s-ok-bg)':'var(--s-err-bg)')+';color:'+(ok?'var(--s-ok-tx)':'var(--s-err-tx)')+';';
+      m.textContent = t;
+    }
+    async function ggiNotaPreview(){
+      var fd = _ncData('preview');
+      document.getElementById('nc-resumen').innerHTML = '<div style="color:var(--gris-texto);font-size:12px;">Consultando factura…</div>';
+      try{
+        var d = await (await fetch('<?= APP_URL ?>/modules/facturas/nota_credito.php', {method:'POST', body:fd})).json();
+        if (!d.ok) { document.getElementById('nc-resumen').innerHTML=''; _ncMsg(d.msg||'Error', false); document.getElementById('nc-btn-emitir').disabled = true; return; }
+        var r = d.resumen, s = function(v){ return 'S/ ' + Number(v).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+        document.getElementById('nc-resumen').innerHTML =
+          '<div style="border:1px solid var(--gris-borde);border-radius:9px;padding:12px 14px;font-size:13px;">'
+          +'<div style="font-weight:700;margin-bottom:2px;">Rectifica '+r.factura+'</div>'
+          +'<div style="color:var(--gris-texto);margin-bottom:8px;font-size:12px;">'+r.tipo_label+'</div>'
+          +'<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Base gravada</span><b>'+s(r.base)+'</b></div>'
+          +'<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>IGV 18%</span><b>'+s(r.igv)+'</b></div>'
+          +'<div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid var(--gris-borde);margin-top:4px;"><span>Total a acreditar</span><b>'+s(r.total)+'</b></div>'
+          +'</div>';
+        document.getElementById('nc-msg').style.display = 'none';
+        document.getElementById('nc-btn-emitir').disabled = false;
+      }catch(e){ document.getElementById('nc-resumen').innerHTML=''; _ncMsg('Error de conexión.', false); }
+    }
+    async function ggiNotaEmitir(){
+      var mot = document.getElementById('nc-motivo').value.trim();
+      if (mot.length < 5) { _ncMsg('Indica el motivo de emisión (mínimo 5 caracteres).', false); return; }
+      var be = document.getElementById('nc-btn-emitir'); be.disabled = true; be.textContent = 'Procesando…';
+      try{
+        var d = await (await fetch('<?= APP_URL ?>/modules/facturas/nota_credito.php', {method:'POST', body:_ncData('emitir')})).json();
+        if (d.ok) { _ncMsg(d.msg, true); if (window.invalidatePageCache) window.invalidatePageCache(location.href); setTimeout(function(){ ggiCerrarNota(); if (window.reloadTab) window.reloadTab('pagos'); else location.reload(); }, 2200); }
+        else { _ncMsg(d.msg||'No se pudo emitir.', false); be.disabled = false; be.textContent = NC_EMIT_LABEL; }
+      }catch(e){ _ncMsg('Error de conexión.', false); be.disabled = false; be.textContent = NC_EMIT_LABEL; }
+    }
+    document.addEventListener('change', function(e){ if (e.target && (e.target.id==='nc-tipo' || e.target.id==='nc-motivo')) { var b=document.getElementById('nc-btn-emitir'); if (b) b.disabled = true; } });
+    </script>
     <?php endif; ?>
 
     <script>
@@ -517,7 +697,7 @@ if ($tab === 'pagos') {
       const file = e.dataTransfer.files[0];
       if (!file) return;
       if (file.type !== 'application/pdf' && !file.name.endsWith('.pdf')) {
-        alert('Solo se permiten archivos PDF.');
+        (window.showToast ? showToast('Solo se permiten archivos PDF.', 'error') : alert('Solo se permiten archivos PDF.'));
         ggiFDragLeave(e);
         return;
       }
@@ -532,7 +712,7 @@ if ($tab === 'pagos') {
     async function ggiSubirFactura() {
       const fileInput = document.getElementById('factura-file-input');
       if (!fileInput.files[0]) {
-        alert('Selecciona o arrastra un archivo PDF.');
+        (window.showToast ? showToast('Selecciona o arrastra un archivo PDF.', 'error') : alert('Selecciona o arrastra un archivo PDF.'));
         return;
       }
       const btn = document.getElementById('btn-subir-factura');

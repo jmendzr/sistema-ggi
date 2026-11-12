@@ -142,6 +142,15 @@ try {
             }
 
             // ── Mensajes entrantes (respuestas de clientes) ───────────────
+            // Nombre de perfil de WhatsApp del remitente (value.contacts[].profile.name),
+            // indexado por teléfono normalizado. Es el nombre que el usuario puso en su WA.
+            $perfiles = [];
+            foreach ($value['contacts'] ?? [] as $ct) {
+                $ph = preg_replace('/\D/', '', (string)($ct['wa_id'] ?? ''));
+                $nm = trim((string)($ct['profile']['name'] ?? ''));
+                if ($ph && $nm !== '') $perfiles[$ph] = mb_substr($nm, 0, 120);
+            }
+
             $messages = $value['messages'] ?? [];
             foreach ($messages as $msg) {
                 $wa_id = $msg['id']   ?? null;
@@ -218,15 +227,43 @@ try {
                 }
 
                 // INSERT IGNORE: Meta puede reintentar el webhook (wa_message_id es UNIQUE)
-                $pdo->prepare("
+                $__inb = $pdo->prepare("
                     INSERT IGNORE INTO whatsapp_inbound (wa_message_id, telefono, cliente_id, tipo, texto)
                     VALUES (?, ?, ?, ?, ?)
-                ")->execute([$wa_id, $from, $cliente_id, $tipo, $texto]);
+                ");
+                $__inb->execute([$wa_id, $from, $cliente_id, $tipo, $texto]);
+                $__msgNuevo = $__inb->rowCount() > 0;   // false = reintento del webhook (ya procesado) → no re-notificar
 
                 // Hilo del inbox multiagente: crea/actualiza la conversación y
                 // reabre la ventana de 24h de Meta.
                 $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
-                WaInbox::registrarEntrante($pdo, $from, $wa_id, $tipo, $texto, $phoneNumberId, $media, $reenviado);
+                $convId = WaInbox::registrarEntrante($pdo, $from, $wa_id, $tipo, $texto, $phoneNumberId, $media, $reenviado);
+
+                // Guardar el nombre de perfil de WhatsApp del contacto (si Meta lo mandó).
+                if ($convId && !empty($perfiles[$from])) {
+                    try { $pdo->prepare("UPDATE wa_conversaciones SET perfil_nombre = ? WHERE id = ?")->execute([$perfiles[$from], (int)$convId]); } catch (\Throwable $e) {}
+                }
+
+                // Lead caliente: el cliente pulsó un botón de interés → fijar y avisar
+                // al ejecutivo a cargo. "Quiero aprovecharlo" = aviso de cotización por
+                // vencer; "Quiero aprovechar" = promoción (campaña).
+                if ($convId && $texto !== null) {
+                    $__t = mb_strtolower(trim($texto));
+                    if (str_starts_with($__t, 'quiero aprovechar')) {
+                        $__motivo = ($__t === 'quiero aprovecharlo') ? null : 'promo';
+                        try { WaInbox::marcarLeadCaliente($pdo, (int)$convId, $__motivo); } catch (\Throwable $e) { error_log('[webhook lead_caliente] ' . $e->getMessage()); }
+                    }
+                }
+
+                // Bot de recepción de leads: primer contacto, captura normas + RUC,
+                // etiqueta y avisa al asesor. Solo números conversacionales; se calla
+                // si un humano toma la conversación. (Reemplaza la auto-respuesta fuera
+                // de horario, que quedó deshabilitada en WaInbox::autoRespuestaFuera.)
+                if ($convId) {
+                    require_once __DIR__ . '/../../core/WaBot.php';
+                    try { WaBot::procesar($pdo, (int)$convId, $from, $phoneNumberId, $tipo, $texto); }
+                    catch (\Throwable $e) { error_log('[webhook wabot] ' . $e->getMessage()); }
+                }
 
                 // Click-to-WhatsApp Ads: el primer mensaje trae 'referral' con el
                 // contexto del anuncio (titular, cuerpo, imagen, enlace). Se guarda
@@ -251,6 +288,74 @@ try {
                         $pdo->prepare("UPDATE wa_mensajes SET referral_json = ? WHERE wa_message_id = ?")
                             ->execute([json_encode($refData, JSON_UNESCAPED_UNICODE), $wa_id]);
                     }
+                }
+
+                // ── Push (PWA) a TODOS los ejecutivos por cada mensaje entrante ──
+                // Llega aunque tengan el navegador cerrado o estén en otra página.
+                // Solo si el mensaje es NUEVO (evita duplicar en reintentos de Meta).
+                if ($convId && !empty($__msgNuevo)) {
+                    try {
+                        require_once __DIR__ . '/../../core/PushService.php';
+                        $nombre = $perfiles[$from] ?? '';
+                        if ($cliente_id) {
+                            $rn = $pdo->prepare("SELECT razon_social FROM clientes WHERE id = ?");
+                            $rn->execute([$cliente_id]);
+                            $nombre = ((string) $rn->fetchColumn()) ?: $nombre;
+                        }
+                        if ($nombre === '') $nombre = '+' . $from;
+                        $prevMap = ['image' => '🖼️ Imagen', 'audio' => '🎤 Audio', 'voice' => '🎤 Audio',
+                                    'video' => '🎬 Video', 'document' => '📎 Documento', 'sticker' => 'Sticker',
+                                    'location' => '📍 Ubicación'];
+                        $prev = trim((string) ($texto ?? ''));
+                        $prev = $prev !== '' ? mb_substr($prev, 0, 120) : ($prevMap[$tipo] ?? 'Nuevo mensaje');
+                        $urlInbox = APP_URL . '/modules/inbox/index.php?tel=' . rawurlencode($from);
+                        $ejes = $pdo->query("SELECT id FROM usuarios WHERE activo = 1 AND rol IN ('ejecutivo_ventas','gerente_comercial')")
+                                    ->fetchAll(PDO::FETCH_COLUMN);
+                        foreach ($ejes as $uid) {
+                            PushService::notify((int) $uid, 'WhatsApp — ' . $nombre, $prev, $urlInbox, 'wa-msg-' . $convId);
+                        }
+                    } catch (\Throwable $e) { error_log('[webhook push-msg] ' . $e->getMessage()); }
+                }
+            }
+
+            // ── Ecos de COEXISTENCIA (smb_message_echoes) ─────────────────
+            // Mensajes que el negocio ENVÍA desde la app de WhatsApp Business del
+            // número (p. ej. Frank responde desde su celular). Meta los reenvía
+            // aquí para que el CRM los vea. Se registran como SALIENTES.
+            // INSERT IGNORE (wa_message_id UNIQUE) evita duplicar los que ya
+            // enviamos por la Cloud API (mismo wamid) o reintentos del webhook.
+            $echoes = $value['message_echoes'] ?? [];
+            foreach ($echoes as $echo) {
+                $wa_id = $echo['id'] ?? null;
+                $to    = preg_replace('/\D/', '', (string)($echo['to'] ?? ''));   // el cliente (destinatario)
+                if (!$to) continue;
+
+                $tipo = $echo['type'] ?? 'text';
+                if ($tipo === 'reaction') {   // reacción del negocio sobre un mensaje del cliente
+                    $sobre = $echo['reaction']['message_id'] ?? null;
+                    $emoji = $echo['reaction']['emoji'] ?? null;
+                    if ($sobre) {
+                        try { $pdo->prepare("UPDATE wa_mensajes SET reaccion = ? WHERE wa_message_id = ?")->execute([$emoji ?: null, $sobre]); } catch (\Throwable $e) {}
+                    }
+                    continue;
+                }
+
+                $texto = match ($tipo) {
+                    'text'        => $echo['text']['body']   ?? null,
+                    'button'      => $echo['button']['text'] ?? null,
+                    'interactive' => $echo['interactive']['button_reply']['title']
+                                  ?? $echo['interactive']['list_reply']['title'] ?? null,
+                    'image', 'video', 'document' => $echo[$tipo]['caption'] ?? null,
+                    default       => null,
+                };
+
+                $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
+                try {
+                    // enviadoPor = null (no es un usuario del sistema); desde_app = true
+                    // marca que se envió desde la app de WhatsApp del número (coexistencia).
+                    WaInbox::registrarSaliente($pdo, $to, $wa_id, $tipo, $texto, null, null, 'sent', null, $phoneNumberId, null, true);
+                } catch (\Throwable $e) {
+                    error_log('[webhook smb_echo] ' . $e->getMessage());
                 }
             }
 

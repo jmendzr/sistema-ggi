@@ -33,6 +33,14 @@ if ($uid_sel) {
     $params   = array_merge($params, $uid_sel);
 }
 
+// Búsqueda por texto en la descripción o la acción (ej. "eliminó", "FA01", nº de cotización).
+$q = trim($_GET['q'] ?? '');
+if ($q !== '') {
+    $where[]  = '(l.descripcion LIKE ? OR l.accion LIKE ?)';
+    $params[] = '%' . $q . '%';
+    $params[] = '%' . $q . '%';
+}
+
 $sql_where = implode(' AND ', $where);
 
 $total = $pdo->prepare("SELECT COUNT(*) FROM log_actividad l WHERE $sql_where");
@@ -145,7 +153,7 @@ $stats_total  = $pdo->query("SELECT COUNT(*) FROM log_actividad")->fetchColumn()
 </div>
 
 <!-- Filtros -->
-<?php $_nfiltros = (!empty($modulo_sel) ? 1 : 0) + (!empty($uid_sel) ? 1 : 0) + (($desde || $hasta) ? 1 : 0); ?>
+<?php $_nfiltros = (!empty($modulo_sel) ? 1 : 0) + (!empty($uid_sel) ? 1 : 0) + (($desde || $hasta) ? 1 : 0) + ($q !== '' ? 1 : 0); ?>
 <form method="GET" class="toolbar <?= $_nfiltros ? 'filtros-open' : '' ?>">
   <button type="button" class="ggi-filtros-toggle" onclick="this.closest('form').classList.toggle('filtros-open')" aria-label="Mostrar u ocultar filtros">
     <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
@@ -164,6 +172,7 @@ $stats_total  = $pdo->query("SELECT COUNT(*) FROM log_actividad")->fetchColumn()
 
   <input type="date" name="desde" value="<?= $desde ?>" class="filter-input" onchange="this.form.submit()">
   <input type="date" name="hasta" value="<?= $hasta ?>" class="filter-input" onchange="this.form.submit()">
+  <input type="search" name="q" value="<?= sanitize($q) ?>" class="filter-input" placeholder="Buscar en descripción…" style="min-width:200px;" aria-label="Buscar en la descripción o acción">
   </div><!-- /.ggi-filtros -->
 
   <a href="?" class="btn btn-outline btn-sm">Limpiar</a>

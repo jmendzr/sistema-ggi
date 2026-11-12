@@ -13,7 +13,7 @@ $active_menu = 'inbox';
 require_once __DIR__ . '/../../core/helpers.php';
 session_init();
 require_login();
-require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
+require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas','gerente_comercial');
 require_once __DIR__ . '/../../core/IaAgente.php';
 $ia_disponible = IaAgente::disponible();
 ?>
@@ -69,6 +69,9 @@ $ia_disponible = IaAgente::disponible();
   }
   .ib-icon:hover { background: var(--bg-hover); color: var(--tx); }
   .ib-icon svg { width: 17px; height: 17px; }
+  /* Campana de notificaciones activa */
+  .ib-icon.on { color: var(--ac); }
+  .ib-icon.on svg path { fill: var(--ac); fill-opacity: .16; }
 
   /* Selector de bandeja: elegir qué número mirar cuando hay varios */
   .ib-bandeja { margin-bottom: 10px; }
@@ -274,17 +277,21 @@ $ia_disponible = IaAgente::disponible();
   /* Fondo de conversación: patrón propio de trazos sutiles (no es el arte de
      WhatsApp). Se adapta a claro/oscuro cambiando el color del trazo. */
   .ib-msgs { padding: 18px; display: flex; flex-direction: column; gap: 8px;
-    background-color: var(--bg-base);
+    /* Fondo más profundo que las burbujas blancas para que se despeguen bien */
+    background-color: #DFE4EC;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg fill='none' stroke='%23334155' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' opacity='0.05'%3E%3Ccircle cx='18' cy='20' r='6'/%3E%3Cpath d='M56 13v13M49 19h13'/%3E%3Cpath d='M8 62q6 -8 12 0t12 0'/%3E%3Crect x='62' y='55' width='12' height='12' rx='3'/%3E%3Cpath d='M40 80l5 -9 5 9z'/%3E%3Ccircle cx='78' cy='30' r='3'/%3E%3Cpath d='M22 44h12'/%3E%3Cpath d='M70 82h12'/%3E%3C/g%3E%3C/svg%3E");
     background-size: 96px 96px; }
   :root[data-tema="oscuro"] .ib-msgs {
+    background-color: #0B0F14;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg fill='none' stroke='%23FFFFFF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' opacity='0.045'%3E%3Ccircle cx='18' cy='20' r='6'/%3E%3Cpath d='M56 13v13M49 19h13'/%3E%3Cpath d='M8 62q6 -8 12 0t12 0'/%3E%3Crect x='62' y='55' width='12' height='12' rx='3'/%3E%3Cpath d='M40 80l5 -9 5 9z'/%3E%3Ccircle cx='78' cy='30' r='3'/%3E%3Cpath d='M22 44h12'/%3E%3Cpath d='M70 82h12'/%3E%3C/g%3E%3C/svg%3E"); }
   .ib-sep { align-self: center; font-size: .68rem; font-weight: 600; color: var(--tx2);
             background: var(--bg-surface); border: 1px solid var(--brd);
             padding: 3px 12px; border-radius: 999px; margin: 10px 0 4px; }
 
   .ib-b { max-width: 72%; min-width: 74px; padding: 8px 12px 6px; border-radius: 14px;
-          font-size: .84rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+          font-size: .84rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+          box-shadow: 0 1px 1.5px rgba(15,23,42,.12); }
+  :root[data-tema="oscuro"] .ib-b { box-shadow: 0 1px 2px rgba(0,0,0,.35); }
   .ib-b.in  { align-self: flex-start; background: var(--bg-surface); color: var(--tx);
               border: 1px solid var(--brd); border-bottom-left-radius: 5px; }
   .ib-b.out { align-self: flex-end; background: var(--ac); color: #fff; border-bottom-right-radius: 5px; }
@@ -661,7 +668,10 @@ $ia_disponible = IaAgente::disponible();
   .ib-ctx-ico { width: 12px; height: 12px; flex-shrink: 0; color: var(--tx3); opacity: 0; transition: opacity .13s; }
   .ib-ctx-a:hover .ib-ctx-ico { opacity: 1; color: var(--ac); }
 
-  .ib-empty { padding: 56px 28px; text-align: center; color: var(--tx2); font-size: .85rem; }
+  /* Estado vacío / "Cargando…": centrado real (vertical + horizontal) dentro
+     del panel del hilo (flex column) y de la lista. margin:auto en un hijo de
+     flex-column lo centra en ambos ejes. */
+  .ib-empty { margin: auto; padding: 32px 28px; text-align: center; color: var(--tx2); font-size: .85rem; max-width: 340px; }
   .ib-empty svg { width: 40px; height: 40px; color: var(--tx3); margin: 0 auto 12px; display: block; }
 
   /* Botón: reutiliza el canónico .btn del design system */
@@ -815,6 +825,9 @@ $ia_disponible = IaAgente::disponible();
     /* El botón de acción (Tomar/Soltar) se compacta para no romper la fila */
     .ib-chat-head .ib-btn-sm { padding: 6px 9px; font-size: .74rem; white-space: nowrap; flex-shrink: 0; }
     .ib-chat-head .ib-tag { flex-shrink: 0; }
+    /* En móvil "Tomar conversación" ya aparece en el pie (compositor); ocultar el
+       duplicado de la cabecera libera espacio para que el nombre se vea completo. */
+    .ib-chat-head .ib-asignar-head { display: none; }
     /* Reasignar queda solo con ícono en móvil (secundario); su texto se oculta */
     .ib-chat-head .ib-reasignar-btn .ib-lbl-desk { display: none; }
     .ib-chat-head .ib-reasignar-btn svg { margin-right: 0 !important; }
@@ -877,6 +890,56 @@ $ia_disponible = IaAgente::disponible();
   .ib-llamar { color: var(--s-ok); flex-shrink: 0; }
   .ib-llamar:hover { background: var(--s-ok-bg); }
 
+  /* Buscar dentro de la conversación */
+  .ib-buscar { border-bottom: 1px solid var(--bd); background: var(--bg2, var(--bg)); }
+  .ib-buscar-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+  .ib-buscar-ic { width: 16px; height: 16px; color: var(--tx3); flex-shrink: 0; }
+  .ib-buscar-inp,
+  #ib-buscar-inp { flex: 1; min-width: 0; border: none; background: transparent; color: var(--tx);
+    font-size: .9rem; outline: none; padding: 4px 0; }
+  .ib-buscar-n { font-size: .74rem; color: var(--tx3); white-space: nowrap; }
+  .ib-buscar-res { max-height: 42vh; overflow-y: auto; }
+  .ib-buscar-res:empty { display: none; }
+  .ib-buscar-item { display: block; width: 100%; text-align: left; padding: 8px 12px; border: none;
+    background: transparent; cursor: pointer; border-top: 1px solid var(--bd); font: inherit; color: var(--tx); }
+  .ib-buscar-item:first-child { border-top: none; }
+  .ib-buscar-item:hover { background: var(--hover, rgba(0,0,0,.04)); }
+  .ib-buscar-item .b-txt { font-size: .84rem; line-height: 1.35; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ib-buscar-item .b-txt mark { background: var(--s-warn-bg, #fde68a); color: inherit; padding: 0 1px; border-radius: 2px; }
+  .ib-buscar-item .b-meta { font-size: .68rem; color: var(--tx3); margin-top: 2px; }
+  .ib-buscar-vacio { padding: 10px 12px; font-size: .8rem; color: var(--tx3); }
+  /* Resaltado del mensaje al saltar desde la búsqueda */
+  .ib-b-wrap.ib-flash > .ib-b { animation: ibFlash 1.8s ease-out; }
+  @keyframes ibFlash {
+    0%,35% { box-shadow: 0 0 0 3px var(--pri, #2563eb); }
+    100%   { box-shadow: 0 0 0 0 transparent; }
+  }
+
+  /* Reenviar a otra conversación */
+  .ib-fwd-ov { position: fixed; inset: 0; z-index: 1200; background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .ib-fwd-box { background: var(--bg); color: var(--tx); border: 1px solid var(--bd);
+    border-radius: 14px; width: 100%; max-width: 420px; max-height: 80vh; display: flex;
+    flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+  .ib-fwd-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--bd); }
+  .ib-fwd-head b { font-size: .95rem; flex: 1; }
+  .ib-fwd-prev { padding: 8px 14px; font-size: .78rem; color: var(--tx3); border-bottom: 1px solid var(--bd);
+    background: var(--bg2, transparent); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ib-fwd-srch { padding: 10px 14px; border-bottom: 1px solid var(--bd); }
+  .ib-fwd-srch input { width: 100%; border: 1px solid var(--bd); border-radius: 8px; padding: 8px 10px;
+    background: transparent; color: var(--tx); font-size: .9rem; outline: none; }
+  .ib-fwd-list { overflow-y: auto; flex: 1; }
+  .ib-fwd-it { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 14px;
+    border: none; border-top: 1px solid var(--bd); background: transparent; cursor: pointer; font: inherit; color: var(--tx); }
+  .ib-fwd-it:first-child { border-top: none; }
+  .ib-fwd-it:hover { background: var(--hover, rgba(0,0,0,.04)); }
+  .ib-fwd-it[disabled] { opacity: .45; cursor: not-allowed; }
+  .ib-fwd-it .t { flex: 1; min-width: 0; }
+  .ib-fwd-it .t b { display: block; font-size: .88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ib-fwd-it .t small { font-size: .72rem; color: var(--tx3); }
+  .ib-fwd-vacio { padding: 16px 14px; font-size: .84rem; color: var(--tx3); text-align: center; }
+
   /* Burbuja de llamada en el hilo (estilo WhatsApp) */
   .ib-call { display: inline-flex; align-items: center; gap: 10px; }
   .ib-call svg { flex-shrink: 0; color: var(--s-ok); }
@@ -913,7 +976,7 @@ $ia_disponible = IaAgente::disponible();
   @media (max-width: 768px) { .sf-pop { right: 10px; left: 10px; bottom: 10px; width: auto; } }
 </style>
 
-<div class="ib" id="ib">
+<div class="ib" id="ib" data-spa-nocache>
   <!-- ══ Lista ══ -->
   <div class="ib-col ib-lista-col">
     <div class="ib-head">
@@ -924,6 +987,9 @@ $ia_disponible = IaAgente::disponible();
         <span class="ib-head-t" style="flex:1">Conversaciones</span>
         <button type="button" class="ib-icon" id="ib-nueva" title="Nueva conversación" aria-label="Nueva conversación">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h8M8 14h5M21 12a8 8 0 01-8 8H7l-4 3V12a8 8 0 018-8h2a8 8 0 018 8z"/></svg>
+        </button>
+        <button type="button" class="ib-icon" id="ib-notif-btn" title="Notificar mensajes nuevos" aria-label="Notificar mensajes nuevos" aria-pressed="false">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path stroke-linecap="round" stroke-linejoin="round" d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         </button>
         <?php if (in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)): ?>
         <a href="<?= APP_URL ?>/modules/whatsapp/numeros.php" class="ib-icon" title="Configuración: perfiles y números" aria-label="Configuración de WhatsApp" style="display:inline-flex;align-items:center;justify-content:center">
@@ -995,7 +1061,21 @@ $ia_disponible = IaAgente::disponible();
 <script>
 (function () {
   var st = { f: 'todas', q: '', sel: null, etqs: [], etqActuales: [], firma: null, adjunto: null, bandeja: '', responder: null, abrirSeq: 0, listaSeq: 0 };
-  var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones'], true)) ?>;
+
+  // ── Ciclo de vida bajo el SPA ──────────────────────────────────────────────
+  // El SPA (spa-nav.js) re-ejecuta este <script> en cada navegación SIN recargar
+  // la página. Sin control, cada montaje dejaba corriendo su propio setInterval y
+  // sus listeners de `document`, cada uno con su propio `st` (su "chat abierto").
+  // Un poller viejo, cada 8 s, hacía abrir(su_st.sel) y pintaba SU chat anterior
+  // encima del actual → la conversación "se pegaba", "retrocedía" o "volvía a la
+  // anterior". Solución: un token de generación por montaje; los montajes viejos
+  // se auto-neutralizan (sus listeners y su poller hacen no-op / se detienen).
+  var MY_GEN = (window._ibGen = (window._ibGen || 0) + 1);
+  if (window._ibPoll) { clearInterval(window._ibPoll); window._ibPoll = null; }
+  if (window._ibPing) { clearInterval(window._ibPing); window._ibPing = null; }
+  var _pollTimer = null, _pingTimer = null;
+  function _vivo() { return MY_GEN === window._ibGen; }   // ¿este montaje sigue siendo el actual?
+  var ES_JEFE = <?= json_encode(in_array($_SESSION['usuario']['rol'] ?? '', ['gerente_general','gerente_operaciones','gerente_comercial'], true)) ?>;
   var IA_ON   = <?= json_encode((bool) $ia_disponible) ?>;
   var YO      = <?= (int) ($_SESSION['usuario']['id'] ?? 0) ?>;
   // Etapas del embudo (código → etiqueta + color). Se calculan solas en el backend.
@@ -1029,6 +1109,7 @@ $ia_disponible = IaAgente::disponible();
     audio:   '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 17v4"/>',
     sticker: '<path d="M15.5 3H5a2 2 0 00-2 2v14a2 2 0 002 2h9l7-7V5a2 2 0 00-2-2z"/><path d="M14 21v-5a2 2 0 012-2h5"/>',
     pin:     '<path d="M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6zM12 15v5"/>',
+    mapa:    '<path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>',
     archive: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8M10 12h4"/>',
     bell:    '<path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/>',
     bell_off:'<path d="M13.7 21a2 2 0 01-3.4 0M18 8a6 6 0 00-9.3-5M6 8c0 7-3 9-3 9h13M3 3l18 18"/>',
@@ -1150,6 +1231,7 @@ $ia_disponible = IaAgente::disponible();
 
           var pin  = it.fijada ? '<span class="ib-item-pin" title="Fijada">' + svg('pin', 13) + '</span>' : '';
           var mute = it.silenciada ? '<span class="ib-item-mute" title="Silenciada">' + svg('bell_off', 13) + '</span>' : '';
+          var lead = it.lead ? '<span title="El cliente pulsó Quiero aprovecharlo" style="display:inline-flex;align-items:center;gap:2px;font-size:.62rem;font-weight:700;background:var(--s-err-bg);color:var(--s-err-tx);border-radius:20px;padding:1px 7px;">🔥 Interesado</span>' : '';
 
           return '<button type="button" class="ib-item' + (st.sel === it.id ? ' sel' : '')
             +     (pendiente ? ' nuevo' : '') + (it.esperando ? ' esperando' : '') + '" data-id="' + it.id + '">'
@@ -1160,6 +1242,7 @@ $ia_disponible = IaAgente::disponible();
             +   '<span class="ib-item-t">' + relativo(it.cuando)
             +     '<span class="ib-item-menu" data-menu="' + it.id + '" data-fij="' + (it.fijada ? 1 : 0)
             +       '" data-sil="' + (it.silenciada ? 1 : 0) + '" data-arch="' + (it.archivada ? 1 : 0)
+            +       '" data-lead="' + (it.lead ? 1 : 0)
             +       '" title="Opciones" aria-label="Opciones de la conversación">'
             +       '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>'
             +     '</span>'
@@ -1177,7 +1260,7 @@ $ia_disponible = IaAgente::disponible();
                     : (it.sin_leer ? '<span class="ib-unread punto"></span>' : ''))
             +     '</span>'
             +   '</span>'
-            +   (tag + etapa + etqs ? '<span class="ib-item-m">' + tag + etapa + etqs + '</span>' : '')
+            +   (lead + tag + etapa + etqs ? '<span class="ib-item-m">' + lead + tag + etapa + etqs + '</span>' : '')
             + '</span></button>';
         }).join('');
       }).catch(function (err) {
@@ -1287,7 +1370,11 @@ $ia_disponible = IaAgente::disponible();
 
         st.etqActuales = j.etiquetas || [];
         chat(j, previo); ctx(j);
-        if (!silencioso) lista(true);
+        if (!silencioso) {
+          lista(true);
+          // Marcar leído en WhatsApp (tildes azules) al abrir realmente el chat.
+          try { fetch('ajax.php?accion=leido&id=' + id, { credentials: 'same-origin' }); } catch (e) {}
+        }
       })
       .catch(function () {
         if (token === st.abrirSeq && !silencioso && $('#ib-chat'))
@@ -1295,7 +1382,187 @@ $ia_disponible = IaAgente::disponible();
       });
   }
 
+  // Estado del hilo abierto para paginar hacia atrás ("Ver mensajes anteriores").
+  var _hiloJ = null, _hiloCargando = false;
+
+  // "Escribiendo…" para el cliente (debounce ~9s; el indicador de Meta dura ~25s).
+  var _typingLast = 0;
+  function _typingPing() {
+    if (!st.sel) return;
+    var now = Date.now();
+    if (now - _typingLast < 9000) return;
+    _typingLast = now;
+    try { fetch('ajax.php?accion=leido&id=' + st.sel + '&typing=1', { credentials: 'same-origin' }); } catch (e) {}
+  }
+
+  // ── Borrador por conversación ─────────────────────────────────────────────
+  // Lo que escribes y no envías se guarda por conversación y vuelve al abrirla.
+  function _draftKey(id) { return 'ib_draft_' + id; }
+  function _draftGet(id) { try { return localStorage.getItem(_draftKey(id)) || ''; } catch (e) { return ''; } }
+  function _draftSet(id, txt) {
+    if (!id) return;
+    try { txt && txt.trim() ? localStorage.setItem(_draftKey(id), txt) : localStorage.removeItem(_draftKey(id)); } catch (e) {}
+  }
+  function _draftDel(id) { if (!id) return; try { localStorage.removeItem(_draftKey(id)); } catch (e) {} }
+
+  // Carga el lote anterior de mensajes y lo antepone, conservando la posición de
+  // lectura. No toca st.firma → el polling silencioso no lo pisa (salvo que llegue
+  // un mensaje NUEVO, que repinta con los recientes).
+  // Trae UN lote anterior y lo antepone. Devuelve Promise(bool: ¿cargó algo?).
+  // `preservar` mantiene la posición de lectura (botón manual); al saltar desde
+  // la búsqueda no hace falta porque luego se hace scroll al mensaje encontrado.
+  function _cargarLoteAntiguo(preservar) {
+    if (_hiloCargando || !_hiloJ || !_hiloJ.hay_mas || !_hiloJ.primer_id) return Promise.resolve(false);
+    _hiloCargando = true;
+    var m = $('#ib-msgs'); var oldH = m ? m.scrollHeight : 0, oldT = m ? m.scrollTop : 0;
+    var b = m && m.querySelector('.ib-load-older'); if (b) b.textContent = 'Cargando…';
+    return fetch('ajax.php?accion=hilo&id=' + _hiloJ.conv.id + '&antes=' + _hiloJ.primer_id,
+          { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (resp) {
+        _hiloCargando = false;
+        if (!resp.ok || !resp.mensajes) { if (b) b.textContent = 'Ver mensajes anteriores'; return false; }
+        _hiloJ.mensajes  = resp.mensajes.concat(_hiloJ.mensajes); // antepone los más viejos
+        _hiloJ.hay_mas   = resp.hay_mas;
+        _hiloJ.primer_id = resp.primer_id;
+        chat(_hiloJ, { abajo: false, scroll: oldT });            // repinta sin saltar al fondo
+        if (preservar) { var m2 = $('#ib-msgs'); if (m2) m2.scrollTop = m2.scrollHeight - oldH + oldT; }
+        return true;
+      })
+      .catch(function () { _hiloCargando = false; if (b) b.textContent = 'Ver mensajes anteriores'; return false; });
+  }
+  function ibCargarAntiguos() { _cargarLoteAntiguo(true); }
+  window.ibCargarAntiguos = ibCargarAntiguos;
+
+  // ── Buscar dentro de la conversación ──────────────────────────────────────
+  var _buscarT = null;
+  function ibBuscarToggle(forzarAbrir) {
+    var box = $('#ib-buscar'); if (!box) return;
+    var abrir = forzarAbrir === true ? true : box.hidden;
+    box.hidden = !abrir;
+    if (abrir) {
+      var inp = $('#ib-buscar-inp'); if (inp) { inp.focus(); inp.select(); }
+    } else {
+      var res = $('#ib-buscar-res'); if (res) res.innerHTML = '';
+      var n = $('#ib-buscar-n'); if (n) n.textContent = '';
+      var inp2 = $('#ib-buscar-inp'); if (inp2) inp2.value = '';
+    }
+  }
+  function _escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function _resaltar(txt, q) {
+    var e = esc(txt);
+    try { e = e.replace(new RegExp('(' + _escRe(esc(q)) + ')', 'ig'), '<mark>$1</mark>'); } catch (x) {}
+    return e;
+  }
+  function ibBuscarRun() {
+    var inp = $('#ib-buscar-inp'), res = $('#ib-buscar-res'), nEl = $('#ib-buscar-n');
+    if (!inp || !res) return;
+    var q = inp.value.trim();
+    if (q.length < 2) { res.innerHTML = ''; if (nEl) nEl.textContent = ''; return; }
+    if (!st.sel) return;
+    fetch('ajax.php?accion=buscar_hilo&id=' + st.sel + '&q=' + encodeURIComponent(q),
+          { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { res.innerHTML = '<div class="ib-buscar-vacio">No se pudo buscar.</div>'; return; }
+        var lista = j.resultados || [];
+        if (nEl) nEl.textContent = lista.length ? (lista.length + (lista.length === 50 ? '+' : '')) : '0';
+        if (!lista.length) { res.innerHTML = '<div class="ib-buscar-vacio">Sin coincidencias.</div>'; return; }
+        res.innerHTML = lista.map(function (m) {
+          var cuando = m.cuando ? (fechaLarga(m.cuando) + ' · ' + hhmm(m.cuando)) : '';
+          var quien  = m.dir === 'out' ? 'Tú' : 'Cliente';
+          return '<button type="button" class="ib-buscar-item" data-jump="' + m.id + '">'
+               +   '<div class="b-txt">' + _resaltar(m.texto || '', q) + '</div>'
+               +   '<div class="b-meta">' + quien + ' · ' + esc(cuando) + '</div>'
+               + '</button>';
+        }).join('');
+      })
+      .catch(function () { res.innerHTML = '<div class="ib-buscar-vacio">Error de red.</div>'; });
+  }
+  function _flashMsg(el) {
+    var wrap = el.closest ? el.closest('.ib-b-wrap') : el;
+    if (!wrap) wrap = el;
+    try { wrap.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (x) { wrap.scrollIntoView(); }
+    wrap.classList.remove('ib-flash');
+    void wrap.offsetWidth;            // reinicia la animación si se repite
+    wrap.classList.add('ib-flash');
+    setTimeout(function () { wrap.classList.remove('ib-flash'); }, 2200);
+  }
+  function ibBuscarJump(id) {
+    id = +id;
+    var sel = '[data-mid="' + id + '"]';
+    var el = document.querySelector(sel);
+    if (el) return _flashMsg(el);
+    // No está cargado: traer lotes anteriores hasta alcanzarlo.
+    if (!_hiloJ || !_hiloJ.hay_mas || id >= _hiloJ.primer_id) return; // no se puede cargar más
+    _cargarLoteAntiguo(false).then(function (ok) { if (ok) ibBuscarJump(id); });
+  }
+
+  // ── Reenviar a otra conversación ──────────────────────────────────────────
+  var _fwdMsg = null, _fwdT = null;
+  function ibReenviarAbrir(mid, preview) {
+    _fwdMsg = +mid;
+    var ov = document.createElement('div');
+    ov.className = 'ib-fwd-ov'; ov.id = 'ib-fwd-ov';
+    ov.innerHTML =
+        '<div class="ib-fwd-box" role="dialog" aria-modal="true" aria-label="Reenviar mensaje">'
+      +   '<div class="ib-fwd-head"><b>Reenviar a…</b>'
+      +     '<button type="button" class="ib-icon" id="ib-fwd-x" title="Cerrar" aria-label="Cerrar">'
+      +       '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>'
+      +     '</button></div>'
+      +   (preview ? '<div class="ib-fwd-prev">' + esc(preview) + '</div>' : '')
+      +   '<div class="ib-fwd-srch"><input type="text" id="ib-fwd-q" class="no-ggi" placeholder="Buscar conversación…" autocomplete="off"></div>'
+      +   '<div class="ib-fwd-list" id="ib-fwd-list"><div class="ib-fwd-vacio">Cargando…</div></div>'
+      + '</div>';
+    document.body.appendChild(ov);
+    ibReenviarCargar('');
+    var q = document.getElementById('ib-fwd-q');
+    if (q) {
+      q.focus();
+      q.addEventListener('input', function () {
+        clearTimeout(_fwdT);
+        _fwdT = setTimeout(function () { ibReenviarCargar(q.value.trim()); }, 250);
+      });
+    }
+  }
+  function ibReenviarCerrar() { var ov = document.getElementById('ib-fwd-ov'); if (ov) ov.remove(); _fwdMsg = null; }
+  function ibReenviarCargar(q) {
+    var cont = document.getElementById('ib-fwd-list'); if (!cont) return;
+    // Sin búsqueda → mis conversaciones (las que puedo escribir). Con texto → todas.
+    var url = 'ajax.php?accion=lista&filtro=' + (q ? 'todas' : 'mias') + (q ? '&q=' + encodeURIComponent(q) : '');
+    fetch(url, { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var items = ((j && j.items) || []).filter(function (it) { return it.id !== st.sel; });
+        if (!items.length) { cont.innerHTML = '<div class="ib-fwd-vacio">Sin conversaciones.</div>'; return; }
+        cont.innerHTML = items.map(function (it) {
+          return '<button type="button" class="ib-fwd-it" data-fwd-to="' + it.id + '">'
+               +   '<span class="ib-av ' + colorDe(it.telefono) + '">' + esc(ini(it.titulo)) + '</span>'
+               +   '<span class="t"><b>' + esc(it.titulo) + '</b><small>' + esc(it.preview || ('+' + it.telefono)) + '</small></span>'
+               + '</button>';
+        }).join('');
+      })
+      .catch(function () { cont.innerHTML = '<div class="ib-fwd-vacio">Error de red.</div>'; });
+  }
+  function ibReenviarA(destino, boton) {
+    if (!_fwdMsg) return;
+    if (boton) boton.disabled = true;
+    ggiPost('ajax.php', { accion: 'reenviar', mensaje_id: _fwdMsg, destino: destino })
+      .then(function (j) {
+        if (j && j.ok) {
+          ibReenviarCerrar();
+          if (typeof ggiToast === 'function') ggiToast('Mensaje reenviado', 'success');
+        } else {
+          if (boton) boton.disabled = false;
+          if (typeof ggiToast === 'function') ggiToast((j && j.msg) || 'No se pudo reenviar', 'error');
+          else alert((j && j.msg) || 'No se pudo reenviar');
+        }
+      })
+      .catch(function () { if (boton) boton.disabled = false; });
+  }
+
   function chat(j, previo) {
+    _hiloJ = j;
     // El scroll pudo moverse durante el fetch (el usuario scrolleó rápido). Se
     // re-lee la posición REAL ahora, no la capturada antes de la petición: así
     // no se le devuelve al fondo si ya está leyendo historial arriba.
@@ -1307,6 +1574,15 @@ $ia_disponible = IaAgente::disponible();
       }
     }
     var c = j.conv, ultDia = '', cuerpo = '';
+
+    // Paginación: botón para traer los mensajes más antiguos (hilos largos > 300).
+    if (j.hay_mas) {
+      cuerpo += '<div class="ib-older-wrap" style="text-align:center;padding:10px 0 4px;">'
+              + '<button type="button" class="ib-load-older" onclick="ibCargarAntiguos()" '
+              + 'style="font:inherit;font-size:12px;font-weight:600;color:var(--ac);background:var(--bg-surface);'
+              + 'border:1px solid var(--gris-borde);border-radius:20px;padding:5px 14px;cursor:pointer;">'
+              + 'Ver mensajes anteriores</button></div>';
+    }
 
     // Reaccionar y responder solo si es mía y la ventana está abierta
     var puedeEscribir = c.es_mia && c.ventana_abierta;
@@ -1435,11 +1711,14 @@ $ia_disponible = IaAgente::disponible();
                 + 'title="Reaccionar" aria-label="Reaccionar">' + svg('smile',16) + '</button>';
         }
       }
+      // Reenviar: va a OTRA conversación, así que no depende de poder escribir en ésta.
+      acts += '<button type="button" class="ib-msg-act" data-fwd="' + m.id + '" '
+            + 'title="Reenviar" aria-label="Reenviar">' + svg('forward',16) + '</button>';
 
       // La firma permite añadir mensajes nuevos sin desmontar las burbujas que
       // ya estaban en pantalla. Así, enviar uno no hace parpadear el hilo.
       cuerpo += '<div class="ib-b-wrap ' + (m.dir === 'in' ? 'in' : 'out')
-             +  '" data-ib-msg="' + m.id + ':' + (m.estado || '') + '">'
+             +  '" data-mid="' + m.id + '" data-ib-msg="' + m.id + ':' + (m.estado || '') + '">'
              +  '<div class="ib-b ' + cls + '">' + fwd + ref + cita + who + cuerpoMsg + err
              +  '<div class="ib-b-foot">' + hhmm(m.cuando)
              +  (m.dir === 'out' ? ' <span>' + ticks(m.estado) + '</span>' : '') + '</div>'
@@ -1453,7 +1732,7 @@ $ia_disponible = IaAgente::disponible();
           ? '<button type="button" class="btn btn-ghost ib-btn-sm" id="ib-liberar">'
             + (c.es_mia ? 'Soltar' : 'Quitar asignación') + '</button>'
           : '<span class="ib-tag otro">Atiende ' + esc(c.asignado_nombre) + '</span>')
-      : '<button type="button" class="btn btn-primary ib-btn-sm" id="ib-asignar">Tomar conversación</button>';
+      : '<button type="button" class="btn btn-primary ib-btn-sm ib-asignar-head" id="ib-asignar">Tomar conversación</button>';
 
     // Gerencia puede pasarla a otro ejecutivo sin tener que tomarla primero
     if (ES_JEFE) {
@@ -1597,6 +1876,12 @@ $ia_disponible = IaAgente::disponible();
       +     '</div>'
       +     '<div class="ib-chat-ph">+' + esc(c.telefono) + '</div>'
       +   '</div>'
+      // Buscar DENTRO de esta conversación
+      +   '<button type="button" class="ib-icon" id="ib-buscar-btn" '
+      +     'title="Buscar en la conversación" aria-label="Buscar en la conversación">'
+      +     '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+      +     '<circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.3-4.3"/></svg>'
+      +   '</button>'
       // Llamar por WhatsApp (saliente). Requiere ventana de permiso de Meta
       // (que el cliente haya llamado o callback habilitado).
       +   '<button type="button" class="ib-icon ib-llamar" id="ib-llamar" '
@@ -1615,6 +1900,19 @@ $ia_disponible = IaAgente::disponible();
       +     '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
       +     '<circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 11v5M12 8h.01"/></svg>'
       +   '</button>'
+      + '</div>'
+      + '<div class="ib-buscar" id="ib-buscar" hidden>'
+      +   '<div class="ib-buscar-bar">'
+      +     '<svg class="ib-buscar-ic" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+      +     '<circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.3-4.3"/></svg>'
+      +     '<input type="text" id="ib-buscar-inp" class="no-ggi" placeholder="Buscar en esta conversación…" autocomplete="off">'
+      +     '<span class="ib-buscar-n" id="ib-buscar-n"></span>'
+      +     '<button type="button" class="ib-icon" id="ib-buscar-x" title="Cerrar búsqueda" aria-label="Cerrar búsqueda">'
+      +       '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+      +       '<path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>'
+      +     '</button>'
+      +   '</div>'
+      +   '<div class="ib-buscar-res" id="ib-buscar-res"></div>'
       + '</div>'
       + '<div class="ib-scroll ib-msgs" id="ib-msgs">' + cuerpo + '</div>'
       + '<div class="ib-foot">' + pie + '</div>';
@@ -1650,6 +1948,9 @@ $ia_disponible = IaAgente::disponible();
         t.innerHTML = formatoVivo(previo.texto);
         if (previo.foco) { t.focus(); _setCursor(t, previo.pos); }
       } else if (!previo) {
+        // Apertura real: restaurar el borrador guardado de esta conversación
+        var _d = _draftGet(st.sel);
+        if (_d) { t.innerHTML = formatoVivo(_d); _setCursor(t, _d.length); }
         t.focus();
       }
 
@@ -1677,8 +1978,9 @@ $ia_disponible = IaAgente::disponible();
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
       });
 
-      // Repintar con formato + sugerir /atajos en cada cambio
-      t.addEventListener('input', function () { repintar(t); sugerirAtajos(); });
+      // Repintar con formato + sugerir /atajos en cada cambio + "escribiendo…"
+      // y guardar el borrador de esta conversación.
+      t.addEventListener('input', function () { repintar(t); sugerirAtajos(); _typingPing(); _draftSet(st.sel, textoActual()); });
 
       // Adjuntar: primero vista previa, como WhatsApp. Enviar de golpe no da
       // oportunidad de revisar el archivo ni de acompañarlo con un mensaje.
@@ -2157,6 +2459,7 @@ $ia_disponible = IaAgente::disponible();
       if (btn && document.body.contains(btn)) { btn.disabled = false; btn.textContent = 'Enviar'; }
       if (!j.ok) return;
       quitarAdjunto();
+      _draftDel(st.sel);
       if (inp && document.body.contains(inp)) inp.innerHTML = '';
       if (j.aviso && typeof showToast === 'function') showToast(j.aviso, 'warn', 6000);
       st.firma = null;          // forzar repintado con el mensaje nuevo
@@ -2676,6 +2979,7 @@ $ia_disponible = IaAgente::disponible();
       +   '<button type="button" class="ib-int-tab" data-it="list">' + svg('list',14) + ' Lista</button>'
       +   '<button type="button" class="ib-int-tab" data-it="cta_url">' + svg('link',14) + ' Enlace</button>'
       +   '<button type="button" class="ib-int-tab" data-it="contact">' + svg('person',14) + ' Contacto</button>'
+      +   '<button type="button" class="ib-int-tab" data-it="location">' + svg('mapa',14) + ' Ubicación</button>'
       + '</div>'
       + '<div id="it-comun">'
       +   '<label class="ib-plt-f"><span>Encabezado <small>(opcional)</small></span>'
@@ -2705,14 +3009,36 @@ $ia_disponible = IaAgente::disponible();
       t.addEventListener('click', function () {
         document.querySelectorAll('.ib-int-tab').forEach(function (x) { x.classList.toggle('on', x === t); });
         sub = t.dataset.it;
-        // El bloque común (encabezado/mensaje/pie) no aplica al contacto
-        document.getElementById('it-comun').style.display = (sub === 'contact') ? 'none' : '';
+        // El bloque común (encabezado/mensaje/pie) no aplica al contacto ni a la ubicación
+        document.getElementById('it-comun').style.display = (sub === 'contact' || sub === 'location') ? 'none' : '';
         pintarEspecifico(sub);
       });
     });
 
     document.getElementById('it-enviar').addEventListener('click', function () {
       var btn = this;
+
+      // La ubicación va por su propia acción (no es un "interactivo")
+      if (sub === 'location') {
+        var coords = _parseCoords(document.getElementById('it-loc').value);
+        if (!coords) { if (window.showToast) showToast('Pega un enlace de Maps válido o escribe «lat, lng»', 'error'); return; }
+        var dl = {
+          accion: 'enviar_ubicacion', id: st.sel,
+          lat: coords[0], lng: coords[1],
+          nombre:    document.getElementById('it-locn').value.trim(),
+          direccion: document.getElementById('it-locd').value.trim()
+        };
+        btn.disabled = true; btn.textContent = 'Enviando…';
+        ggiPost('ajax.php', dl).then(function (j) {
+          btn.disabled = false; btn.textContent = 'Enviar';
+          if (!j.ok) { if (window.showToast) showToast(j.msg || 'No se pudo enviar', 'error'); return; }
+          ggiModalClose();
+          if (window.showToast) showToast('Ubicación enviada', 'ok');
+          st.firma = null; abrir(st.sel);
+        });
+        return;
+      }
+
       var datos = { accion: 'enviar_interactivo', id: st.sel, subtipo: sub };
 
       if (sub === 'contact') {
@@ -2801,6 +3127,30 @@ $ia_disponible = IaAgente::disponible();
         + '<label class="ib-plt-f"><span>Dirección web</span>'
         + '<input type="url" id="it-curl" placeholder="https://…"></label>';
 
+    } else if (sub === 'location') {
+      box.innerHTML = '<label class="ib-plt-f"><span>Enlace de Google Maps o coordenadas</span>'
+        + '<input type="text" id="it-loc" placeholder="https://maps.google.com/… o -12.0464, -77.0428"></label>'
+        + '<div class="ib-plt-hint">Pega un enlace de Google Maps o escribe «latitud, longitud».</div>'
+        + '<button type="button" class="btn btn-ghost btn-sm" id="it-loc-geo" style="margin:6px 0">'
+        +   svg('mapa',14) + ' Usar mi ubicación actual</button>'
+        + '<label class="ib-plt-f"><span>Nombre del lugar <small>(opcional)</small></span>'
+        + '<input type="text" id="it-locn" maxlength="100" placeholder="Ej.: Oficina GGI"></label>'
+        + '<label class="ib-plt-f"><span>Dirección <small>(opcional)</small></span>'
+        + '<input type="text" id="it-locd" maxlength="200" placeholder="Ej.: Av. Javier Prado 123, San Isidro"></label>';
+      var geo = document.getElementById('it-loc-geo');
+      if (geo) geo.addEventListener('click', function () {
+        if (!navigator.geolocation) { if (window.showToast) showToast('El navegador no permite geolocalización', 'error'); return; }
+        geo.disabled = true; geo.textContent = 'Obteniendo…';
+        navigator.geolocation.getCurrentPosition(function (p) {
+          var inp = document.getElementById('it-loc');
+          if (inp) inp.value = p.coords.latitude.toFixed(6) + ', ' + p.coords.longitude.toFixed(6);
+          geo.disabled = false; geo.innerHTML = svg('mapa',14) + ' Usar mi ubicación actual';
+        }, function () {
+          geo.disabled = false; geo.innerHTML = svg('mapa',14) + ' Usar mi ubicación actual';
+          if (window.showToast) showToast('No se pudo obtener la ubicación', 'error');
+        }, { enableHighAccuracy: true, timeout: 10000 });
+      });
+
     } else {   // contact
       box.innerHTML = '<label class="ib-plt-f"><span>Nombre</span>'
         + '<input type="text" id="it-cn" placeholder="Nombre del contacto"></label>'
@@ -2809,6 +3159,24 @@ $ia_disponible = IaAgente::disponible();
         + '<label class="ib-plt-f"><span>Empresa <small>(opcional)</small></span>'
         + '<input type="text" id="it-ce" placeholder="Empresa"></label>';
     }
+  }
+
+  // Extrae [lat, lng] de un enlace de Google Maps o de un texto «lat, lng».
+  function _parseCoords(txt) {
+    txt = (txt || '').trim();
+    if (!txt) return null;
+    // @lat,lng  (…/@-12.04,-77.04,17z)
+    var m = txt.match(/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+    // q=lat,lng  o  query=lat,lng  o  ll=lat,lng
+    if (!m) m = txt.match(/[?&](?:q|query|ll|destination|center)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/i);
+    // !3dlat!4dlng  (formato de place)
+    if (!m) m = txt.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+    // texto plano «lat, lng»
+    if (!m) m = txt.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+    if (!m) return null;
+    var lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+    return [lat, lng];
   }
   // ── Envío ──
   function enviar() {
@@ -2845,7 +3213,7 @@ $ia_disponible = IaAgente::disponible();
 
     ggiPost('ajax.php', datos)
       .then(function (j) {
-        if (j.ok) { inp.innerHTML = ''; quitarResponder(); }
+        if (j.ok) { inp.innerHTML = ''; _draftDel(st.sel); quitarResponder(); }
         // Se refresca sin desmontar la conversación. Si el servidor agregó el
         // mensaje, chat() lo inserta al final y conserva el resto del hilo.
         // En un fallo también permite mostrar el estado real de Meta.
@@ -3140,12 +3508,14 @@ $ia_disponible = IaAgente::disponible();
     var fij  = ancla.dataset.fij  === '1';
     var sil  = ancla.dataset.sil  === '1';
     var arch = ancla.dataset.arch === '1';
+    var lead = ancla.dataset.lead === '1';
     function fila(accion, ico, txt) {
       return '<button type="button" class="ib-pop-item" data-convmenu="' + accion + '" data-cid="' + id + '">'
            + '<span style="display:inline-flex;color:var(--tx3)">' + svg(ico, 15) + '</span>' + txt + '</button>';
     }
     var d = abrirPop(ancla,
-        fila(fij  ? 'desfijar'  : 'fijar',   'pin',      fij  ? 'Desfijar' : 'Fijar arriba')
+        (lead ? fila('quitar_lead', 'bell_off', 'Quitar 🔥 Interesado') : '')
+      + fila(fij  ? 'desfijar'  : 'fijar',   'pin',      fij  ? 'Desfijar' : 'Fijar arriba')
       + fila('no_leido', 'unread', 'Marcar como no leída')
       + fila(sil  ? 'activar'   : 'silenciar', 'bell_off', sil ? 'Activar avisos' : 'Silenciar avisos')
       + fila(arch ? 'desarchivar' : 'archivar', 'archive', arch ? 'Desarchivar' : 'Archivar'));
@@ -3157,6 +3527,14 @@ $ia_disponible = IaAgente::disponible();
     cerrarPop();
     if (accion === 'no_leido') {
       ggiPost('ajax.php', { accion: 'sin_leer', id: cid }).then(function (j) { if (j.ok) lista(); });
+      return;
+    }
+    if (accion === 'quitar_lead') {
+      ggiPost('ajax.php', { accion: 'quitar_lead', id: cid }).then(function (j) {
+        if (!j.ok) { if (window.showToast) showToast(j.msg || 'No se pudo quitar', 'error'); return; }
+        if (window.showToast) showToast('Marca de Interesado retirada', 'ok');
+        lista(); if (String(st.sel) === String(cid)) abrir(cid);
+      });
       return;
     }
     var mapa = {
@@ -3310,12 +3688,14 @@ $ia_disponible = IaAgente::disponible();
   // aplicaba el formato al texto marcado. Cancelar el mousedown conserva la
   // selección; el click sigue funcionando igual.
   document.addEventListener('mousedown', function (e) {
+    if (!_vivo()) return;   // montaje viejo del SPA → ignorar
     if (e.target.closest('.ib-fmt[data-fmt]') || e.target.closest('[data-emoji]')) {
       e.preventDefault();
     }
   });
 
   document.addEventListener('click', function (e) {
+    if (!_vivo()) return;   // montaje viejo del SPA → no reabrir chats con `st` obsoleto
     // Estado del popover ANTES de que este mismo clic lo cierre, para permitir
     // que el ícono de filtro funcione como toggle (abrir/cerrar).
     var _popPrev = document.getElementById('ib-pop');
@@ -3342,6 +3722,29 @@ $ia_disponible = IaAgente::disponible();
       $('#ib').classList.remove('abierto');
       st.sel = null;
       return;
+    }
+
+    // Buscar dentro de la conversación
+    if (e.target.closest('#ib-buscar-btn')) { ibBuscarToggle(); return; }
+    if (e.target.closest('#ib-buscar-x'))   { ibBuscarToggle(false); return; }
+    var jmp = e.target.closest('[data-jump]');
+    if (jmp) { ibBuscarJump(jmp.dataset.jump); return; }
+
+    // Reenviar un mensaje a otra conversación
+    var fwd = e.target.closest('[data-fwd]');
+    if (fwd) {
+      var wrap = fwd.closest('.ib-b-wrap');
+      var b = wrap && wrap.querySelector('.ib-b');
+      var prev = b ? b.textContent.trim().slice(0, 160) : '';
+      ibReenviarAbrir(fwd.dataset.fwd, prev);
+      return;
+    }
+    if (e.target.closest('#ib-fwd-x')) { ibReenviarCerrar(); return; }
+    var fwdOv = document.getElementById('ib-fwd-ov');
+    if (fwdOv) {
+      if (e.target === fwdOv) { ibReenviarCerrar(); return; }     // clic fuera de la caja
+      var to = e.target.closest('[data-fwd-to]');
+      if (to) { ibReenviarA(+to.dataset.fwdTo, to); return; }
     }
 
     // Colapsar / mostrar paneles laterales
@@ -3568,6 +3971,9 @@ $ia_disponible = IaAgente::disponible();
   // Refresca TAMBIÉN el hilo abierto: antes había que recargar la página para
   // ver los mensajes nuevos de la conversación que estabas atendiendo.
   function refrescar() {
+    // Poller de un montaje viejo, o el inbox ya no está en pantalla (navegó a otra
+    // sección del SPA) → se detiene solo para no pisar el estado actual.
+    if (!_vivo() || !document.getElementById('ib-lista')) { clearInterval(_pollTimer); return; }
     if (document.hidden) return;
     lista(true);
     // No re-renderizar el hilo si el usuario está leyendo historial (scrolleado
@@ -3579,8 +3985,131 @@ $ia_disponible = IaAgente::disponible();
       if (cerca) abrir(st.sel, true);
     }
   }
-  setInterval(refrescar, 8000);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) refrescar(); });
+  _pollTimer = setInterval(refrescar, 8000);
+  window._ibPoll = _pollTimer;   // registro global: el próximo montaje lo mata
+  document.addEventListener('visibilitychange', function () { if (_vivo() && !document.hidden) refrescar(); });
+
+  // Buscar en la conversación: input (debounce) y Esc para cerrar.
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.id === 'ib-buscar-inp') {
+      clearTimeout(_buscarT);
+      _buscarT = setTimeout(ibBuscarRun, 250);
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('ib-fwd-ov')) { ibReenviarCerrar(); e.preventDefault(); return; }
+    if (document.getElementById('ib-atajo-sug')) return;   // lo maneja el compositor
+    var box = $('#ib-buscar');
+    if (box && !box.hidden) { ibBuscarToggle(false); e.preventDefault(); return; }
+    // Esc cancela la cita de respuesta en curso
+    if (st.responder && typeof quitarResponder === 'function') { quitarResponder(); e.preventDefault(); }
+  });
+
+  // ── Notificaciones de mensajes nuevos + refresco en vivo ───────────────────
+  // Un segundo sondeo LIGERO cada 5 s que corre incluso con la pestaña oculta:
+  // detecta mensajes ENTRANTES nuevos (endpoint `ping`, filtra por PK) y, si el
+  // usuario activó la campana, muestra una notificación del navegador + un beep.
+  // Cuando la pestaña está visible, además pinta al instante lista e hilo (no
+  // hay que esperar los 8 s del poller ni recargar el navegador).
+  st.notif = { on: false, lastId: null };
+  try { st.notif.on = localStorage.getItem('ib_notif') === '1'; } catch (_) {}
+
+  function _ibBeep() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      var ctx = st._actx || (st._actx = new AC());
+      if (ctx.state === 'suspended') ctx.resume();
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.14, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime + 0.36);
+    } catch (_) {}
+  }
+
+  function _ibNotify(nv) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    var ico = '<?= APP_URL ?>/assets/icons/icon-192.png';
+    try {
+      if (nv.length === 1) {
+        var it = nv[0];
+        var n = new Notification(it.contacto || ('+' + it.tel), {
+          body: it.preview || 'Nuevo mensaje', tag: 'wa-msg-' + it.conv_id,
+          icon: ico, badge: ico, renotify: true
+        });
+        n.onclick = function () { window.focus(); try { abrir(it.conv_id); } catch (_) {} n.close(); };
+      } else {
+        var quien = nv.slice(-3).map(function (x) { return x.contacto; }).join(', ');
+        var n2 = new Notification(nv.length + ' mensajes nuevos', { body: quien, tag: 'ib-multi', icon: ico, badge: ico, renotify: true });
+        n2.onclick = function () { window.focus(); n2.close(); };
+      }
+    } catch (_) {}
+  }
+
+  function pingNuevos() {
+    if (!_vivo() || !document.getElementById('ib-lista')) { clearInterval(_pingTimer); return; }
+    fetch('ajax.php?accion=ping' + (st.notif.lastId != null ? '&since=' + st.notif.lastId : ''),
+          { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!_vivo() || !j || !j.ok) return;
+        if (st.notif.lastId == null) { st.notif.lastId = j.max_id || 0; return; } // línea base
+        var nv = j.nuevos || [];
+        if (!nv.length) return;
+        st.notif.lastId = Math.max(st.notif.lastId, j.max_id || 0, nv[nv.length - 1].id);
+        if (st.notif.on) { _ibNotify(nv); _ibBeep(); }
+        if (!document.hidden) {   // pintar en vivo sin esperar el poller de 8 s
+          lista(true);
+          if (st.sel) {
+            var m = document.getElementById('ib-msgs');
+            var cerca = !m || (m.scrollHeight - m.scrollTop - m.clientHeight < 140);
+            if (cerca) abrir(st.sel, true);
+          }
+        }
+      })
+      .catch(function () {});
+  }
+  _pingTimer = setInterval(pingNuevos, 5000);
+  window._ibPing = _pingTimer;   // el próximo montaje lo mata
+  pingNuevos();                  // fija la línea base de inmediato
+
+  // Botón campana: activa/desactiva las notificaciones (pide permiso al activar).
+  function _ibUpdNotifBtn() {
+    var b = document.getElementById('ib-notif-btn'); if (!b) return;
+    var on = st.notif.on && ('Notification' in window) && Notification.permission === 'granted';
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.title = on ? 'Notificaciones activadas · clic para desactivar' : 'Notificar mensajes nuevos';
+  }
+  (function () {
+    var b = document.getElementById('ib-notif-btn'); if (!b) return;
+    // Si el permiso fue revocado, no dejar el estado "on" colgado.
+    if (st.notif.on && (!('Notification' in window) || Notification.permission === 'denied')) {
+      st.notif.on = false; try { localStorage.setItem('ib_notif', '0'); } catch (_) {}
+    }
+    _ibUpdNotifBtn();
+    b.addEventListener('click', function () {
+      if (!('Notification' in window)) { if (window.showToast) showToast('Tu navegador no soporta notificaciones', 'warning'); return; }
+      if (st.notif.on) {
+        st.notif.on = false; try { localStorage.setItem('ib_notif', '0'); } catch (_) {}
+        _ibUpdNotifBtn(); if (window.showToast) showToast('Notificaciones desactivadas');
+        return;
+      }
+      Notification.requestPermission().then(function (p) {
+        if (p === 'granted') {
+          st.notif.on = true; try { localStorage.setItem('ib_notif', '1'); } catch (_) {}
+          _ibBeep(); _ibUpdNotifBtn();
+          if (window.showToast) showToast('Notificaciones activadas · te avisaré de cada mensaje nuevo', 'ok');
+        } else {
+          _ibUpdNotifBtn();
+          if (window.showToast) showToast('Permiso de notificaciones denegado por el navegador', 'warning');
+        }
+      });
+    });
+  })();
 
   // Restaurar paneles colapsados de la sesión anterior
   try {

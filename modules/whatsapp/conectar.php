@@ -7,7 +7,11 @@
  * Requiere que la app esté Live y con la Revisión de Meta aprobada para números
  * reales; en desarrollo funciona solo con admins/probadores de la app.
  */
-$page_title  = 'Conectar número';
+// Idioma opcional SOLO para grabar el App Review de Meta (?lang=en): deja esta
+// pantalla Y el popup de Meta en inglés, sin afectar a los usuarios reales
+// (default: español). Para grabar: abrí .../modules/whatsapp/conectar.php?lang=en
+$EN = (($_GET['lang'] ?? '') === 'en');
+$page_title  = $EN ? 'Connect a WhatsApp number' : 'Conectar número';
 $active_menu = 'wa_conectar';
 require_once __DIR__ . '/../../core/helpers.php';
 session_init();
@@ -17,6 +21,7 @@ require_role('gerente_general', 'gerente_operaciones');
 $APP_ID    = defined('META_APP_ID') ? META_APP_ID : '';
 $CONFIG_ID = '1610326027282775';         // Config de Embedded Signup (WhatsApp)
 $GRAPH_V   = defined('META_WA_VERSION') ? META_WA_VERSION : 'v21.0';
+$fbLocale  = $EN ? 'en_US' : 'es_LA';     // idioma del popup/login de Meta
 ?>
 <?php include __DIR__ . '/../../templates/layout.php'; ?>
 
@@ -40,7 +45,17 @@ $GRAPH_V   = defined('META_WA_VERSION') ? META_WA_VERSION : 'v21.0';
 
 <div class="cx-wrap">
   <div class="cx-card">
-    <h2>Conectar un número de WhatsApp</h2>
+    <h2><?= $EN ? 'Connect a WhatsApp number' : 'Conectar un número de WhatsApp' ?></h2>
+    <?php if ($EN): ?>
+    <p>Link a number that already uses the <b>WhatsApp Business app</b> so you can view and reply to it
+       from this system, <b>while still using the phone</b> (coexistence). The customer keeps writing to
+       the same number as always.</p>
+    <ol class="cx-steps">
+      <li>Click "Connect number" and follow Meta's flow (Facebook login).</li>
+      <li>Scan the <b>QR code</b> with the WhatsApp Business app of that number.</li>
+      <li>Done: the number appears as a new inbox inside the system.</li>
+    </ol>
+    <?php else: ?>
     <p>Vinculá un número que ya usa la <b>app de WhatsApp Business</b> para verlo y responderlo desde
        el sistema, <b>sin dejar de usar el celular</b> (coexistencia). El cliente te sigue escribiendo
        al mismo número de siempre.</p>
@@ -49,16 +64,16 @@ $GRAPH_V   = defined('META_WA_VERSION') ? META_WA_VERSION : 'v21.0';
       <li>Escaneá el <b>QR</b> con la app de WhatsApp Business del número.</li>
       <li>Listo: el número aparece como bandeja nueva en el inbox.</li>
     </ol>
+    <?php endif; ?>
 
-    <button type="button" class="cx-btn" id="cx-lanzar" disabled>
+    <button type="button" class="cx-btn" id="cx-lanzar" disabled
+            title="<?= $EN ? 'Opens Meta Embedded Signup: log in with Facebook and connect the WhatsApp Business number' : 'Abre el Embedded Signup de Meta: inicia sesión con Facebook y conecta el número' ?>">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 00-8.5 15.3L2 22l4.8-1.5A10 10 0 1012 2zm0 18a8 8 0 01-4.1-1.1l-.3-.2-2.8.9.9-2.8-.2-.3A8 8 0 1112 20z"/></svg>
-      <span id="cx-lbl">Cargando…</span>
+      <span id="cx-lbl"><?= $EN ? 'Loading…' : 'Cargando…' ?></span>
     </button>
 
     <div class="cx-aviso">
-      ⚠️ Para conectar números <b>reales</b> la app de Meta debe estar <b>publicada (Live)</b> y con la
-      <b>Revisión aprobada</b>. Si todavía está "En revisión", este botón solo funcionará con vos como
-      administrador/probador de la app.
+      <?php if ($EN): ?>⚠️ To connect <b>real</b> numbers, the Meta app must be <b>published (Live)</b> and the <b>App Review approved</b>. While it is still "In review", this button only works for you as an app <b>admin/tester</b>.<?php else: ?>⚠️ Para conectar números <b>reales</b> la app de Meta debe estar <b>publicada (Live)</b> y con la <b>Revisión aprobada</b>. Si todavía está "En revisión", este botón solo funcionará con vos como administrador/probador de la app.<?php endif; ?>
     </div>
     <div class="cx-res" id="cx-res"></div>
   </div>
@@ -68,12 +83,12 @@ $GRAPH_V   = defined('META_WA_VERSION') ? META_WA_VERSION : 'v21.0';
   window.fbAsyncInit = function () {
     FB.init({ appId: '<?= htmlspecialchars($APP_ID) ?>', autoLogAppEvents: true, xfbml: false, version: '<?= htmlspecialchars($GRAPH_V) ?>' });
     var b = document.getElementById('cx-lanzar');
-    b.disabled = false; document.getElementById('cx-lbl').textContent = 'Conectar número';
+    b.disabled = false; document.getElementById('cx-lbl').textContent = '<?= $EN ? 'Connect number' : 'Conectar número' ?>';
   };
   (function (d, s, id) {
     var js, fjs = d.getElementsByTagName(s)[0];
     if (d.getElementById(id)) return;
-    js = d.createElement(s); js.id = id; js.src = 'https://connect.facebook.net/es_LA/sdk.js';
+    js = d.createElement(s); js.id = id; js.src = 'https://connect.facebook.net/<?= $fbLocale ?>/sdk.js';
     fjs.parentNode.insertBefore(js, fjs);
   }(document, 'script', 'facebook-jssdk'));
 
@@ -100,14 +115,14 @@ $GRAPH_V   = defined('META_WA_VERSION') ? META_WA_VERSION : 'v21.0';
     _sesion = {};
     FB.login(function (response) {
       if (!(response.authResponse && response.authResponse.code)) {
-        mostrar('Se canceló la conexión o no se completó el flujo.', false);
+        mostrar('<?= $EN ? 'The connection was cancelled or the flow was not completed.' : 'Se canceló la conexión o no se completó el flujo.' ?>', false);
         return;
       }
       if (!_sesion.phone_number_id || !_sesion.waba_id) {
-        mostrar('El flujo terminó pero Meta no devolvió el número. Reintentá o revisá que la Revisión esté aprobada.', false);
+        mostrar('<?= $EN ? 'The flow finished but Meta did not return the number. Retry, or check that the App Review is approved.' : 'El flujo terminó pero Meta no devolvió el número. Reintentá o revisá que la Revisión esté aprobada.' ?>', false);
         return;
       }
-      mostrar('Conectando el número al sistema…', true);
+      mostrar('<?= $EN ? 'Connecting the number to the system…' : 'Conectando el número al sistema…' ?>', true);
       ggiPost('ajax_conectar.php', {
         accion: 'finalizar',
         code: response.authResponse.code,
@@ -115,10 +130,11 @@ $GRAPH_V   = defined('META_WA_VERSION') ? META_WA_VERSION : 'v21.0';
         waba_id: _sesion.waba_id
       }).then(function (j) {
         if (j.ok) {
-          mostrar('✅ Número conectado: ' + (j.numero || '') + (j.ya ? ' (ya estaba registrado)' : '')
-                + '. Aparecerá como bandeja en el inbox.', true);
+          mostrar((<?= $EN ? "'✅ Number connected: '" : "'✅ Número conectado: '" ?>) + (j.numero || '') + (j.ya ? (<?= $EN ? "' (already registered)'" : "' (ya estaba registrado)'" ?>) : '')
+                + (<?= $EN ? "'. It will appear as an inbox.'" : "'. Aparecerá como bandeja en el inbox.'" ?>)
+                + (j.msg_extra || ''), (!j.msg_extra));
         } else {
-          mostrar('No se pudo conectar: ' + (j.msg || 'error'), false);
+          mostrar((<?= $EN ? "'Could not connect: '" : "'No se pudo conectar: '" ?>) + (j.msg || 'error'), false);
         }
       });
     }, {

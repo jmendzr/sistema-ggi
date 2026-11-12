@@ -3,7 +3,7 @@ require_once __DIR__ . '/../../core/helpers.php';
 require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
-require_role('gerente_general','gerente_operaciones');
+require_role('gerente_general','gerente_operaciones','administracion_finanzas');
 
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) { header('Location: ' . APP_URL . '/modules/certificados/index.php'); exit; }

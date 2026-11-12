@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
 $user = auth_user();
-require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
+require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas','gerente_comercial');
 
 $pdo = Database::get();
 

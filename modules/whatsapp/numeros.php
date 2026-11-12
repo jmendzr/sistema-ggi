@@ -72,13 +72,15 @@ $calidad = [
                          display: flex; align-items: center; justify-content: center; }
 </style>
 
-<div class="page-header pl-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+<div class="page-header pl-head" data-spa-nocache style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
   <div>
     <h1>Números de WhatsApp</h1>
     <p>Números que el sistema puede usar, con su estado real en Meta</p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
-    <a href="<?= APP_URL ?>/modules/whatsapp/conectar.php" class="btn btn-primary">+ Conectar número</a>
+    <!-- TEMPORAL (grabación App Review de Meta): lleva a la pantalla en INGLÉS.
+         Revertir a "…/conectar.php" (sin ?lang=en) cuando termine la revisión. -->
+    <a href="<?= APP_URL ?>/modules/whatsapp/conectar.php?lang=en" class="btn btn-primary">+ Conectar número</a>
     <button type="button" class="btn btn-ghost" id="nm-add">Agregar por identificador</button>
   </div>
 </div>
@@ -144,7 +146,9 @@ $calidad = [
             + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
             +   (ok ? '<button type="button" class="btn btn-ghost btn-sm" data-perfil="' + esc(n.phone_number_id) + '" '
                 + 'data-nom="' + esc(n.verified_name || n.telefono || '') + '">Editar perfil</button>' : '')
-            +   '<button type="button" class="btn btn-ghost btn-sm" data-acc="' + n.id + '">'
+            +   '<button type="button" class="btn btn-ghost btn-sm" data-acc="' + n.id + '" '
+            +     'title="Elegir qué ejecutivos ven este número" style="display:inline-flex;align-items:center;gap:6px">'
+            +     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>'
             +     'Quién la ve: ' + (n.con_acceso ? n.con_acceso + ' ejecutivo' + (n.con_acceso === 1 ? '' : 's') : 'todos')
             +   '</button>'
             +   (esPrincipal ? '' : '<button type="button" class="btn btn-ghost btn-sm" '
@@ -248,17 +252,20 @@ $calidad = [
     if (ac) {
       var nid = ac.dataset.acc;
       fetch('ajax_numeros.php?accion=accesos&id=' + nid, { credentials: 'same-origin', cache: 'no-store' })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);   // sesión caída / 403 → no romper en silencio
+          return r.json();
+        })
         .then(function (j) {
-          if (!j.ok) return;
+          if (!j.ok) { if (window.showToast) showToast(j.msg || 'No se pudo cargar el acceso', 'error'); return; }
           mantOpen('Quién ve esta bandeja',
               '<p class="pl-hint" style="margin-bottom:12px">Sin nadie marcado, la bandeja la ven '
             + '<b>todos</b> los ejecutivos. Al marcar a alguien, solo esas personas la verán. '
             + 'Gerencia siempre ve todo.</p>'
             + j.usuarios.map(function (u) {
                 var on = j.con_acceso.indexOf(parseInt(u.id, 10)) !== -1;
-                return '<label style="display:flex;gap:9px;align-items:center;padding:7px 0;font-size:.85rem">'
-                     + '<input type="checkbox" data-u="' + u.id + '"' + (on ? ' checked' : '') + '> '
+                return '<label style="display:flex;gap:10px;align-items:center;padding:8px 0;font-size:.9rem;cursor:pointer">'
+                     + '<input type="checkbox" class="ggi-check" data-u="' + u.id + '"' + (on ? ' checked' : '') + '> '
                      + esc(u.nombre) + (u.rol !== 'ejecutivo_ventas' ? ' <span style="color:var(--tx3)">(gerencia)</span>' : '')
                      + '</label>';
               }).join('')
@@ -279,6 +286,9 @@ $calidad = [
               cargar();
             });
           });
+        })
+        .catch(function (err) {
+          if (window.showToast) showToast('No se pudo abrir "Quién la ve" (' + (err && err.message || 'error') + ')', 'error');
         });
       return;
     }

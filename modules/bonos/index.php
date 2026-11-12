@@ -4,18 +4,18 @@ require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
 $user = auth_user();
-require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
+require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas','gerente_comercial', 'administracion_finanzas');
 $pdo = Database::get();
 
 // POST: mark as paid (gerentes only)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $accion = $_POST['accion'] ?? '';
-    if ($accion === 'pagar' && in_array($user['rol'], ['gerente_general', 'gerente_operaciones'])) {
+    if ($accion === 'pagar' && in_array($user['rol'], ['gerente_general', 'gerente_operaciones', 'administracion_finanzas'])) {
         $bono_ids = array_filter(array_map('intval', explode(',', $_POST['bono_ids'] ?? '')));
         if ($bono_ids) {
             $ph = implode(',', array_fill(0, count($bono_ids), '?'));
-            $pdo->prepare("UPDATE bonos_ejecutivos SET estado='pagado', fecha_pago=CURDATE(), pagado_por=? WHERE id IN ($ph)")
+            $pdo->prepare("UPDATE bonos_ejecutivos SET estado='pagado', fecha_pago=CURDATE(), pagado_at=NOW(), pagado_por=? WHERE id IN ($ph)")
                 ->execute(array_merge([$user['id']], array_values($bono_ids)));
             log_actividad('bonos', 'pagar', 'Marcó ' . count($bono_ids) . ' bono(s) como pagados');
         }
@@ -27,26 +27,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Filters
 $filtro_ej_sel     = array_values(array_filter(array_map('intval', (array)($_GET['ejecutivo'] ?? [])), fn($v) => $v > 0));
 $filtro_estado_sel = array_values(array_filter((array)($_GET['estado'] ?? []), fn($v) => in_array($v, ['pendiente','pagado'], true)));
-$filtro_desde  = $_GET['desde'] ?? '';
-$filtro_hasta  = $_GET['hasta'] ?? '';
-$filtro_preset = $_GET['preset'] ?? '';
-
-// Preset → fechas automáticas
-if ($filtro_preset === '15d') {
-    $filtro_desde = date('Y-m-d', strtotime('-15 days'));
-    $filtro_hasta = date('Y-m-d');
-} elseif ($filtro_preset === '30d') {
-    $filtro_desde = date('Y-m-d', strtotime('-30 days'));
-    $filtro_hasta = date('Y-m-d');
-} elseif ($filtro_preset === 'mes') {
-    $filtro_desde = date('Y-m-01');
-    $filtro_hasta = date('Y-m-d');
-}
+// ── Consulta por MES en curso ────────────────────────────────────────────────
+// Los bonos se consultan y pagan por el mes actual; NO se mezclan meses. Los
+// meses anteriores se ven en el Informe de Pago y su historial.
+$_meses_lbl = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+$mes_actual = date('Y-m');
+// Mes seleccionado en el selector (?mes=YYYY-MM). Por defecto, el mes en curso.
+// Cada mes se consulta por separado; NO se mezclan meses en una sola lista.
+$mes_sel    = (isset($_GET['mes']) && preg_match('/^\d{4}-\d{2}$/', (string)$_GET['mes'])) ? $_GET['mes'] : $mes_actual;
+$mes_ini    = $mes_sel . '-01';
+$mes_fin    = date('Y-m-t', strtotime($mes_ini));
+$mes_label  = $_meses_lbl[(int)substr($mes_sel, 5, 2)] . ' ' . substr($mes_sel, 0, 4);
+// Por defecto solo PENDIENTES del mes; ?estado[]=pagado para ver también los pagados.
+if (!$filtro_estado_sel) $filtro_estado_sel = ['pendiente'];
 
 $where  = ['1=1'];
 $params = [];
 
 if ($user['rol'] === 'ejecutivo_ventas') {
+    // El ejecutivo ve solo SUS propios bonos. El Gerente Comercial ve todos
+    // (solo lectura): no cae aquí, pasa al filtro opcional de abajo.
     $where[]  = 'be.ejecutivo_id = ?';
     $params[] = $user['id'];
 } elseif ($filtro_ej_sel) {
@@ -54,16 +54,11 @@ if ($user['rol'] === 'ejecutivo_ventas') {
     $where[]  = "be.ejecutivo_id IN ($ph)";
     $params   = array_merge($params, $filtro_ej_sel);
 }
-// Nota: el filtro de estado se aplica después de agrupar (ver abajo)
-// para que los grupos muestren el estado real del grupo completo (no de bonos parciales).
-if ($filtro_desde) {
-    $where[]  = 'DATE(be.created_at) >= ?';
-    $params[] = $filtro_desde;
-}
-if ($filtro_hasta) {
-    $where[]  = 'DATE(be.created_at) <= ?';
-    $params[] = $filtro_hasta;
-}
+// Solo el MES seleccionado (por created_at del bono). No se mezclan meses.
+// El filtro de estado se aplica después de agrupar.
+$where[]  = 'DATE(be.created_at) BETWEEN ? AND ?';
+$params[] = $mes_ini;
+$params[] = $mes_fin;
 $sql_where = implode(' AND ', $where);
 
 // Build bonos query — guard against missing tables
@@ -151,10 +146,42 @@ if ($filtro_estado_sel) {
     $bonos_grupos = array_filter($bonos_grupos, fn($g) => in_array($g['estado'], $filtro_estado_sel, true));
 }
 
-$es_gerente = in_array($user['rol'], ['gerente_general', 'gerente_operaciones']);
-$ejecutivos_lista = $es_gerente
-    ? $pdo->query("SELECT id, nombre, apellido FROM usuarios WHERE activo=1 AND rol='ejecutivo_ventas' ORDER BY nombre")->fetchAll()
+// Última liquidación: cuándo se marcaron bonos como pagados por última vez.
+$ultima_liq = null;
+try {
+    $ultima_liq = $pdo->query("
+        SELECT be.fecha_pago, be.pagado_at,
+               NULLIF(TRIM(CONCAT(COALESCE(pu.nombre,''),' ',COALESCE(pu.apellido,''))),'') AS pagador
+        FROM bonos_ejecutivos be LEFT JOIN usuarios pu ON pu.id = be.pagado_por
+        WHERE be.estado='pagado' AND be.fecha_pago IS NOT NULL
+        ORDER BY COALESCE(be.pagado_at, be.fecha_pago) DESC, be.id DESC LIMIT 1
+    ")->fetch();
+} catch (\PDOException $e) { $ultima_liq = null; }
+
+$es_gerente = in_array($user['rol'], ['gerente_general', 'gerente_operaciones', 'administracion_finanzas']);
+// El Gerente Comercial VE todo (columnas de ejecutivo, filtro, pagado-por) pero
+// NO tiene acciones (pagar/informe): esas siguen atadas a $es_gerente.
+$ver_todos  = $es_gerente || $user['rol'] === 'gerente_comercial';
+$ejecutivos_lista = $ver_todos
+    ? $pdo->query("SELECT id, nombre, apellido FROM usuarios WHERE activo=1 AND rol IN ('ejecutivo_ventas','gerente_comercial') ORDER BY nombre")->fetchAll()
     : [];
+
+// ── Meses seleccionables ─────────────────────────────────────────────────────
+// El mes en curso + meses pasados que TODAVÍA tienen bonos PENDIENTES (sin pagar).
+// Respeta la visibilidad: un ejecutivo solo ve los meses donde él tiene pendientes.
+try {
+    $mesesArgs = [];
+    $mesesSql  = "SELECT DISTINCT DATE_FORMAT(be.created_at,'%Y-%m') AS periodo
+                    FROM bonos_ejecutivos be
+                   WHERE be.estado = 'pendiente'";
+    if ($user['rol'] === 'ejecutivo_ventas') { $mesesSql .= " AND be.ejecutivo_id = ?"; $mesesArgs[] = $user['id']; }
+    $mesesSql .= " ORDER BY periodo DESC";
+    $mq = $pdo->prepare($mesesSql); $mq->execute($mesesArgs);
+    $meses_opciones = $mq->fetchAll(PDO::FETCH_COLUMN) ?: [];
+} catch (\PDOException $e) { $meses_opciones = []; }
+// El mes en curso y el seleccionado siempre deben poder elegirse.
+foreach ([$mes_actual, $mes_sel] as $_m) if (!in_array($_m, $meses_opciones, true)) $meses_opciones[] = $_m;
+rsort($meses_opciones);
 
 $page_title  = 'Bonos de Ventas';
 $active_menu = 'bonos';
@@ -291,7 +318,7 @@ require_once __DIR__ . '/../../templates/layout.php';
     <p><?= count($bonos_grupos) ?> propuesta<?= count($bonos_grupos) !== 1 ? 'es' : '' ?> con bonos</p>
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
-    <?php if (in_array($user['rol'], ['gerente_general', 'gerente_operaciones'])): ?>
+    <?php if (in_array($user['rol'], ['gerente_general', 'gerente_operaciones', 'administracion_finanzas'])): ?>
     <a href="<?= APP_URL ?>/modules/bonos/informe_pago.php" class="btn btn-outline">
       <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
       Informe de pago
@@ -340,70 +367,47 @@ ggiReady(function() {
 </div>
 
 <!-- Filters -->
-<?php $_nfiltros = (!empty($filtro_ej_sel) ? 1 : 0) + (!empty($filtro_estado_sel) ? 1 : 0) + (($filtro_desde || $filtro_hasta) ? 1 : 0); ?>
 <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:10px;">
-  <form method="GET" id="form-filtros" class="<?= $_nfiltros ? 'filtros-open' : '' ?>" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-    <button type="button" class="ggi-filtros-toggle" onclick="this.closest('form').classList.toggle('filtros-open')" aria-label="Mostrar u ocultar filtros">
-      <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-      Filtros<?php if ($_nfiltros): ?> <span class="ggi-filtros-badge"><?= $_nfiltros ?></span><?php endif; ?>
-    </button>
-    <div class="ggi-filtros">
-    <?php if ($es_gerente && $ejecutivos_lista): ?>
-    <?php
-      $_bej_opts = [];
-      foreach ($ejecutivos_lista as $ej) $_bej_opts[(string)$ej['id']] = $ej['nombre'] . ' ' . $ej['apellido'];
-      echo ggi_msdrop('ms-bono-ejec', 'ejecutivo', $_bej_opts, $filtro_ej_sel, ['placeholder' => 'Todos los ejecutivos', 'aria' => 'Filtrar por ejecutivo']);
-    ?>
-    <?php endif; ?>
-    <?php
-      echo ggi_msdrop('ms-bono-estado', 'estado', [
-        'pendiente' => ['label' => 'Pendiente', 'cls' => 'is-warn'],
-        'pagado'    => ['label' => 'Pagado',    'cls' => 'is-ok'],
-      ], $filtro_estado_sel, ['placeholder' => 'Todos los estados', 'aria' => 'Filtrar por estado']);
-    ?>
-
-    <!-- Rango de fechas -->
-    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <span style="font-size:12px;color:var(--gris-texto);font-weight:600;">Desde</span>
-      <input type="date" name="desde" value="<?= htmlspecialchars($filtro_desde) ?>"
-             class="filter-select" style="width:140px;"
-             onchange="document.getElementById('form-filtros').submit()">
-      <span style="font-size:12px;color:var(--gris-texto);font-weight:600;">Hasta</span>
-      <input type="date" name="hasta" value="<?= htmlspecialchars($filtro_hasta) ?>"
-             class="filter-select" style="width:140px;"
-             onchange="document.getElementById('form-filtros').submit()">
-    </div>
-    </div><!-- /.ggi-filtros -->
-
-    <!-- Presets rápidos -->
-    <?php
-      // Query-string con los filtros activos (arrays) para arrastrarlos en los presets
-      $_bono_qs = '';
-      foreach ($filtro_ej_sel as $_e)     $_bono_qs .= 'ejecutivo[]=' . (int)$_e . '&';
-      foreach ($filtro_estado_sel as $_s) $_bono_qs .= 'estado[]=' . urlencode($_s) . '&';
-    ?>
-    <div class="preset-btns" style="display:flex;gap:6px;">
-      <a href="?<?= $_bono_qs ?>preset=15d"
-         class="btn btn-outline btn-sm <?= $filtro_preset==='15d'?'btn-primary':'' ?>"
-         style="<?= $filtro_preset==='15d'?'':'font-weight:500;' ?>">
-        15 días
-      </a>
-      <a href="?<?= $_bono_qs ?>preset=30d"
-         class="btn btn-outline btn-sm <?= $filtro_preset==='30d'?'btn-primary':'' ?>">
-        30 días
-      </a>
-      <a href="?<?= $_bono_qs ?>preset=mes"
-         class="btn btn-outline btn-sm <?= $filtro_preset==='mes'?'btn-primary':'' ?>">
-        Este mes
-      </a>
-      <?php if ($filtro_ej_sel || $filtro_estado_sel || $filtro_desde || $filtro_hasta || $filtro_preset): ?>
-      <a href="<?= APP_URL ?>/modules/bonos/index.php" class="btn btn-outline btn-sm">
-        <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        Limpiar
-      </a>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+    <form method="GET" id="form-filtros" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <label title="Consultar bonos de otro mes (incluye meses con pendientes sin pagar)"
+             style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:var(--gris-dark);background:var(--gris-bg,#f1f5f9);border:1px solid var(--gris-borde);border-radius:9px;padding:7px 11px 7px 13px;cursor:pointer;">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <select name="mes" onchange="this.form.submit()" aria-label="Mes de los bonos"
+                style="border:0;background:transparent;font-size:13px;font-weight:700;color:var(--gris-dark);cursor:pointer;outline:none;padding:0;margin:0;">
+          <?php foreach ($meses_opciones as $_mo):
+            $_lbl = $_meses_lbl[(int)substr($_mo, 5, 2)] . ' ' . substr($_mo, 0, 4);
+          ?>
+          <option value="<?= sanitize($_mo) ?>" <?= $_mo === $mes_sel ? 'selected' : '' ?>><?= sanitize($_lbl . ($_mo === $mes_actual ? ' (actual)' : '')) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <?php if ($ver_todos && $ejecutivos_lista): ?>
+      <?php
+        $_bej_opts = [];
+        foreach ($ejecutivos_lista as $ej) $_bej_opts[(string)$ej['id']] = $ej['nombre'] . ' ' . $ej['apellido'];
+        echo ggi_msdrop('ms-bono-ejec', 'ejecutivo', $_bej_opts, $filtro_ej_sel, ['placeholder' => 'Todos los ejecutivos', 'aria' => 'Filtrar por ejecutivo']);
+      ?>
       <?php endif; ?>
-    </div>
-  </form>
+      <?php
+        echo ggi_msdrop('ms-bono-estado', 'estado', [
+          'pendiente' => ['label' => 'Pendiente', 'cls' => 'is-warn'],
+          'pagado'    => ['label' => 'Pagado',    'cls' => 'is-ok'],
+        ], $filtro_estado_sel, ['placeholder' => 'Estado', 'aria' => 'Filtrar por estado']);
+      ?>
+      <?php if ($filtro_ej_sel || $filtro_estado_sel !== ['pendiente'] || $mes_sel !== $mes_actual): ?>
+      <a href="<?= APP_URL ?>/modules/bonos/index.php" class="btn btn-outline btn-sm">Limpiar</a>
+      <?php endif; ?>
+    </form>
+  </div>
+  <?php if ($ultima_liq && !empty($ultima_liq['fecha_pago'])):
+    $_ul_ts  = !empty($ultima_liq['pagado_at']) ? $ultima_liq['pagado_at'] : $ultima_liq['fecha_pago'];
+    $_ul_fmt = !empty($ultima_liq['pagado_at']) ? 'd/m/Y H:i' : 'd/m/Y';
+  ?>
+  <div style="font-size:12px;color:var(--gris-texto);">
+    ✓ Última liquidación: <strong style="color:var(--gris-dark);"><?= sanitize(date($_ul_fmt, strtotime($_ul_ts))) ?></strong><?php if (!empty($ultima_liq['pagador'])): ?> · por <?= sanitize($ultima_liq['pagador']) ?><?php endif; ?>
+  </div>
+  <?php endif; ?>
 </div>
 
 <!-- Bonos Table -->
@@ -414,7 +418,7 @@ ggiReady(function() {
 
   <div class="table-wrap">
     <div class="table-header">
-      <div class="table-title">Historial de Bonos</div>
+      <div class="table-title">Bonos · <?= sanitize($mes_label) ?></div>
       <?php if ($es_gerente): ?>
       <button type="button" class="btn btn-success btn-sm" id="btn-pagar" style="display:none;" onclick="submitPagar()">
         <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -445,12 +449,12 @@ ggiReady(function() {
             <input type="checkbox" id="check-all" title="Seleccionar pendientes" style="cursor:pointer;accent-color:var(--azul);" onchange="toggleAll(this)">
           </th>
           <?php endif; ?>
-          <?php if ($es_gerente): ?><th scope="col">Ejecutivo</th><?php endif; ?>
+          <?php if ($ver_todos): ?><th scope="col">Ejecutivo</th><?php endif; ?>
           <th scope="col">Propuesta</th>
           <th scope="col" style="text-align:right;">Monto</th>
           <th scope="col" style="text-align:center;">Estado</th>
           <th scope="col">Fecha</th>
-          <?php if ($es_gerente): ?><th scope="col">Pagado por</th><?php endif; ?>
+          <?php if ($ver_todos): ?><th scope="col">Pagado por</th><?php endif; ?>
         </tr>
       </thead>
       <tbody>
@@ -465,7 +469,7 @@ ggiReady(function() {
             <?php endif; ?>
           </td>
           <?php endif; ?>
-          <?php if ($es_gerente): ?>
+          <?php if ($ver_todos): ?>
           <td>
             <span style="font-weight:600;"><?= sanitize($g['ej_nombre'] . ' ' . $g['ej_apellido']) ?></span>
           </td>
@@ -495,7 +499,7 @@ ggiReady(function() {
               <?= date('d/m/Y', strtotime($g['created_at'])) ?>
             <?php endif; ?>
           </td>
-          <?php if ($es_gerente): ?>
+          <?php if ($ver_todos): ?>
           <td>
             <?php if ($g['estado'] === 'pagado' && $g['pagador_nombre']): ?>
               <span style="font-size:12px;color:var(--gris-texto);"><?= sanitize($g['pagador_nombre']) ?></span>

@@ -7,7 +7,7 @@
  * (ALEGRA_EMAIL / ALEGRA_TOKEN). Basic Auth = base64(email:token).
  *
  * IDs verificados contra la cuenta real (GET /items, /retentions):
- *   Ítems:   15 = "Servicios…" (total) · 14 = "Anticipo…" · 16 = "Saldo…"
+ *   Ítems:   18 = "Servicios…" (factura total) · 14 = "Anticipo…" · 16 = "Saldo…"
  *   IGV:     tax id 1 (18%)
  *   Detracción [012] Intermediación laboral y tercerización 12% = retention id 17
  *   Numeración factura FA01 = numberTemplate id 13
@@ -18,14 +18,30 @@ require_once __DIR__ . '/../config/config.php';
 class AlegraService
 {
     // ── Catálogo (IDs de la cuenta Alegra de GGI) ──
-    const ITEM_TOTAL     = 15;
-    const ITEM_ANTICIPO  = 14;
-    const ITEM_SALDO     = 16;
+    const ITEM_TOTAL     = 18;   // factura por el total (una sola factura). Antes era 15.
+    const ITEM_ANTICIPO  = 14;   // factura de anticipo (pago inicial, flujo de 2 facturas)
+    const ITEM_SALDO     = 16;   // factura de saldo (pago final, flujo de 2 facturas)
     const TAX_IGV        = 1;    // IGV 18%
     const DETRACCION_012 = 17;   // [012] Intermediación laboral y tercerización 12%
     const NUMBER_FACTURA = 13;   // Serie FA01
+    const NUMBER_NOTA_CR = 14;   // Serie F100 — nota de crédito electrónica a factura
     const IGV_RATE       = 0.18;
     const DETRACCION_MIN = 700;  // umbral SUNAT: detracción solo si total > S/700
+
+    /**
+     * Tipos de nota de crédito SUNAT (catálogo 09). El código es el valor exacto
+     * que espera el campo `type` de Alegra; el texto es la etiqueta para la UI.
+     * Ordenados por uso real de GGI (anular una factura mal emitida es lo común).
+     */
+    const NOTA_CR_TIPOS = [
+        'VOID_OPERATION'                     => 'Anulación de la operación',
+        'CORRECTION_BY_ERROR_ON_DESCRIPTION' => 'Corrección por error en la descripción',
+        'VOID_OPERATION_BY_ERROR_IN_RUC'     => 'Anulación por error en el RUC',
+        'TOTAL_DEVOLUTION'                   => 'Devolución total',
+        'DECREASE_IN_VALUE'                  => 'Disminución en el valor',
+        'GLOBAL_DISCOUNT'                    => 'Descuento global',
+        'OTHER_CONCEPTS'                     => 'Otros conceptos',
+    ];
 
     public static $lastError = null;
 
@@ -179,6 +195,40 @@ class AlegraService
         return self::req('POST', '/invoices', $payload);
     }
 
+    /**
+     * Clasifica el estado de timbrado SUNAT a partir del objeto `stamp` de Alegra.
+     * SUNAT es asíncrono: al emitir suele quedar STAMPED_AND_WAITING_RESPONSE y
+     * minutos después pasa a STAMPED_AND_ACCEPTED (o *_REJECTED). El PDF útil (y el
+     * envío al cliente) solo debe hacerse cuando ya está ACEPTADO.
+     *
+     * @return string 'accepted' | 'waiting' | 'rejected' | 'unknown'
+     */
+    public static function clasificarTimbrado(?array $stamp): string
+    {
+        if (!$stamp) return 'unknown';
+        $es = strtoupper((string)($stamp['emissionStatus'] ?? ''));
+        $ls = mb_strtolower((string)($stamp['legalStatus'] ?? ''));
+        if (strpos($es, 'REJECTED') !== false || strpos($ls, 'rechaz') !== false) return 'rejected';
+        if (strpos($es, 'ACCEPTED') !== false || strpos($ls, 'acept')  !== false) return 'accepted';
+        if (strpos($es, 'WAITING')  !== false || strpos($es, 'PROCESS') !== false || strpos($es, 'STAMPED') !== false) return 'waiting';
+        return 'unknown';
+    }
+
+    /** Relee la factura en Alegra y devuelve su estado de timbrado (para el re-chequeo). */
+    public static function estadoTimbradoDe(int $alegraId): array
+    {
+        [$c, $r] = self::req('GET', '/invoices/' . $alegraId . '?fields=stamp,numberTemplate,status');
+        if ($c !== 200) return ['clase'=>'unknown', 'emissionStatus'=>null, 'resp'=>$r];
+        $stamp = $r['stamp'] ?? null;
+        return [
+            'clase'          => self::clasificarTimbrado($stamp),
+            'emissionStatus' => $stamp['emissionStatus'] ?? null,
+            'legalStatus'    => $stamp['legalStatus'] ?? null,
+            'numero'         => $r['numberTemplate']['fullNumber'] ?? null,
+            'resp'           => $stamp,
+        ];
+    }
+
     /** Elimina una factura (solo borradores de prueba). */
     public static function eliminar(int $alegraId): array
     {
@@ -192,13 +242,19 @@ class AlegraService
         return ($c === 200 && !empty($r['pdf'])) ? (string)$r['pdf'] : null;
     }
 
-    /**
-     * Descarga el PDF de la factura y lo guarda junto a las facturas del cliente
-     * (misma convención que la carga manual). Devuelve [rutaRelativa, nombre] o null.
-     */
-    public static function descargarPdf(int $alegraId, int $clienteId, string $numero): ?array
+    /** URL del PDF de una nota de crédito (GET /credit-notes/{id}?fields=pdf). */
+    public static function pdfUrlNota(int $notaId): ?string
     {
-        $url = self::pdfUrl($alegraId);
+        [$c, $r] = self::req('GET', '/credit-notes/' . $notaId . '?fields=pdf');
+        return ($c === 200 && !empty($r['pdf'])) ? (string)$r['pdf'] : null;
+    }
+
+    /**
+     * Descarga un PDF (factura o nota de crédito) desde su URL de Alegra y lo
+     * guarda en la carpeta de facturas del cliente. Devuelve [rutaRelativa, nombre] o null.
+     */
+    private static function guardarPdfDesde(?string $url, int $clienteId, string $numero, string $etiqueta): ?array
+    {
         if (!$url) { self::$lastError = 'sin URL de PDF'; return null; }
 
         $ch = curl_init($url);
@@ -213,11 +269,83 @@ class AlegraService
 
         $dir = '/home/groupglo/domains/sistema.groupglobaliso.com/public_html/documentaciones_clientes/facturas/' . $clienteId . '/';
         if (!is_dir($dir) && !@mkdir($dir, 0755, true)) { self::$lastError = 'no se pudo crear el directorio'; return null; }
-        $safe     = preg_replace('/[^A-Za-z0-9\-_]/', '_', $numero !== '' ? $numero : ('factura_' . $alegraId));
+        $safe     = preg_replace('/[^A-Za-z0-9\-_]/', '_', $numero !== '' ? $numero : ($etiqueta . '_x'));
         $filename = $safe . '_' . date('Ymd_His') . '.pdf';
         if (@file_put_contents($dir . $filename, $bin) === false) { self::$lastError = 'no se pudo guardar el PDF'; return null; }
 
-        return ['documentaciones_clientes/facturas/' . $clienteId . '/' . $filename, ($numero !== '' ? $numero : 'Factura') . '.pdf'];
+        return ['documentaciones_clientes/facturas/' . $clienteId . '/' . $filename, ($numero !== '' ? $numero : $etiqueta) . '.pdf'];
+    }
+
+    /**
+     * Descarga el PDF de la factura y lo guarda junto a las facturas del cliente
+     * (misma convención que la carga manual). Devuelve [rutaRelativa, nombre] o null.
+     */
+    public static function descargarPdf(int $alegraId, int $clienteId, string $numero): ?array
+    {
+        return self::guardarPdfDesde(self::pdfUrl($alegraId), $clienteId, $numero, 'Factura');
+    }
+
+    /** Descarga el PDF de la nota de crédito y lo guarda igual que las facturas. */
+    public static function descargarPdfNota(int $notaId, int $clienteId, string $numero): ?array
+    {
+        return self::guardarPdfDesde(self::pdfUrlNota($notaId), $clienteId, $numero, 'NotaCredito');
+    }
+
+    /** Trae la factura de Alegra (ítems, total, saldo, cliente) para armar la nota de crédito. */
+    public static function facturaAlegra(int $alegraId): ?array
+    {
+        [$c, $r] = self::req('GET', '/invoices/' . $alegraId);
+        if ($c !== 200 || empty($r['id'])) { self::$lastError = 'factura no hallada en Alegra (HTTP ' . $c . ')'; return null; }
+        return $r;
+    }
+
+    /**
+     * Construye el payload de una nota de crédito ELECTRÓNICA a una factura.
+     * Anula/rectifica el total de la factura copiando sus ítems.
+     *
+     * @param array  $factura       respuesta de facturaAlegra()
+     * @param string $tipo          código SUNAT catálogo 09 (clave de NOTA_CR_TIPOS)
+     * @param string $causa         motivo de emisión (texto libre, obligatorio)
+     * @param bool   $generateStamp true = emite a SUNAT; false = borrador de prueba
+     */
+    public static function construirNotaCredito(array $factura, string $tipo, string $causa, bool $generateStamp): array
+    {
+        // Copiar ítems de la factura (id, descripción, precio, cantidad, IGV).
+        $items = [];
+        foreach (($factura['items'] ?? []) as $it) {
+            $items[] = [
+                'id'          => $it['id'],
+                'description' => $it['description'] ?? ($it['name'] ?? ''),
+                'price'       => (float)$it['price'],
+                'quantity'    => (float)($it['quantity'] ?? 1),
+                'tax'         => [['id' => self::TAX_IGV]],
+            ];
+        }
+        return [
+            'date'           => date('Y-m-d'),
+            'client'         => ['id' => (int)($factura['client']['id'] ?? 0)],
+            'numberTemplate' => ['id' => self::NUMBER_NOTA_CR],
+            'type'           => $tipo,
+            'cause'          => $causa,
+            'items'          => $items,
+            'invoices'       => [[
+                'id'     => (int)$factura['id'],
+                'amount' => (float)$factura['total'],
+            ]],
+            'stamp'          => ['generateStamp' => $generateStamp],
+        ];
+    }
+
+    /** Crea la nota de crédito en Alegra. Devuelve [httpCode, respuesta]. */
+    public static function crearNotaCredito(array $payload): array
+    {
+        return self::req('POST', '/credit-notes', $payload);
+    }
+
+    /** Elimina una nota de crédito (solo borradores de prueba). */
+    public static function eliminarNotaCredito(int $notaId): array
+    {
+        return self::req('DELETE', '/credit-notes/' . $notaId);
     }
 
     /** Arma la descripción del ítem a partir de las normas de la cotización. */

@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../core/Database.php';
 require_once __DIR__ . '/../../vendor/autoload.php';
 session_init();
 require_login();
-require_role('gerente_general', 'gerente_operaciones');
+require_role('gerente_general', 'gerente_operaciones', 'administracion_finanzas');
 
 $pdo = Database::get();
 
@@ -16,7 +16,7 @@ $month = max(1, min(12, $month));
 if (!$ej_id) { http_response_code(400); exit('Ejecutivo requerido.'); }
 
 // Datos del ejecutivo (salario visible solo para gerentes — esta ruta ya los requiere)
-$ej_stmt = $pdo->prepare("SELECT id, nombre, apellido, salario_mensual FROM usuarios WHERE id=? AND rol='ejecutivo_ventas' AND activo=1 LIMIT 1");
+$ej_stmt = $pdo->prepare("SELECT id, nombre, apellido, salario_mensual FROM usuarios WHERE id=? AND rol IN ('ejecutivo_ventas','gerente_comercial') AND activo=1 LIMIT 1");
 $ej_stmt->execute([$ej_id]);
 $ej = $ej_stmt->fetch();
 if (!$ej) { http_response_code(404); exit('Ejecutivo no encontrado.'); }
@@ -25,11 +25,13 @@ if (!$ej) { http_response_code(404); exit('Ejecutivo no encontrado.'); }
 $periodo_ini = sprintf('%04d-%02d-01 00:00:00', $year, $month);
 $periodo_fin = date('Y-m-t 23:59:59', mktime(0, 0, 0, $month, 1, $year));
 $stmt = $pdo->prepare("
-    SELECT be.id, be.monto, be.cotizacion_id, n.codigo AS norma_codigo
+    SELECT be.id, be.monto, be.cotizacion_id, be.created_at, n.codigo AS norma_codigo,
+           cot.numero AS cot_numero, cl.razon_social
     FROM bonos_ejecutivos be
     JOIN normas_iso n ON n.id = be.norma_iso_id
+    LEFT JOIN cotizaciones cot ON cot.id = be.cotizacion_id
+    LEFT JOIN clientes cl ON cl.id = cot.cliente_id
     WHERE be.ejecutivo_id = ?
-      AND be.estado = 'pendiente'
       AND be.created_at BETWEEN ? AND ?
     ORDER BY be.created_at ASC
 ");
@@ -41,6 +43,19 @@ $ventas_cerradas  = count(array_unique(array_column($bonos, 'cotizacion_id')));
 $certs_cerrados   = count($bonos);
 $salario          = (float)$ej['salario_mensual'];
 $total_pagar      = $salario + $total_comisiones;
+
+// ── Historial de informes generados (upsert por ejecutivo + período) ─────────
+if ($ej_id && $certs_cerrados > 0) {
+    try {
+        $__u = auth_user();
+        $pdo->prepare(
+            "INSERT INTO bonos_informes (ejecutivo_id, periodo, total, num_bonos, generado_por)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE total=VALUES(total), num_bonos=VALUES(num_bonos),
+                                     generado_por=VALUES(generado_por), veces=veces+1"
+        )->execute([$ej_id, sprintf('%04d-%02d', $year, $month), $total_pagar, $certs_cerrados, $__u['id'] ?? null]);
+    } catch (\Throwable $e) { /* best-effort: no bloquear el PDF */ }
+}
 
 $montos_unicos = array_unique(array_map(fn($b) => (float)$b['monto'], $bonos));
 $comision_unit = count($montos_unicos) === 1 ? reset($montos_unicos) : null;
@@ -71,6 +86,45 @@ if ($comision_unit !== null) {
       <td class="td-amount">' . $h($fmt($comision_unit)) . '</td>
     </tr>';
 }
+
+// ── 2da hoja: detalle de comisiones (cotizaciones cerradas del ejecutivo) ─────
+$det_rows = '';
+foreach ($bonos as $i => $b) {
+    $det_rows .= '<tr>'
+      . '<td style="padding:6pt 8pt;border-bottom:0.5pt solid #e5e7eb;color:#6b7280;">' . ($i + 1) . '</td>'
+      . '<td style="padding:6pt 8pt;border-bottom:0.5pt solid #e5e7eb;white-space:nowrap;">' . $h($b['cot_numero'] ?? ('#' . $b['cotizacion_id'])) . '</td>'
+      . '<td style="padding:6pt 8pt;border-bottom:0.5pt solid #e5e7eb;">' . $h($b['razon_social'] ?? '—') . '</td>'
+      . '<td style="padding:6pt 8pt;border-bottom:0.5pt solid #e5e7eb;">' . $h($b['norma_codigo']) . '</td>'
+      . '<td style="padding:6pt 8pt;border-bottom:0.5pt solid #e5e7eb;text-align:right;font-weight:600;">' . $h($fmt($b['monto'])) . '</td>'
+      . '<td style="padding:6pt 8pt;border-bottom:0.5pt solid #e5e7eb;color:#6b7280;white-space:nowrap;">' . $h(date('d/m/Y', strtotime($b['created_at']))) . '</td>'
+      . '</tr>';
+}
+$detalle_html = empty($bonos) ? '' : '
+<div style="page-break-before:always;padding:30pt 34pt 20pt;">
+  <div style="font-size:15pt;font-weight:700;color:#1e293b;margin-bottom:2pt;">Detalle de comisiones</div>
+  <div style="font-size:10pt;color:#6b7280;margin-bottom:16pt;">'
+    . $h($ej['nombre'] . ' ' . $ej['apellido']) . ' &middot; ' . $h($nombre_mes . ' ' . $year)
+    . ' &middot; ' . count($bonos) . ' comisión(es) &middot; ' . $ventas_cerradas . ' venta(s) cerrada(s)</div>
+  <table style="width:100%;border-collapse:collapse;font-size:9pt;">
+    <thead>
+      <tr style="background:#1e7a4f;color:#ffffff;">
+        <th style="padding:8pt;text-align:left;">#</th>
+        <th style="padding:8pt;text-align:left;">Cotización</th>
+        <th style="padding:8pt;text-align:left;">Cliente</th>
+        <th style="padding:8pt;text-align:left;">Norma</th>
+        <th style="padding:8pt;text-align:right;">Monto (S/.)</th>
+        <th style="padding:8pt;text-align:left;">Fecha</th>
+      </tr>
+    </thead>
+    <tbody>' . $det_rows . '
+      <tr>
+        <td colspan="4" style="padding:9pt 8pt;text-align:right;font-weight:700;border-top:1.5pt solid #1e7a4f;">Total comisiones</td>
+        <td style="padding:9pt 8pt;text-align:right;font-weight:700;border-top:1.5pt solid #1e7a4f;">' . $h($fmt($total_comisiones)) . '</td>
+        <td style="border-top:1.5pt solid #1e7a4f;"></td>
+      </tr>
+    </tbody>
+  </table>
+</div>';
 
 $html = <<<HTML
 <!DOCTYPE html>
@@ -323,6 +377,8 @@ $html = <<<HTML
 </div><!-- /content -->
 
 <div class="bottom-band"></div>
+
+{$detalle_html}
 
 </body>
 </html>

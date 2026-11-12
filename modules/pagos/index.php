@@ -3,7 +3,7 @@ require_once __DIR__ . '/../../core/helpers.php';
 require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
-require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas');
+require_role('gerente_general', 'gerente_operaciones', 'ejecutivo_ventas','gerente_comercial', 'administracion_finanzas');
 $page_title  = 'Pagos';
 $active_menu = 'pagos';
 
@@ -170,7 +170,7 @@ function _label_mes(string $ym, array $nombres): string {
 }
 
 // Pre-computar ANTES de layout.php que llama session_write_close()
-$_es_gerente = has_role('gerente_general', 'gerente_operaciones');
+$_es_gerente = has_role('gerente_general', 'gerente_operaciones', 'administracion_finanzas');
 
 require_once __DIR__ . '/../../templates/layout.php';
 ?>

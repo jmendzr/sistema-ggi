@@ -30,7 +30,7 @@ switch ($modulo) {
 
 // ── CLIENTES ──────────────────────────────────────────────
 case 'clientes':
-    require_role('gerente_general','gerente_operaciones','ejecutivo_ventas');
+    require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial');
     $headers = ['RUC','Razón Social','Departamento','Provincia','Distrito',
                 'Contacto','Teléfono','Email Contacto','Cargo','Estado',
                 'Fecha Contrato','Certs. Vigentes','Registrado por','Fecha Registro'];
@@ -69,7 +69,7 @@ case 'clientes':
 
 // ── CERTIFICADOS ──────────────────────────────────────────
 case 'certificados':
-    require_role('gerente_general','gerente_operaciones','ejecutivo_ventas');
+    require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial');
     $headers = ['Cliente','RUC','Norma','Casa Cert.','N° Certificado','Estado',
                 'Fecha Emisión','Fecha Vencimiento','Días al Vencimiento',
                 'Fecha Aud. 1','Fecha Aud. 2','Alcance','Registrado por'];
@@ -173,7 +173,7 @@ case 'envios':
 
 // ── COTIZACIONES ──────────────────────────────────────────
 case 'cotizaciones':
-    require_role('gerente_general','gerente_operaciones','ejecutivo_ventas');
+    require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial');
     $headers = ['Número','Empresa','RUC Empresa','Contacto','Teléfono','Email',
                 'Estado','Monto Total','Moneda','Normas',
                 'Fecha Emisión','Fecha Vencimiento','Creado por'];

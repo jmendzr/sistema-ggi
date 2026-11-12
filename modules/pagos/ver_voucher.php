@@ -26,7 +26,7 @@ if (!file_exists($pago['voucher_path'])) { http_response_code(404); exit('Archiv
 
 // Verificar que el usuario tenga acceso (gerente o ejecutivo del cliente)
 $user = auth_user();
-if ($user['rol'] !== 'gerente_general' && $user['rol'] !== 'gerente_operaciones') {
+if ($user['rol'] !== 'gerente_general' && $user['rol'] !== 'gerente_operaciones' && $user['rol'] !== 'administracion_finanzas') {
     // Ejecutivo: solo puede ver si es ejecutivo asignado al cliente
     $cli = $pdo->prepare("SELECT ejecutivo_id FROM clientes WHERE id = ?");
     $cli->execute([$pago['cliente_id']]);

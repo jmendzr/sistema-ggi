@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
 $user = auth_user();
-require_role('gerente_general','gerente_operaciones','ejecutivo_ventas');
+require_role('gerente_general','gerente_operaciones','ejecutivo_ventas','gerente_comercial');
 
 $pdo = Database::get();
 
@@ -956,5 +956,61 @@ ggiReady(() => {
       document.getElementById('modal-seguimiento').classList.remove('open');
     });
   }
+});
+</script>
+
+<!-- Selector de marca (Group Global ISO / Acreditta ISO) al abrir la propuesta desde el listado -->
+<script>
+ggiReady(() => {
+  if (document.body.dataset.marcaListWired) return;
+  document.body.dataset.marcaListWired = '1';
+
+  if (!document.getElementById('ggi-marca-css')) {
+    const st = document.createElement('style'); st.id = 'ggi-marca-css';
+    st.textContent = '.ggi-marca-ov{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px}'
+      + '.ggi-marca-box{background:var(--bg-surface,#fff);border:1px solid var(--brd,#e2e8f0);border-radius:14px;box-shadow:0 24px 60px -20px rgba(0,0,0,.4);padding:24px;max-width:420px;width:100%;text-align:center}'
+      + '.ggi-marca-box .mm-t{font-size:16px;font-weight:800;color:var(--tx,#111827);margin-bottom:4px}'
+      + '.ggi-marca-box .mm-s{font-size:12px;color:var(--tx2,#64748b);margin-bottom:18px}'
+      + '.ggi-marca-box .mm-btns{display:flex;gap:10px}'
+      + '.ggi-marca-box .mm-b{flex:1;border:0;border-radius:10px;padding:14px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff;transition:.15s}'
+      + '.ggi-marca-box .mm-b:hover{opacity:.9}.ggi-marca-box .mm-ggi{background:#2DB140}.ggi-marca-box .mm-acr{background:#F5851F}';
+    document.head.appendChild(st);
+  }
+
+  const pedirMarca = (num, cb) => {
+    const ov = document.createElement('div');
+    ov.className = 'ggi-marca-ov';
+    ov.innerHTML = '<div class="ggi-marca-box" role="dialog" aria-modal="true" aria-labelledby="ggi-marca-lt">'
+      + '<div id="ggi-marca-lt" class="mm-t">¿Con qué marca abrir la propuesta?</div>'
+      + '<div class="mm-s">Propuesta ' + (num || '') + '</div>'
+      + '<div class="mm-btns"><button type="button" data-m="ggi" class="mm-b mm-ggi">Group Global ISO</button>'
+      + '<button type="button" data-m="acreditta" class="mm-b mm-acr">Acreditta ISO</button></div></div>';
+    document.body.appendChild(ov);
+    const cerrar = () => ov.remove();
+    ov.addEventListener('click', (e) => { if (e.target === ov) cerrar(); });
+    ov.querySelectorAll('button[data-m]').forEach(b => b.addEventListener('click', () => { cerrar(); cb(b.dataset.m); }));
+    document.addEventListener('keydown', function esc(e){ if (e.key === 'Escape') { cerrar(); document.removeEventListener('keydown', esc); } });
+    const f = ov.querySelector('.mm-ggi'); if (f) f.focus();
+  };
+
+  // Intercepta en CAPTURA el clic del ícono de propuesta (antes que el lightbox, que va en burbuja)
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('a[data-ggi-preview][data-src*="/pdf.php"]');
+    if (!el) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const src   = el.getAttribute('data-src') || el.getAttribute('href') || '';
+    const dl    = el.getAttribute('data-download-url') || src;
+    const title = el.getAttribute('data-title') || el.getAttribute('title') || '';
+    const num   = title.replace('Propuesta ', '');
+    pedirMarca(num, (marca) => {
+      const mq = marca === 'acreditta' ? '&marca=acreditta' : '';
+      if (window.ggiLightbox && window.ggiLightbox.open) {
+        window.ggiLightbox.open(src + mq, { title: title, download: dl + mq });
+      } else {
+        window.open(src + mq, '_blank');
+      }
+    });
+  }, true);
 });
 </script>

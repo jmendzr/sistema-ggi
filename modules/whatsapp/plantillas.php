@@ -13,7 +13,7 @@ require_once __DIR__ . '/../../core/Database.php';
 require_once __DIR__ . '/../../core/WaPlantillas.php';
 session_init();
 require_login();
-require_role('gerente_general', 'gerente_operaciones');
+require_role('gerente_general', 'gerente_operaciones','gerente_comercial');
 
 $pdo  = Database::get();
 $diag = WaPlantillas::diagnostico($pdo, null);   // sin llamar a Meta al cargar

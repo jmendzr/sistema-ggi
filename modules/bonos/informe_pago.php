@@ -4,34 +4,30 @@ require_once __DIR__ . '/../../core/Database.php';
 session_init();
 require_login();
 $user = auth_user();
-require_role('gerente_general', 'gerente_operaciones');
+require_role('gerente_general', 'gerente_operaciones', 'administracion_finanzas');
 
 $pdo = Database::get();
 
 $ejecutivos = $pdo->query("
     SELECT id, nombre, apellido FROM usuarios
-    WHERE rol = 'ejecutivo_ventas' AND activo = 1
+    WHERE rol IN ('ejecutivo_ventas','gerente_comercial') AND activo = 1
     ORDER BY nombre, apellido
 ")->fetchAll();
 
 $filtro_ej  = (int)($_GET['ejecutivo_id'] ?? 0);
 
-// Acepta tanto ?periodo=YYYY-MM (input[type=month]) como ?year=&month= (legacy)
-if (!empty($_GET['periodo']) && preg_match('/^(\d{4})-(\d{2})$/', $_GET['periodo'], $pm)) {
-    $filtro_año = (int)$pm[1];
-    $filtro_mes = (int)$pm[2];
-} else {
-    $filtro_año = (int)($_GET['year']  ?? date('Y'));
-    $filtro_mes = (int)($_GET['month'] ?? date('n'));
-}
-$filtro_mes = max(1, min(12, $filtro_mes));
+// El informe interactivo está BLOQUEADO al mes en curso: no se re-generan meses
+// pasados a cada rato. Los meses anteriores se consultan/re-descargan desde el
+// Historial (más abajo).
+$filtro_año     = (int)date('Y');
+$filtro_mes     = (int)date('n');
 $filtro_periodo = sprintf('%04d-%02d', $filtro_año, $filtro_mes);
 
 $preview = null;
 
 if ($filtro_ej) {
     // Datos del ejecutivo (sin salario en la respuesta si el ejecutivo consulta — pero esta ruta ya requiere gerente)
-    $ej = $pdo->prepare("SELECT id, nombre, apellido, salario_mensual FROM usuarios WHERE id=? AND rol='ejecutivo_ventas' AND activo=1 LIMIT 1");
+    $ej = $pdo->prepare("SELECT id, nombre, apellido, salario_mensual FROM usuarios WHERE id=? AND rol IN ('ejecutivo_ventas','gerente_comercial') AND activo=1 LIMIT 1");
     $ej->execute([$filtro_ej]);
     $ej = $ej->fetch();
 
@@ -47,7 +43,6 @@ if ($filtro_ej) {
             JOIN clientes c       ON c.id   = cot.cliente_id
             JOIN normas_iso n     ON n.id   = be.norma_iso_id
             WHERE be.ejecutivo_id = ?
-              AND be.estado = 'pendiente'
               AND be.created_at BETWEEN ? AND ?
             ORDER BY be.created_at ASC
         ");
@@ -67,6 +62,20 @@ if ($filtro_ej) {
 
 $meses_es = ['', 'Enero','Febrero','Marzo','Abril','Mayo','Junio',
               'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// Historial de informes generados (para re-descargar el PDF)
+$historial = [];
+try {
+    $historial = $pdo->query("
+        SELECT bi.*,
+               NULLIF(TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))),'') AS ejecutivo,
+               NULLIF(TRIM(CONCAT(COALESCE(g.nombre,''),' ',COALESCE(g.apellido,''))),'') AS generado_por_nom
+        FROM bonos_informes bi
+        JOIN usuarios u ON u.id = bi.ejecutivo_id
+        LEFT JOIN usuarios g ON g.id = bi.generado_por
+        ORDER BY bi.generado_at DESC LIMIT 50
+    ")->fetchAll();
+} catch (\Throwable $e) { $historial = []; }
 
 $page_title  = 'Informe de Pago';
 $active_menu = 'bonos';
@@ -175,7 +184,10 @@ require_once __DIR__ . '/../../templates/layout.php';
           </div>
           <div class="filter-field">
             <label>Período</label>
-            <input type="month" name="periodo" value="<?= htmlspecialchars($filtro_periodo) ?>">
+            <div style="height:40px;display:inline-flex;align-items:center;gap:7px;padding:0 13px;border:1.5px solid var(--gris-borde);border-radius:9px;background:var(--gris-bg,#f1f5f9);font-size:13px;font-weight:700;color:var(--gris-dark);">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <?= $meses_es[$filtro_mes] . ' ' . $filtro_año ?>
+            </div>
           </div>
           <div class="filter-field">
             <label>&nbsp;</label>
@@ -215,7 +227,7 @@ require_once __DIR__ . '/../../templates/layout.php';
           Informe <?= $nombre_mes ?> <?= $filtro_año ?> — <?= sanitize($p['ej']['nombre'] . ' ' . $p['ej']['apellido']) ?>
         </div>
         <div class="card-header-sub">
-          <?= $p['certs_cerrados'] ?> comisión(es) pendiente(s) · <?= $p['ventas_cerradas'] ?> venta(s)
+          <?= $p['certs_cerrados'] ?> comisión(es) del mes · <?= $p['ventas_cerradas'] ?> venta(s)
         </div>
       </div>
       <?php if (!empty($p['bonos'])): ?>
@@ -231,7 +243,7 @@ require_once __DIR__ . '/../../templates/layout.php';
       <?php if (empty($p['bonos'])): ?>
       <div class="empty-preview" style="padding:32px;">
         <svg width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-        <p>No hay comisiones pendientes para <?= $nombre_mes ?> <?= $filtro_año ?>.</p>
+        <p>No hay comisiones para <?= $nombre_mes ?> <?= $filtro_año ?>.</p>
       </div>
       <?php else: ?>
 
@@ -321,6 +333,54 @@ require_once __DIR__ . '/../../templates/layout.php';
     </div>
   </div>
   <?php endif; ?>
+
+  <!-- Historial de informes generados -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-header-icon">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+      </div>
+      <div>
+        <div class="card-header-title">Historial de informes</div>
+        <div class="card-header-sub">Informes generados · re-descarga el PDF cuando quieras (incluye meses anteriores)</div>
+      </div>
+    </div>
+    <div class="card-body" style="padding:0;">
+      <?php if (!$historial): ?>
+        <div class="empty-preview" style="padding:28px;">Aún no se han generado informes.</div>
+      <?php else: ?>
+      <table class="preview-table" style="font-size:12.5px;">
+        <thead><tr>
+          <th scope="col">Ejecutivo</th>
+          <th scope="col" style="text-align:center;">Período</th>
+          <th scope="col" style="text-align:right;">Total</th>
+          <th scope="col">Generado</th>
+          <th scope="col" style="text-align:right;"></th>
+        </tr></thead>
+        <tbody>
+        <?php foreach ($historial as $hh):
+          $_hp = explode('-', $hh['periodo']); $hy = (int)($_hp[0] ?? 0); $hm = (int)($_hp[1] ?? 0);
+        ?>
+          <tr>
+            <td><?= sanitize($hh['ejecutivo'] ?: '—') ?></td>
+            <td style="text-align:center;"><?= ($meses_es[$hm] ?? $hm) . ' ' . $hy ?></td>
+            <td style="text-align:right;font-weight:700;">S/ <?= number_format((float)$hh['total'], 2) ?></td>
+            <td style="color:var(--gris-texto);font-size:11.5px;">
+              <?= sanitize(date('d/m/Y H:i', strtotime($hh['generado_at']))) ?><?php if ($hh['generado_por_nom']): ?> · <?= sanitize($hh['generado_por_nom']) ?><?php endif; ?><?php if ((int)$hh['veces'] > 1): ?> · <?= (int)$hh['veces'] ?>×<?php endif; ?>
+            </td>
+            <td style="text-align:right;">
+              <a href="<?= APP_URL ?>/modules/bonos/generar_informe_pdf.php?ejecutivo_id=<?= (int)$hh['ejecutivo_id'] ?>&month=<?= $hm ?>&year=<?= $hy ?>" target="_blank" class="btn btn-outline btn-sm">
+                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                PDF
+              </a>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+      <?php endif; ?>
+    </div>
+  </div>
 
 </div>
 

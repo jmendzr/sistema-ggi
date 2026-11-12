@@ -151,8 +151,35 @@ function _csrfUpdate(newToken) {
  * Devuelve siempre un objeto (nunca lanza), con .ok booleano.
  * Pasar {silent:true} para manejar el error por cuenta propia.
  */
+/**
+ * ggiBtnLoading(btn, on) — estado de carga consistente en un botón.
+ * on=true: lo deshabilita, antepone un spinner y conserva el texto original.
+ * on=false: lo restaura. Idempotente. Úsalo suelto o vía ggiPost({boton}).
+ */
+window.ggiBtnLoading = function (btn, on) {
+  if (!btn) return;
+  if (on) {
+    if (btn.dataset.ggiLoading) return;
+    btn.dataset.ggiLoading = '1';
+    btn.dataset.ggiHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.innerHTML = '<span class="ggi-spin" aria-hidden="true"></span>' + btn.dataset.ggiHtml;
+  } else {
+    if (!btn.dataset.ggiLoading) return;
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+    if (btn.dataset.ggiHtml !== undefined) btn.innerHTML = btn.dataset.ggiHtml;
+    delete btn.dataset.ggiLoading;
+    delete btn.dataset.ggiHtml;
+  }
+};
+
 window.ggiPost = function (url, datos, opciones) {
   opciones = opciones || {};
+
+  // U-05: estado de carga en el botón que dispara la acción (opcional).
+  if (opciones.boton) window.ggiBtnLoading(opciones.boton, true);
 
   function avisar(m) {
     if (opciones.silent) return;
@@ -215,6 +242,9 @@ window.ggiPost = function (url, datos, opciones) {
   .catch(function () {
     avisar('Sin conexión con el servidor');
     return { ok: false, msg: 'Sin conexión' };
+  })
+  .finally(function () {
+    if (opciones.boton) window.ggiBtnLoading(opciones.boton, false);
   });
 };
 
@@ -642,7 +672,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.documentElement.style.removeProperty('--sidebar-current');
   }
   // Restaurar secciones colapsadas
-  ['mant', 'finanzas', 'sistema'].forEach(function(id) {
+  ['mant', 'finanzas', 'reportes', 'whatsapp', 'sistema'].forEach(function(id) {
     if (localStorage.getItem('sidebar_sec_' + id) === '1') {
       var sec = document.getElementById('section-' + id);
       if (sec) sec.classList.add('collapsed');
@@ -1355,7 +1385,7 @@ function renderMantenimiento(titulo, campos, filas, columnas, editId, msg) {
         return `<tr data-activo="${isActivo ? '1' : '0'}" data-mant-id="${f.id}" style="${isActivo ? '' : 'opacity:.6;background:var(--gris-bg,#f8f9fd);'}">
           ${tds}<td data-label="Estado">${badge}</td>
           <td style="white-space:nowrap">
-            <div style="display:flex;gap:4px;">
+            <div class="action-btns">
               <button type="button" onclick="mantEditRow(${f.id})" class="btn-ic btn-ic-blue" title="Editar">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               </button>
@@ -1371,7 +1401,7 @@ function renderMantenimiento(titulo, campos, filas, columnas, editId, msg) {
       }).join('');
 
   root.innerHTML = `
-    <div class="mant-table-card">
+    <div class="table-wrap mant-table-card">
       <div class="mant-card-header">
         <div class="mant-card-title">Registros (${filas.length})</div>
         <button type="button" onclick="mantNuevo()" class="btn btn-primary btn-sm">
@@ -1380,7 +1410,7 @@ function renderMantenimiento(titulo, campos, filas, columnas, editId, msg) {
         </button>
       </div>
       <div style="overflow-x:auto">
-        <table class="mant-table">
+        <table class="data-table mant-table">
           <thead><tr>${theads}</tr></thead>
           <tbody>${tbody}</tbody>
         </table>
